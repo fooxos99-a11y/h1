@@ -1,0 +1,52 @@
+import assert from 'node:assert/strict';
+import process from 'node:process';
+import { chromium } from 'playwright';
+const browser = await chromium.launch();
+const base = 'http://127.0.0.1:3003/tests/fixtures/program-sections.html';
+try {
+  for (const width of [360, 768, 1440]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    const errors = []; page.on('pageerror', error => errors.push(error.message));
+    await page.goto(base);
+    await page.getByRole('button', { name: 'ابدأ', exact: true }).click();
+    await page.getByRole('heading', { name: 'قسم الأسئلة', exact: true }).waitFor();
+    assert.equal(await page.getByRole('dialog').count(), 0);
+    await page.getByRole('button', { name: 'ابدأ', exact: true }).first().click();
+    await page.getByText('محتوى الأسئلة', { exact: true }).waitFor();
+    await page.reload();
+    await page.getByText('محتوى الأسئلة', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'ابدأ', exact: true }).click();
+    await page.getByText('صحيح', { exact: true }).click();
+    assert.equal(await page.getByRole('radio', { name: 'صحيح', exact: true }).isChecked(), true);
+    await page.getByRole('button', { name: 'إنهاء الاختبار' }).click();
+    await page.getByText('تم الانتهاء من الاختبار!', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'رجوع', exact: true }).last().click();
+    await page.getByRole('button', { name: 'ابدأ', exact: true }).last().click();
+    await page.getByText('محتوى النشاط', { exact: true }).waitFor();
+    assert.ok(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth));
+    await page.goto(`${base}?mode=sizes`);
+    await page.locator('.daily-challenge-options-arena .daily-challenge-shape').first().waitFor();
+    const sizes = await page.locator('.daily-challenge-options-arena .daily-challenge-shape').evaluateAll(items => items.map(item => item.getBoundingClientRect().width));
+    assert.equal(sizes.length, 7);
+    assert.ok(sizes.every((size, index) => index === 0 || sizes[index - 1] - size >= 5));
+    assert.ok(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth));
+    assert.deepEqual(errors, []);
+    await page.close();
+  }
+  const page = await browser.newPage();
+  await page.goto(`${base}?mode=editor`);
+  await page.getByLabel('اسم البرنامج', { exact: true }).fill('برنامج الأقسام');
+  await page.getByRole('switch', { name: 'أقسام البرنامج', exact: true }).click();
+  await page.getByRole('button', { name: 'إضافة قسم', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'إضافة قسم', exact: true });
+  await dialog.getByLabel('اسم القسم', { exact: true }).fill('قسم يدوي');
+  await dialog.getByLabel('النص (إجباري)', { exact: true }).fill('محتوى القسم');
+  await dialog.getByRole('switch', { name: 'بدون أسئلة — تسجيل النقاط يدويًا', exact: true }).click();
+  await dialog.getByRole('button', { name: 'حفظ', exact: true }).click();
+  await page.getByRole('button', { name: 'حفظ', exact: true }).click();
+  const saved = JSON.parse(await page.getByTestId('saved').innerText());
+  assert.equal(saved.title, 'برنامج الأقسام');
+  assert.equal(saved.sections[0].title, 'قسم يدوي');
+  assert.equal(saved.sectionsEnabled, true);
+  process.stdout.write('Program pages, sections, editor and size ordering passed at 360/768/1440px.\n');
+} finally { await browser.close(); }

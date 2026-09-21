@@ -1,0 +1,85 @@
+.game-intro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 42%, hsl(var(--primary) / 0.22), transparent 34%),
+    hsl(var(--background) / 0.76);
+  backdrop-filter: blur(18px);
+  animation: gameIntroBackdrop 450ms ease both;
+}
+
+.game-intro-card {
+  width: min(360px, calc(100vw - 40px));
+  min-height: 210px;
+  border: 1px solid hsl(var(--primary) / 0.28);
+  border-radius: 28px;
+  background:
+    linear-gradient(135deg, hsl(var(--card) / 0.96), hsl(var(--background) / 0.78));
+  box-shadow: 0 30px 80px hsl(var(--primary) / 0.16);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 18px;
+  padding: 28px;
+  color: hsl(var(--foreground));
+  text-align: center;
+  animation: gameIntroCard 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.game-intro-icon {
+  width: 74px;
+  height: 74px;
+  border-radius: 24px;
+  display: grid;
+  place-items: center;
+  background: hsl(var(--primary) / 0.14);
+  color: hsl(var(--primary));
+  box-shadow: inset 0 1px 0 hsl(var(--primary) / 0.16);
+}
+
+.game-intro-title {
+  color: hsl(var(--primary));
+  font-size: clamp(26px, 7vw, 38px);
+  font-weight: 950;
+}
+
+.game-intro-loader {
+  width: min(220px, 70vw);
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: hsl(var(--primary) / 0.12);
+}
+
+.game-intro-loader::before {
+  content: '';
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary-light)));
+  transform-origin: right center;
+  animation: gameIntroProgress 450ms linear both;
+}
+
+@keyframes gameIntroBackdrop {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  84% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes gameIntroCard {
+  0% { opacity: 0; transform: translateY(18px) scale(0.96); }
+  15% { opacity: 1; transform: translateY(0) scale(1); }
+  82% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-10px) scale(0.98); }
+}
+
+@keyframes gameIntroProgress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}

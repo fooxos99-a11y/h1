@@ -1,0 +1,472 @@
+import { defaultAccountSection } from '@/lib/defaultAccountSection';
+import useStaffAttendance from '@/hooks/useStaffAttendance';
+import NotificationButton from '@/components/notifications/NotificationButton';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Helmet } from 'react-helmet';
+import { useNavigate, useParams } from '@/lib/router';
+import {
+  Bell,
+  Building2,
+  BookMarked,
+  BookOpen,
+  ClipboardCheck,
+  ClipboardList,
+  GraduationCap,
+  FileCheck2,
+  History,
+  ListChecks,
+  LogOut,
+  MessageSquare,
+  Mic2,
+  PhoneCall,
+  PlusCircle,
+  Send,
+  Settings,
+  Store,
+  Trophy,
+  ShieldCheck,
+  UserPlus,
+  Users,
+} from 'lucide-react';
+import CustomCursor from '@/components/CustomCursor';
+import LazyCallsSection from '@/components/calls/LazyCallsSection';
+import LazyAudioCallRoom from '@/components/calls/LazyAudioCallRoom';
+import DashboardLoader from '@/components/dashboard/DashboardLoader';
+import DashboardShell from '@/components/dashboard/DashboardShell';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { studentsApi } from '@/services/studentsApi';
+import LoadingScreen from '@/components/LoadingScreen';
+import { hasAuthSession } from '@/lib/authSession';
+import { useAccountLogout } from '@/hooks/useAccountLogout';
+import { readStoredDashboardPermissions, storeDashboardPermissions } from '@/lib/dashboardPermissions';
+import { dashboardSectionRoutes } from '@/lib/sectionRoutes';
+import {
+  defaultSettingsNavigationKey,
+  isSettingsNavigationKey,
+  settingsNavigationItems,
+} from '@/lib/settingsNavigation';
+import useOnlineStatus from '@/hooks/useOnlineStatus';
+import { useSiteConfig } from '@/site/SiteProvider';
+import useRewardUnits from '@/hooks/useRewardUnits';
+import StaffAttendancePrompt from '@/components/attendance/StaffAttendancePrompt';
+
+const AdministratorsSection = lazy(() => import('@/components/dashboard/AdministratorsSection'));
+const FamiliesSection = lazy(() => import('@/components/dashboard/FamiliesSection'));
+const ManualAttendanceSection = lazy(() => import('@/components/dashboard/ManualAttendanceSection'));
+const NarrationDaySection = lazy(() => import('@/components/dashboard/NarrationDaySection'));
+const ContactMessagesSection = lazy(() => import('@/components/dashboard/ContactMessagesSection'));
+const QuranTestsSection = lazy(() => import('@/components/dashboard/QuranTestsSection'));
+const RegistrationRequestsSection = lazy(() => import('@/components/dashboard/RegistrationRequestsSection'));
+const NotificationsSection = lazy(() => import('@/components/dashboard/NotificationsSection'));
+const ReportsSection = lazy(() => import('@/components/dashboard/ReportsSection'));
+const RecitersSection = lazy(() => import('@/components/dashboard/RecitersSection'));
+const SettingsSection = lazy(() => import('@/components/dashboard/SettingsSection'));
+const StoreSection = lazy(() => import('@/components/dashboard/StoreSection'));
+const ProgramsSection = lazy(() => import('@/components/dashboard/ProgramsSection'));
+const StudentPlansSection = lazy(() => import('@/components/dashboard/StudentPlansSection'));
+const StudentExecutionCorrectionsSection = lazy(() => import('@/components/dashboard/StudentExecutionCorrectionsSection'));
+const StudentsSection = lazy(() => import('@/components/dashboard/StudentsSection'));
+const SupervisorsSection = lazy(() => import('@/components/dashboard/SupervisorsSection'));
+const TeacherEvaluationSection = lazy(() => import('@/components/dashboard/TeacherEvaluationSection'));
+const TeacherPreviousSessionsPanel = lazy(() => import('@/components/portal/TeacherPreviousSessionsPanel'));
+const RecitationSettingsButton = lazy(() => import('@/components/portal/RecitationSettingsButton'));
+const WhatsAppSendSection = lazy(() => import('@/components/dashboard/WhatsAppSendSection'));
+const CulturalCompetitionSection = lazy(() => import('@/components/dashboard/CulturalCompetitionSection'));
+const StaffAttendanceSection = lazy(() => import('@/components/attendance/StaffAttendanceSection'));
+const StudentMushafSection = lazy(() => import('@/components/portal/StudentMushafSection'));
+const TeacherPointsAdjustmentSection = lazy(() => import('@/components/portal/TeacherPointsAdjustmentSection'));
+
+const dashboardSectionPreloaders = {
+  administrators: () => import('@/components/dashboard/AdministratorsSection'),
+  families: () => import('@/components/dashboard/FamiliesSection'),
+  manualAttendance: () => import('@/components/dashboard/ManualAttendanceSection'),
+  narrationDay: () => import('@/components/dashboard/NarrationDaySection'),
+  contactMessages: () => import('@/components/dashboard/ContactMessagesSection'),
+  quranTests: () => import('@/components/dashboard/QuranTestsSection'),
+  registrationRequests: () => import('@/components/dashboard/RegistrationRequestsSection'),
+  notifications: () => import('@/components/dashboard/NotificationsSection'),
+  reports: () => import('@/components/dashboard/ReportsSection'),
+  reciters: () => import('@/components/dashboard/RecitersSection'),
+  settings: () => import('@/components/dashboard/SettingsSection'),
+  store: () => import('@/components/dashboard/StoreSection'),
+  programs: () => import('@/components/dashboard/ProgramsSection'),
+  studentPlans: () => import('@/components/dashboard/StudentPlansSection'),
+  studentExecutionCorrections: () => import('@/components/dashboard/StudentExecutionCorrectionsSection'),
+  students: () => import('@/components/dashboard/StudentsSection'),
+  supervisors: () => import('@/components/dashboard/SupervisorsSection'),
+  quranEvaluation: () => import('@/components/dashboard/TeacherEvaluationSection'),
+  previousRecitationSessions: () => import('@/components/portal/TeacherPreviousSessionsPanel'),
+  whatsappSend: () => import('@/components/dashboard/WhatsAppSendSection'),
+  culturalCompetition: () => import('@/components/dashboard/CulturalCompetitionSection'),
+  staffAttendance: () => import('@/components/attendance/StaffAttendanceSection'),
+  mushaf: () => import('@/components/portal/StudentMushafSection'),
+  teacherPoints: () => import('@/components/portal/TeacherPointsAdjustmentSection'),
+};
+
+const defaultSettings = {
+  attendanceManualEnabled: true,
+  quranTaskExecutionSource: 'student',
+  hasStudentQuranExecution: true,
+  recitationAttendanceSource: 'supervisor',
+  pointsSystemEnabled: false,
+  teacherManualPointsEnabled: false,
+  storeEnabled: false,
+  learningPathsEnabled: false,
+  culturalCompetitionSectionEnabled: true,
+  staffAttendanceSource: 'supervisor',
+};
+
+const sectionFeatureKeys = {
+  reports: 'reportsSectionEnabled',
+  students: 'studentsSectionEnabled',
+  studentPlans: 'studentPlansSectionEnabled',
+  families: 'committeesSectionEnabled',
+  supervisors: 'usersRolesSectionEnabled',
+  reciters: 'usersRolesSectionEnabled',
+  administrators: 'usersRolesSectionEnabled',
+  quranTests: 'quranTestsSectionEnabled',
+  narrationDay: 'narrationSectionEnabled',
+  programs: 'programsSectionEnabled',
+  calls: 'callsSectionEnabled',
+  registrationRequests: 'registrationRequestsSectionEnabled',
+  store: 'storeSectionEnabled',
+  culturalCompetition: 'culturalCompetitionSectionEnabled',
+};
+
+const baseSections = [
+  { key: 'manualAttendance', label: 'التحضير', icon: ClipboardCheck },
+  { key: 'staffAttendance', label: 'التحضير', icon: ClipboardCheck },
+  { key: 'mushaf', label: 'المصحف', icon: BookOpen },
+  { key: 'reports', label: 'التقارير', icon: ClipboardList, permissionKeys: ['reports', 'executionFollowup'] },
+  { key: 'students', label: 'الطلاب', icon: GraduationCap },
+  { key: 'studentPlans', label: 'خطط الطلاب', icon: ListChecks },
+  {
+    key: 'studentExecutionCorrections',
+    label: 'تصحيح تنفيذ الطلاب',
+    icon: ClipboardList,
+    permissionKey: 'studentPlans',
+    managementOnly: true,
+  },
+  { key: 'teacherPoints', label: 'الإضافة والخصم', icon: PlusCircle, supervisorOnly: true },
+  { key: 'families', label: 'الحلقات', icon: Building2 },
+  { key: 'supervisors', label: 'المعلمين', icon: Users },
+  { key: 'reciters', label: 'المقرئون', icon: Mic2 },
+  { key: 'administrators', label: 'الإداريين', icon: ShieldCheck },
+  { key: 'quranTests', label: 'الاختبارات', icon: FileCheck2 },
+  { key: 'narrationDay', label: 'يوم السرد', icon: BookMarked, managementOnly: true },
+  { key: 'programs', label: 'البرامج', icon: BookOpen },
+  { key: 'culturalCompetition', label: 'المسابقات الثقافية', icon: Trophy },
+  { key: 'calls', label: 'المكالمات', icon: PhoneCall },
+  { key: 'notifications', label: 'الإشعارات', icon: Bell },
+  { key: 'whatsappSend', label: 'الإرسال عبر الواتس', icon: Send },
+  { key: 'contactMessages', label: 'التواصل', icon: MessageSquare },
+  { key: 'registrationRequests', label: 'طلبات التسجيل', icon: UserPlus },
+  { key: 'store', label: 'المتجر', icon: Store, managementOnly: true },
+  { key: 'settings', label: 'الإعدادات', icon: Settings, children: settingsNavigationItems },
+  { key: 'quranEvaluation', label: 'جلسات التسميع', icon: ClipboardCheck, supervisorOnly: true },
+  {
+    key: 'previousRecitationSessions',
+    permissionKey: 'quranEvaluation',
+    label: 'جلسات التسميع السابقة',
+    icon: History,
+    supervisorOnly: true,
+  },
+];
+
+const supervisorSectionOrder = new Map([
+  ['staffAttendance', 0],
+  ['quranEvaluation', 1],
+  ['previousRecitationSessions', 2],
+  ['teacherPoints', 3],
+  ['reports', 4],
+  ['culturalCompetition', 5],
+  ['calls', 6],
+  ['studentPlans', Number.POSITIVE_INFINITY],
+]);
+
+const reciterSectionOrder = new Map([
+  ['staffAttendance', 0],
+  ['quranEvaluation', 1],
+  ['mushaf', 3],
+]);
+
+const offlineDashboardSections = new Set([
+  'staffAttendance',
+  'mushaf',
+  'reports',
+  'students',
+  'studentPlans',
+  'families',
+  'quranTests',
+  'narrationDay',
+  'quranEvaluation',
+  'previousRecitationSessions',
+]);
+
+const WajehDashboard = () => {
+  const site = useSiteConfig();
+  const navigate = useNavigate();
+  const { section: sectionSlug = '' } = useParams();
+  const isOnline = useOnlineStatus();
+  const [settings, setSettings] = useState(defaultSettings);
+  const rewardUnits = useRewardUnits(site.features?.summit !== false && settings.summitEnabled);
+  const [isDashboardLoading, setIsDashboardLoading] = useState(true);
+  const [dashboardPermissions, setDashboardPermissions] = useState(readStoredDashboardPermissions);
+  const [activeCallRoom, setActiveCallRoom] = useState(null);
+  const role = localStorage.getItem('wajeh_role') || '';
+  const supervisorId = Number(localStorage.getItem('wajeh_supervisor_id') || 0);
+  const hasSession = hasAuthSession(role);
+  const isManager = role === 'manager' && hasSession;
+  const isSupervisor = role === 'supervisor' && hasSession;
+  const isReciter = role === 'reciter' && hasSession;
+  const isAdmin = role === 'admin' && hasSession;
+  const hasDashboardAccess = isManager || isAdmin || isReciter || (isSupervisor && dashboardPermissions.length > 0);
+
+  useEffect(() => {
+    const routeKey = dashboardSectionRoutes.getKey(sectionSlug);
+    const preloadKey = routeKey === 'executionFollowup'
+      ? 'reports'
+      : (isSettingsNavigationKey(routeKey) ? 'settings' : routeKey);
+    dashboardSectionPreloaders[preloadKey]?.();
+  }, [sectionSlug]);
+
+  useEffect(() => {
+    if (!isOnline) {
+      setIsDashboardLoading(false);
+      return;
+    }
+    if (isManager || isSupervisor || isAdmin || isReciter) {
+      studentsApi.getDashboardBootstrap()
+        .then((data) => {
+          setSettings({ ...defaultSettings, ...(data.settings || {}) });
+          const permissions = data.permissions || [];
+          storeDashboardPermissions(permissions);
+          setDashboardPermissions(permissions);
+        })
+        .catch(() => {
+          setSettings(defaultSettings);
+          if (!isManager) {
+            storeDashboardPermissions([]);
+            setDashboardPermissions([]);
+          }
+        })
+        .finally(() => setIsDashboardLoading(false));
+    } else {
+      setIsDashboardLoading(false);
+    }
+  }, [isAdmin, isManager, isOnline, isReciter, isSupervisor]);
+
+  const staffAttendanceActive = settings.staffAttendanceSource === 'teacher' && (isSupervisor || isAdmin || isReciter);
+  const staffAttendanceState = useStaffAttendance(staffAttendanceActive);
+  const { alreadyPresentToday } = staffAttendanceState;
+
+  const sections = useMemo(() => {
+    const localizeSections = (items) => items.map((item) => ({
+      ...item,
+      label: rewardUnits.text(item.label),
+      children: item.children?.map((child) => ({ ...child, label: rewardUnits.text(child.label) })),
+    }));
+    if (isReciter) return localizeSections(baseSections
+      .filter((section) => (
+        ['quranEvaluation', 'staffAttendance', 'mushaf'].includes(section.key)
+        && (section.key !== 'staffAttendance' || (settings.staffAttendanceSource === 'teacher' && !alreadyPresentToday))
+      ))
+      .sort((first, second) => reciterSectionOrder.get(first.key) - reciterSectionOrder.get(second.key)));
+    const filteredSections = baseSections.filter((section) => {
+      const featureKey = sectionFeatureKeys[section.key];
+      if (featureKey && settings[featureKey] === false) return false;
+      if (section.managerOnly && !isManager) return false;
+      if (section.managementOnly && isSupervisor) return false;
+      if (section.key === 'store' && site.features?.store === false) return false;
+      if (section.key === 'teacherPoints' && !settings.teacherManualPointsEnabled) return false;
+      if (section.key === 'studentExecutionCorrections' && settings.hasStudentQuranExecution === false) return false;
+      if (section.supervisorOnly && !isSupervisor) return false;
+      if (isSupervisor && ['manualAttendance', 'students'].includes(section.key)) return false;
+      if (isSupervisor && section.key === 'studentPlans') return true;
+      if (isSupervisor && section.key === 'teacherPoints') return true;
+      if (isSupervisor && section.key === 'culturalCompetition') return true;
+      if (isSupervisor && section.key === 'calls') return true;
+      if (isSupervisor && section.key === 'reports') return true;
+      if (section.key === 'staffAttendance') {
+        return settings.staffAttendanceSource === 'teacher' && !alreadyPresentToday && (
+          isSupervisor
+          || isReciter
+          || (isAdmin && dashboardPermissions.includes('staffAttendance'))
+        );
+      }
+      if (section.key === 'mushaf') return isSupervisor || isReciter;
+      const permissionKeys = section.permissionKeys || [section.permissionKey || section.key];
+      if (!isManager && !permissionKeys.some((key) => dashboardPermissions.includes(key))) return false;
+      if (!isSupervisor && section.key === 'manualAttendance' && (!settings.attendanceManualEnabled || settings.recitationAttendanceSource === 'teacher')) return false;
+      return true;
+    });
+
+    const availableSections = isOnline
+      ? filteredSections
+      : filteredSections.filter((section) => offlineDashboardSections.has(section.key));
+    if (!isSupervisor) return localizeSections([...availableSections].sort((first, second) => (
+      Number(second.key === 'staffAttendance') - Number(first.key === 'staffAttendance')
+    )));
+    return localizeSections([...availableSections].sort((first, second) => (
+      (supervisorSectionOrder.get(first.key) ?? Number.MAX_SAFE_INTEGER)
+      - (supervisorSectionOrder.get(second.key) ?? Number.MAX_SAFE_INTEGER)
+    )));
+  }, [alreadyPresentToday, dashboardPermissions, isAdmin, isManager, isOnline, isReciter, isSupervisor, rewardUnits, settings, site.features]);
+
+  const routeSection = dashboardSectionRoutes.getKey(sectionSlug);
+  const requestedSection = routeSection === 'executionFollowup'
+    ? 'reports'
+    : routeSection === 'settings'
+      ? defaultSettingsNavigationKey
+      : routeSection;
+  const isVisibleSection = sections.some((section) => (
+    section.key === requestedSection
+    || section.children?.some((child) => child.key === requestedSection)
+  ));
+  const visibleActiveSection = isVisibleSection
+    ? requestedSection
+    : defaultAccountSection(role, sections);
+
+  useEffect(() => {
+    if (isDashboardLoading || !hasDashboardAccess || !visibleActiveSection) return;
+    const canonicalSlug = dashboardSectionRoutes.getSlug(visibleActiveSection);
+    if (sectionSlug !== canonicalSlug) {
+      navigate(`/dashboard/${canonicalSlug}`, { replace: true });
+    }
+  }, [hasDashboardAccess, isDashboardLoading, navigate, sectionSlug, visibleActiveSection]);
+
+  const changeSection = useCallback((key) => {
+    const slug = dashboardSectionRoutes.getSlug(key);
+    if (slug) navigate(`/dashboard/${slug}`);
+  }, [navigate]);
+
+  const logout = useAccountLogout();
+
+  const clearActiveCall = useCallback(() => setActiveCallRoom(null), []);
+  const restoreActiveCall = useCallback(() => changeSection('calls'), [changeSection]);
+
+  const renderSection = () => {
+    if (visibleActiveSection === 'students') return <StudentsSection />;
+    if (visibleActiveSection === 'registrationRequests') return <RegistrationRequestsSection />;
+    if (visibleActiveSection === 'studentPlans') return <StudentPlansSection hideCommitteeFilter={isSupervisor && !isManager} />;
+    if (visibleActiveSection === 'studentExecutionCorrections') return <StudentExecutionCorrectionsSection />;
+    if (visibleActiveSection === 'teacherPoints') return <TeacherPointsAdjustmentSection />;
+    if (visibleActiveSection === 'quranTests') return <QuranTestsSection />;
+    if (visibleActiveSection === 'quranEvaluation') return <TeacherEvaluationSection />;
+    if (visibleActiveSection === 'previousRecitationSessions') return <TeacherPreviousSessionsPanel />;
+    if (visibleActiveSection === 'families') return <FamiliesSection />;
+    if (visibleActiveSection === 'supervisors') return <SupervisorsSection />;
+    if (visibleActiveSection === 'reciters') return <RecitersSection />;
+    if (visibleActiveSection === 'administrators') return <AdministratorsSection />;
+    if (visibleActiveSection === 'reports') return (
+      <ReportsSection
+        teacherScoped={isSupervisor}
+        canViewStandardReports={isSupervisor || isManager || dashboardPermissions.includes('reports')}
+        canViewExecutionFollowup={
+          settings.hasStudentQuranExecution !== false
+          && (isSupervisor || isManager || dashboardPermissions.includes('executionFollowup'))
+        }
+        canViewTeacherPoints={settings.teacherManualPointsEnabled}
+      />
+    );
+    if (visibleActiveSection === 'programs') return <ProgramsSection />;
+    if (visibleActiveSection === 'culturalCompetition') return <CulturalCompetitionSection canManageBank={isManager || isAdmin} />;
+    if (visibleActiveSection === 'calls') return activeCallRoom ? null : <LazyCallsSection onJoinRoom={setActiveCallRoom} />;
+    if (visibleActiveSection === 'narrationDay') return <NarrationDaySection />;
+    if (visibleActiveSection === 'notifications') return <NotificationsSection />;
+    if (visibleActiveSection === 'whatsappSend') return <WhatsAppSendSection />;
+    if (visibleActiveSection === 'contactMessages') return <ContactMessagesSection />;
+    if (visibleActiveSection === 'manualAttendance') return <ManualAttendanceSection teacherScoped={isSupervisor} />;
+    if (visibleActiveSection === 'staffAttendance') return <StaffAttendanceSection attendanceState={staffAttendanceState} />;
+    if (visibleActiveSection === 'mushaf') return <StudentMushafSection />;
+    if (isSettingsNavigationKey(visibleActiveSection)) return (
+      <SettingsSection
+        activeCategory={visibleActiveSection}
+        onSettingsChange={setSettings}
+        canManageDeletionRequests={isManager}
+        canResetPoints={isManager}
+      />
+    );
+    if (visibleActiveSection === 'store') return <StoreSection />;
+    return (
+      <Card className="border-primary/30 bg-card">
+        <CardContent className="p-8 text-muted-foreground">القسم غير متاح حالياً.</CardContent>
+      </Card>
+    );
+  };
+
+  if (isDashboardLoading) {
+    return (
+      <div className="min-h-screen bg-background text-foreground [font-family:var(--font-ui)]" dir="rtl">
+        <CustomCursor />
+        <LoadingScreen />
+      </div>
+    );
+  }
+
+  if (!hasDashboardAccess) {
+    return (
+      <div className="min-h-screen bg-background px-4 py-16 text-foreground [font-family:var(--font-ui)]" dir="rtl">
+        <CustomCursor />
+        <Helmet>
+          <title>غير مصرح</title>
+        </Helmet>
+        <div className="mx-auto max-w-xl rounded-2xl border border-border bg-card p-8 text-center shadow-[0_12px_35px_hsl(210_40%_20%/0.08)]">
+          <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-primary/10 text-primary">
+            <ShieldCheck className="h-6 w-6" />
+          </span>
+          <h1 className="mt-4 text-2xl font-black text-foreground">غير مصرح بالدخول</h1>
+          <p className="mt-2 text-sm font-semibold text-muted-foreground">هذا الحساب لا يملك صلاحية الوصول إلى لوحة التحكم.</p>
+          <Button type="button" variant="outline" className="mt-5" onClick={logout}>
+            <LogOut className="h-4 w-4" />
+            العودة لتسجيل الدخول
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (visibleActiveSection === 'mushaf') {
+    const returnSection = sections.find((section) => section.key !== 'mushaf');
+    return (
+      <div className="fixed inset-0 z-[100] h-dvh overflow-hidden bg-background [font-family:var(--font-ui)]" dir="rtl">
+        <Suspense fallback={<DashboardLoader mode="screen" className="h-dvh" />}>
+          <StudentMushafSection onBack={() => returnSection && changeSection(returnSection.key)} />
+        </Suspense>
+      </div>
+    );
+  }
+
+  return (
+    <>
+    <StaffAttendancePrompt active={staffAttendanceActive} attendanceState={staffAttendanceState} />
+    <DashboardShell
+      headerContent={visibleActiveSection === 'quranEvaluation' ? <><Suspense fallback={null}><RecitationSettingsButton staffId={supervisorId} /></Suspense><NotificationButton showTrigger={false} /></> : <NotificationButton />}
+      title={site.name}
+      logo={site.markLogo || site.squareLogo || site.logo}
+      sections={sections}
+      activeSection={visibleActiveSection}
+      contentKey={isSettingsNavigationKey(visibleActiveSection) ? 'settings' : visibleActiveSection}
+      onSectionChange={changeSection}
+      onLogout={logout}
+      persistentContent={activeCallRoom ? (
+        <LazyAudioCallRoom
+          roomInfo={activeCallRoom}
+          isOwner={activeCallRoom.isOwner}
+          minimized={visibleActiveSection !== 'calls'}
+          onRestore={restoreActiveCall}
+          onLeave={clearActiveCall}
+          onClosed={clearActiveCall}
+        />
+      ) : null}
+    >
+      <Suspense fallback={<DashboardLoader className="min-h-[420px]" />}>
+        {renderSection()}
+      </Suspense>
+    </DashboardShell>
+    </>
+  );
+};
+
+export default WajehDashboard;

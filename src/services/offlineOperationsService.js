@@ -1,0 +1,234 @@
+import { singleFlight, limitedTaskQueue } from '@/lib/asyncRequests';
+import { createRefreshGate } from '@/lib/refreshGate';
+import { getAuthSessionVersion } from '@/lib/authSession';
+import { studentsApi } from '@/services/studentsApi';
+import { getTenantRegistrationNumber } from '@/services/apiBase';
+import { offlineRecitationStore } from '@/services/offlineRecitationStore';
+import { getBusinessDate, shiftDateOnly } from '../../shared/business-date.js';
+
+const ACTION_HANDLERS = Object.freeze({
+  student_attendance: (payload) => studentsApi.checkInStudent(payload.studentId, payload),
+  staff_attendance: (payload) => studentsApi.checkInMyStaffAttendance(payload),
+  quran_test_result: (payload) => studentsApi.saveQuranTestResult(payload),
+  narration_part: (payload) => studentsApi.updateNarrationPart(payload.eventId, payload.partId, {
+    ...payload.evaluation,
+    requestId: payload.requestId,
+    deviceId: payload.deviceId,
+    bootId: payload.bootId,
+    eventMonotonicMs: payload.eventMonotonicMs,
+    committedAtLocal: payload.committedAtLocal,
+  }),
+  narration_student_status: (payload) => studentsApi.updateNarrationStudentStatus(
+    payload.eventId,
+    payload.entryId,
+    payload.status,
+    payload,
+  ),
+  daily_challenge_submit: (payload) => studentsApi.submitDailyChallenge(payload),
+  store_purchase: (payload) => studentsApi.purchaseStoreProduct(payload.productId, payload),
+});
+
+const isOnline = () => typeof navigator === 'undefined' || navigator.onLine !== false;
+
+const registerBackgroundSync = async () => {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  const registration = await navigator.serviceWorker.ready.catch(() => null);
+  await registration?.sync?.register?.('madarij-offline-operations').catch(() => undefined);
+};
+
+export const offlineActorKey = (accountId, actorRole = 'supervisor') => (
+  `${getTenantRegistrationNumber() || 'default'}:${String(actorRole || 'supervisor')}:${Number(accountId || 0)}`
+);
+
+const refreshManagementWorkspace = createRefreshGate(5 * 60_000);
+const fetchSnapshot = singleFlight(async (key, session, loader) => {
+  const value = await loader();
+  await offlineRecitationStore.cacheSnapshot(key, value);
+  return value;
+}, (key, session) => JSON.stringify([key, session]));
+
+export async function loadOfflineSnapshot(accountId, resourceKey, loader, {
+  actorRole = 'supervisor',
+  preferCache = false,
+  onRefresh,
+} = {}) {
+  const key = `${offlineActorKey(accountId, actorRole)}:resource:${resourceKey}`;
+  const cached = await offlineRecitationStore.getSnapshot(key);
+  if (!isOnline()) {
+    if (cached !== null && cached !== undefined) return cached;
+    throw new Error('هذه البيانات غير محفوظة للعمل دون إنترنت. اتصل بالإنترنت مرة واحدة أولًا.');
+  }
+  if (preferCache && cached !== null && cached !== undefined) {
+    void fetchSnapshot(key, getAuthSessionVersion(), loader).then((value) => {
+      onRefresh?.(value);
+    }).catch(() => undefined);
+    return cached;
+  }
+  try {
+    return await fetchSnapshot(key, getAuthSessionVersion(), loader);
+  } catch (error) {
+    if (cached !== null && cached !== undefined) return cached;
+    throw error;
+  }
+}
+
+export async function commitOfflineOperation(accountId, actionType, payload, { dedupeKey = '', actorRole = 'supervisor' } = {}) {
+  if (!ACTION_HANDLERS[actionType]) throw new Error('نوع العملية المحلية غير مدعوم.');
+  const device = await offlineRecitationStore.getDeviceContext(offlineActorKey(accountId, actorRole));
+  const capturedAtLocal = new Date().toISOString();
+  const action = await offlineRecitationStore.commitAction(
+    offlineActorKey(accountId, actorRole),
+    actionType,
+    {
+      ...payload,
+      deviceId: device.deviceId,
+      bootId: device.bootId,
+      eventMonotonicMs: device.monotonicMs,
+      capturedAtLocal,
+      committedAtLocal: capturedAtLocal,
+      registrationNumber: getTenantRegistrationNumber(),
+    },
+    { dedupeKey },
+  );
+  void registerBackgroundSync();
+  return action;
+}
+
+export async function syncOfflineActions(accountId, { force = false, actorRole = 'supervisor' } = {}) {
+  if (!accountId || !isOnline()) return [];
+  const actorKey = offlineActorKey(accountId, actorRole);
+  const actions = await offlineRecitationStore.getActions(actorKey, ['pending', 'failed', 'syncing']);
+  const results = [];
+  for (const action of actions) {
+    if (!force && action.nextRetryAt && Date.parse(action.nextRetryAt) > Date.now()) continue;
+    const handler = ACTION_HANDLERS[action.actionType];
+    if (!handler) continue;
+    await offlineRecitationStore.updateAction(actorKey, action.actionId, { status: 'syncing', lastError: '' });
+    try {
+      const result = await handler(action.payload);
+      if (action.actionType === 'staff_attendance' && result?.date) {
+        const key = `${actorKey}:resource:staff-attendance:me`;
+        const cached = await offlineRecitationStore.getSnapshot(key);
+        if (!cached?.date || result.date >= cached.date) {
+          await offlineRecitationStore.cacheSnapshot(key, result);
+        }
+      }
+      results.push(await offlineRecitationStore.updateAction(actorKey, action.actionId, {
+        status: 'synced', result, nextRetryAt: null, lastError: '',
+      }));
+      await offlineRecitationStore.setMeta(`last_sync:${actorKey}`, new Date().toISOString());
+    } catch (error) {
+      const retryCount = Number(action.retryCount || 0) + 1;
+      const terminal = Number(error?.status) >= 400
+        && Number(error?.status) < 500
+        && ![408, 429].includes(Number(error?.status));
+      results.push(await offlineRecitationStore.updateAction(actorKey, action.actionId, {
+        status: error?.status === 403
+          ? 'rejected_permission'
+          : (error?.status === 409 ? 'rejected_conflict' : (terminal ? 'rejected_validation' : 'failed')),
+        retryCount,
+        nextRetryAt: terminal ? null : new Date(Date.now() + Math.min(60 * 60_000, 5_000 * (3 ** retryCount))).toISOString(),
+        lastError: error.message || 'تعذرت المزامنة.',
+      }));
+    }
+  }
+  return results;
+}
+
+export async function prefetchOfflineWorkspace(accountId) {
+  if (!accountId || !isOnline()) return;
+  const date = getBusinessDate();
+  const cache = (key, loader) => loadOfflineSnapshot(accountId, key, loader);
+  const reportTo = date;
+  const reportFrom = shiftDateOnly(date, -369);
+  const [, scheduleResult, eventsResult] = await Promise.allSettled([
+    cache('quran-tests:settings', () => studentsApi.getSettings()),
+    cache(`quran-tests:schedule:${date}`, () => studentsApi.getQuranTestSchedule({ date })),
+    cache('narration:events', () => studentsApi.getNarrationEvents()),
+    cache('staff-attendance:me', () => studentsApi.getMyStaffAttendance()),
+    cache('quran-tests:students', () => studentsApi.getQuranTestStudents()),
+    cache('narration:committees', () => studentsApi.getCommittees()),
+    cache('plans:rows:all', () => studentsApi.getStudentPlans({ committeeId: 'all' })),
+    cache('quran:chapters', () => studentsApi.getQuranChapters()),
+    cache('quran:juz-ranges', () => studentsApi.getQuranJuzRanges()),
+    cache('settings:public', () => studentsApi.getPublicSettings()),
+    cache('reports:recitation-sessions', () => studentsApi.getRecitationSessionsReport({ from: reportFrom, to: reportTo })),
+  ]);
+  const schedule = scheduleResult.status === 'fulfilled' && Array.isArray(scheduleResult.value) ? scheduleResult.value : [];
+  const events = eventsResult.status === 'fulfilled' && Array.isArray(eventsResult.value) ? eventsResult.value : [];
+  const openEvent = events.find((item) => item.status === 'open');
+  const event = openEvent
+    ? await cache(`narration:event:${openEvent.id}`, () => studentsApi.getNarrationEvent(openEvent.id)).catch(() => null)
+    : null;
+  const detailJobs = [];
+  for (const appointment of schedule) {
+    detailJobs.push(cache(
+      `quran-tests:ayahs:${appointment.studentId}:${appointment.juz}`,
+      () => studentsApi.getQuranTestJuzAyahs(appointment.studentId, appointment.juz),
+    ));
+  }
+  if (event) {
+    for (const student of event.students || []) {
+      for (const part of student.parts || []) {
+        detailJobs.push(cache(
+          `narration:ayahs:${event.id}:${part.id}`,
+          () => studentsApi.getNarrationPartAyahs(event.id, part.id),
+        ));
+      }
+    }
+  }
+  await Promise.allSettled(detailJobs);
+}
+
+export async function prefetchOfflineManagementWorkspace(accountId, actorRole = 'manager', { automatic = false } = {}) {
+  if (!accountId || !isOnline()) return;
+  const date = getBusinessDate();
+  const cache = limitedTaskQueue(
+    (key, loader) => loadOfflineSnapshot(accountId, key, loader, { actorRole }),
+    (key) => key,
+    2,
+  );
+  if (automatic) {
+    const scope = JSON.stringify([offlineActorKey(accountId, actorRole), getAuthSessionVersion(), date]);
+    return refreshManagementWorkspace(scope, () => cache('management:committees', () => studentsApi.getCommittees()));
+  }
+  const [familiesResult, archivesResult, committeesResult] = await Promise.allSettled([
+    cache('management:families:', () => studentsApi.getFamilies()),
+    cache('reports:archives', () => studentsApi.getReportArchives()),
+    cache('management:committees', () => studentsApi.getCommittees()),
+    cache('management:students:all', () => studentsApi.getStudents({ committeeId: 'all' })),
+    cache('reports:committees', () => studentsApi.getCommittees()),
+    cache(`reports:students:${date}:${date}:all`, () => studentsApi.getProgressReport({
+      from: date, to: date, committeeId: 'all', studentId: 'all',
+    })),
+    cache(`reports:overview::${date}`, () => studentsApi.getOverviewReport()),
+    cache(`reports:supervisors:${date}`, () => studentsApi.getSupervisorReport({ date })),
+  ]);
+  const families = familiesResult.status === 'fulfilled' && Array.isArray(familiesResult.value)
+    ? familiesResult.value
+    : [];
+  const archives = archivesResult.status === 'fulfilled' && Array.isArray(archivesResult.value)
+    ? archivesResult.value
+    : [];
+  const committees = committeesResult.status === 'fulfilled' && Array.isArray(committeesResult.value)
+    ? committeesResult.value
+    : [];
+  await Promise.allSettled([
+    ...committees.map((committee) => cache(
+      `management:students:${committee.id}`,
+      () => studentsApi.getStudents({ committeeId: committee.id }),
+    )),
+    ...families.map((family) => cache(
+      `management:family-students:${family.id}`,
+      () => studentsApi.getFamilyStudents(family.id),
+    )),
+    ...archives.slice(0, 10).map((archive) => cache(
+      `reports:archive:${archive.id}`,
+      () => studentsApi.getReportArchive(archive.id),
+    )),
+  ]);
+  await offlineRecitationStore.setMeta(
+    `offline_prepared_at:${offlineActorKey(accountId, actorRole)}`,
+    new Date().toISOString(),
+  );
+}

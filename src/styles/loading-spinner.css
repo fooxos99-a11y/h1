@@ -1,0 +1,19 @@
+/* Shared by the initial HTML and React, including native web builds. */
+.loading-spinner--screen {
+  display: inline-block;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  color: #0aa3b4;
+  border: 3px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  animation: loading-spinner-rotate 1s linear infinite;
+}
+
+@keyframes loading-spinner-rotate {
+  to { transform: rotate(360deg); }
+}

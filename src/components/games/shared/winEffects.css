@@ -1,0 +1,108 @@
+.game-win-effects {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.game-win-effects--fullscreen {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 0;
+}
+
+.game-win-firework {
+  position: absolute;
+  top: var(--y);
+  left: var(--x);
+  width: 1px;
+  height: 1px;
+  transform: scale(var(--scale));
+}
+
+.game-win-firework span {
+  --angle: calc(var(--i) * 20deg);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 22px;
+  border-radius: 999px;
+  background: #f6c453;
+  box-shadow: 0 0 12px #f6c453, 0 0 28px rgba(246, 196, 83, 0.9);
+  transform: translate(-50%, -50%) rotate(var(--angle)) translateY(0) scale(0.2);
+  opacity: 0;
+  animation: game-win-pop 2.15s cubic-bezier(.18, .86, .34, 1.05) infinite;
+  animation-delay: calc(var(--delay) + var(--i) * 12ms);
+}
+
+.game-win-firework span:nth-child(3n) {
+  width: 9px;
+  height: 9px;
+  background: #fff;
+  box-shadow: 0 0 12px #fff, 0 0 24px rgba(255, 255, 255, 0.9);
+}
+
+.game-win-firework span:nth-child(4n) {
+  background: #31d7c0;
+  box-shadow: 0 0 12px #31d7c0, 0 0 28px rgba(49, 215, 192, 0.85);
+}
+
+.game-win-rings {
+  position: absolute;
+  top: -72px;
+  left: -72px;
+  width: 144px;
+  height: 144px;
+  border: 3px solid rgba(246, 196, 83, 0.72);
+  border-radius: 999px;
+  box-shadow: 0 0 28px rgba(246, 196, 83, 0.4);
+  animation: game-win-ring 2.15s ease-out infinite;
+  animation-delay: var(--delay);
+}
+
+@keyframes game-win-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle)) translateY(0) scale(0.2);
+  }
+  18% {
+    opacity: 1;
+  }
+  68% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(var(--angle)) translateY(calc(var(--distance) * -1)) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle)) translateY(calc(var(--distance) * -1.08)) scale(0.25);
+  }
+}
+
+@keyframes game-win-ring {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.68);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-win-firework span {
+    animation: none;
+    opacity: 0.72;
+    transform: translate(-50%, -50%) rotate(var(--angle)) translateY(calc(var(--distance) * -0.72)) scale(0.82);
+  }
+
+  .game-win-rings {
+    animation: none;
+    opacity: 0.42;
+    transform: scale(1);
+  }
+}

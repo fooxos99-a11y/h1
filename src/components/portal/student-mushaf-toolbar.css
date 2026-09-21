@@ -1,0 +1,6 @@
+.student-mushaf-reader[data-reader-theme="light"]{--reader-button-bg:rgba(255,255,255,.35);--reader-button-ink:#07566b;--reader-button-border:rgba(148,163,184,.3)}
+.student-mushaf-reader[data-reader-theme="dark"]{--reader-button-bg:rgba(255,255,255,.12);--reader-button-ink:#f2d28a;--reader-button-border:#53657b}
+.student-mushaf-reader[data-reader-theme] .student-mushaf-toolbar button{background:var(--reader-button-bg)!important;color:var(--reader-button-ink)!important;border-color:var(--reader-button-border)!important;box-shadow:none;transition-property:transform,box-shadow}
+.student-mushaf-reader[data-reader-theme] .student-mushaf-toolbar button svg{color:inherit!important}
+.student-mushaf-reader[data-reader-theme] .student-mushaf-toolbar button[aria-pressed="true"]{background:#087c88!important;color:#fff!important;border-color:#087c88!important}
+.student-mushaf-reader[data-reader-theme] .student-mushaf-toolbar button:hover{filter:brightness(1.08)}

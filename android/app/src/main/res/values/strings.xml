@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">الحبيب ماب</string>
+    <string name="title_activity_main">الحبيب ماب</string>
+    <string name="package_name">sa.madarij.app</string>
+    <string name="custom_url_scheme">sa.madarij.app</string>
+</resources>

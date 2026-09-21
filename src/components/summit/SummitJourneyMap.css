@@ -1,0 +1,543 @@
+.summit-map-shell {
+  background: #e9e7da;
+  color: #142b3c;
+  font-family: var(--font-ui);
+}
+
+.summit-overview,
+.qassim-road-scene {
+  position: absolute;
+  inset: 0;
+}
+
+.summit-overview { background: #e9e7da; }
+
+.qassim-road-scene {
+  overflow: hidden;
+  background: #bda77d;
+  color: #fff;
+  isolation: isolate;
+}
+
+.qassim-road-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 53% center;
+  filter: saturate(.82) contrast(.94) brightness(.98);
+  animation: qassim-road-entry .9s cubic-bezier(.2, .75, .25, 1) both;
+  transform-origin: 50% 58%;
+}
+
+.qassim-road-scene.is-station .qassim-road-backdrop {
+  object-position: 58% center;
+  transform: scale(var(--road-scene-scale, 1));
+  transition: transform .8s ease, object-position .8s ease;
+}
+
+.qassim-road-scene.is-station.is-moving .qassim-road-backdrop {
+  animation: none;
+}
+
+.qassim-road-scene.is-moving .qassim-road-backdrop {
+  animation: qassim-road-driving 1.25s ease-in-out infinite alternate;
+}
+
+.qassim-road-scene.is-moving .qassim-road-depth {
+  animation: qassim-road-flow .7s linear infinite;
+}
+
+.qassim-road-depth {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(180deg, rgb(21 44 57 / 6%) 0%, transparent 43%, rgb(12 25 33 / 13%) 100%),
+    linear-gradient(90deg, rgb(194 166 111 / 8%), transparent 42% 68%, rgb(194 166 111 / 8%));
+  pointer-events: none;
+}
+
+.qassim-road-scene.is-night .qassim-road-backdrop {
+  filter: brightness(.58) saturate(.68) contrast(1.06) hue-rotate(7deg);
+}
+
+.qassim-road-scene.is-night .qassim-road-depth {
+  background:
+    radial-gradient(circle at 18% 12%, rgb(255 255 255 / 46%) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 73% 17%, rgb(255 255 255 / 38%) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 46% 8%, rgb(255 255 255 / 32%) 0 1px, transparent 1.5px),
+    linear-gradient(180deg, rgb(7 26 45 / 54%) 0%, rgb(8 31 48 / 27%) 48%, rgb(2 13 22 / 22%) 100%);
+  background-size: 13rem 9rem, 17rem 11rem, 19rem 12rem, auto;
+  background-position: 0 0, 2rem 1rem, 5rem .25rem, 0 0;
+  background-repeat: repeat-x, repeat-x, repeat-x, no-repeat;
+}
+
+.qassim-road-scene.is-night .qassim-road-sign {
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 14%), 0 1rem 2rem rgb(0 10 18 / 54%);
+}
+
+.qassim-road-sign {
+  position: absolute;
+  top: 57%;
+  left: 77%;
+  z-index: 15;
+  display: flex;
+  width: clamp(7.7rem, 27vw, 11rem);
+  flex-direction: column;
+  gap: .2rem;
+  padding: .58rem .68rem;
+  border: 2px solid rgb(255 255 255 / 92%);
+  border-radius: .28rem;
+  background: #176b47;
+  box-shadow: 0 .9rem 1.6rem rgb(21 42 45 / 28%);
+  color: #fff;
+  text-align: right;
+  transform: translate(-50%, -100%) scale(.78);
+  transform-origin: center bottom;
+}
+
+.qassim-road-sign.is-left {
+  right: 77%;
+  left: auto;
+}
+
+.qassim-road-sign.is-left::after {
+  right: auto;
+  left: 1.25rem;
+  box-shadow: -1.1rem 0 #747c7d;
+}
+
+.qassim-road-sign::after {
+  position: absolute;
+  right: 1.25rem;
+  bottom: -4.8rem;
+  width: .3rem;
+  height: 4.8rem;
+  background: #747c7d;
+  box-shadow: 1.1rem 0 #747c7d;
+  content: '';
+}
+
+.qassim-road-sign > span { color: rgb(255 255 255 / 72%); font-size: .67rem; font-weight: 800; }
+.qassim-road-sign > strong { font-size: 1.08rem; line-height: 1.35; }
+.qassim-road-sign > small { font-weight: 900; }
+.qassim-road-sign button {
+  position: relative;
+  z-index: 2;
+  min-height: 2.5rem;
+  margin-top: .35rem;
+  border: 1px solid rgb(255 255 255 / 52%);
+  background: #fff;
+  color: #14563c !important;
+  box-shadow: none;
+}
+
+.qassim-road-sign button:hover { background: #f2f5ef; color: #103f2e !important; }
+.qassim-road-sign.is-arrived { background: #134f72; }
+.qassim-road-sign.is-arrived button { color: #134f72 !important; }
+
+.qassim-road-station {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 1rem);
+  left: 50%;
+  z-index: 60;
+  width: clamp(8.5rem, 32vw, 12rem);
+  color: #fff;
+  transform: translateX(-50%);
+  transform-origin: center top;
+}
+
+.qassim-road-station-board {
+  position: relative;
+  display: grid;
+  min-width: 100%;
+  gap: .16rem;
+  padding: .7rem .85rem .78rem;
+  border: 1px solid rgb(255 255 255 / 62%);
+  border-top: .45rem solid #e8ecec;
+  border-radius: .25rem .25rem .5rem .5rem;
+  background: linear-gradient(160deg, rgb(38 51 57 / 94%), rgb(18 32 39 / 96%));
+  box-shadow: 0 1rem 2rem rgb(10 25 31 / 38%);
+  text-align: center;
+}
+
+.qassim-road-station-board::before {
+  position: absolute;
+  inset: -.55rem -.45rem auto;
+  height: .42rem;
+  border-radius: .15rem;
+  background: repeating-linear-gradient(90deg, #f2f2ed 0 1.4rem, #1c7654 1.4rem 2.8rem);
+  content: '';
+}
+
+.qassim-road-station-board > span { color: #b9d5c8; font-size: .68rem; font-weight: 900; }
+.qassim-road-station-board > strong { font-size: 1rem; line-height: 1.35; }
+.qassim-road-station-board > small { color: rgb(255 255 255 / 76%); font-size: .72rem; font-weight: 800; }
+.qassim-road-station.is-arrived .qassim-road-station-board { border-color: rgb(239 191 92 / 82%); box-shadow: 0 0 0 4px rgb(239 191 92 / 18%), 0 1rem 2rem rgb(10 25 31 / 38%); }
+
+.qassim-road-scene.is-night .qassim-road-station-board {
+  background: linear-gradient(160deg, rgb(27 46 58 / 97%), rgb(9 24 34 / 98%));
+  box-shadow: 0 0 1.4rem rgb(224 183 91 / 18%), 0 1rem 2rem rgb(0 8 14 / 58%);
+}
+
+@media (max-width: 480px) {
+  .qassim-road-scene.is-station .qassim-road-backdrop { object-position: 62% center; }
+  .qassim-road-station { width: 8.75rem; }
+}
+
+@keyframes qassim-road-driving {
+  from { transform: scale(1.015) translateY(0); }
+  to { transform: scale(1.075) translateY(1.2%); }
+}
+
+@keyframes qassim-road-flow {
+  from { transform: translateY(-1%); }
+  to { transform: translateY(1%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qassim-road-scene.is-moving .qassim-road-backdrop,
+  .qassim-road-scene.is-moving .qassim-road-depth { animation: none; }
+}
+
+.qassim-road-goal {
+  --goal-blur: 1.4px;
+  --goal-opacity: .35;
+  --goal-scale: .62;
+  --goal-top: 31%;
+  position: absolute;
+  top: var(--goal-top);
+  left: 50%;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  opacity: var(--goal-opacity);
+  filter: blur(var(--goal-blur));
+  transform: translate(-50%, -50%) scale(var(--goal-scale));
+  transform-origin: center bottom;
+  transition: opacity .7s ease, filter .7s ease, transform .7s ease, top .7s ease;
+}
+
+.qassim-road-goal > div {
+  display: grid;
+  width: 3.2rem;
+  height: 3.2rem;
+  place-items: center;
+  border: 3px solid rgb(255 255 255 / 82%);
+  border-radius: 50% 50% 50% 14%;
+  background: #183c52;
+  box-shadow: 0 0 2.2rem rgb(244 225 157 / 48%);
+  transform: rotate(-45deg);
+}
+
+.qassim-road-goal svg { width: 1.25rem; transform: rotate(45deg); }
+.qassim-road-goal > span {
+  margin-top: .7rem;
+  padding: .3rem .65rem;
+  border-radius: .45rem;
+  background: rgb(19 47 64 / 90%);
+  font-size: .72rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.qassim-road-dashboard {
+  position: absolute;
+  right: -8%;
+  bottom: -10%;
+  left: -8%;
+  z-index: 8;
+  height: 16%;
+  border-top: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 50% 50% 0 0;
+  background: linear-gradient(180deg, #26343b 0%, #111b20 82%);
+  box-shadow: 0 -1rem 3rem rgb(11 23 29 / 36%);
+  pointer-events: none;
+}
+
+.qassim-road-dashboard-rim {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  width: 34%;
+  height: 75%;
+  border: .6rem solid #10191e;
+  border-bottom: 0;
+  border-radius: 50% 50% 0 0;
+  opacity: .7;
+  transform: translateX(-50%);
+}
+
+.summit-view-toggle {
+  position: absolute;
+  right: 1rem;
+  bottom: calc(env(safe-area-inset-bottom) + 1rem);
+  z-index: 55;
+  min-height: 3rem;
+  border: 1px solid rgb(255 255 255 / 42%);
+  background: #143043;
+  box-shadow: 0 .5rem 1.25rem rgb(20 39 53 / 24%);
+  color: #fff;
+  backdrop-filter: blur(8px);
+}
+
+.summit-view-toggle:hover { background: #173c54; color: #fff; }
+.summit-view-toggle svg { width: 1.1rem; height: 1.1rem; }
+
+@keyframes qassim-road-entry {
+  from { opacity: .76; transform: scale(1.045); }
+  to { opacity: 1; transform: scale(1); }
+}
+.summit-map-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  touch-action: pan-x pan-y;
+}
+
+.summit-map-viewport::-webkit-scrollbar { display: none; }
+
+.summit-map-canvas {
+  position: relative;
+  min-width: 1px;
+  min-height: 1px;
+  margin: auto;
+  transform-origin: top left;
+}
+
+.qassim-map-artwork {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+
+.qassim-region-boundary {
+  fill: rgb(237 235 222 / 55%);
+  stroke: #c4c0b2;
+  stroke-dasharray: 5 6;
+  stroke-width: 1.5;
+}
+
+.qassim-road-edge,
+.qassim-road {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.qassim-road-edge { stroke: #bbb8ad; stroke-width: 10; opacity: .9; }
+.qassim-road-edge.is-primary { stroke-width: 16; }
+.qassim-road { stroke: #fffefa; stroke-width: 6; }
+.qassim-road.is-primary { stroke-width: 10; }
+
+.qassim-route-casing,
+.qassim-route-future,
+.qassim-route-progress-casing,
+.qassim-route-progress {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.qassim-route-casing { stroke: #fff; stroke-width: 18; }
+.qassim-route-future { stroke: #879197; stroke-dasharray: 13 12; stroke-width: 10; }
+.qassim-route-progress-casing { stroke: #fff; stroke-width: 18; }
+.qassim-route-progress { stroke: #1a73e8; stroke-width: 11; }
+.qassim-map-goal-fog { fill: #e8e5d8; opacity: .97; }
+
+.qassim-city-area {
+  fill: url(#qassim-buildings);
+  stroke: rgb(128 121 105 / 38%);
+  stroke-width: 1.5;
+}
+
+.qassim-city-area.is-capital { stroke: #1a73e8; stroke-width: 2.5; }
+.qassim-city-center { fill: #53656c; stroke: #fff; stroke-width: 2; }
+.qassim-city-label {
+  direction: rtl;
+  fill: #3c4c53;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 900;
+  paint-order: stroke;
+  stroke: rgb(255 255 255 / 96%);
+  stroke-linejoin: round;
+  stroke-width: 5px;
+}
+
+.qassim-map-station-shadow { fill: rgb(42 53 57 / 20%); }
+.qassim-map-station-building { fill: #f4efe2; stroke: #51646a; stroke-width: 2; }
+.qassim-map-station-roof { fill: #176b47; stroke: #fff; stroke-width: 2; }
+.qassim-map-station-door { fill: #334b5c; }
+.qassim-map-station-stripe { fill: #d89b2b; opacity: .95; }
+.qassim-map-station-label,
+.qassim-map-station-distance {
+  direction: rtl;
+  fill: #263d46;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 900;
+  paint-order: stroke;
+  stroke: rgb(255 255 255 / 96%);
+  stroke-linejoin: round;
+  stroke-width: 5px;
+}
+.qassim-map-station-distance { fill: #176b47; font-size: 12px; stroke-width: 4px; }
+
+.summit-stage-sign,
+.summit-location-marker,
+.summit-mystery-goal {
+  position: absolute;
+  z-index: 20;
+  transform: translate(-50%, -50%);
+}
+
+.summit-stage-sign {
+  width: 2.75rem !important;
+  min-width: 2.75rem !important;
+  height: 2.75rem !important;
+  min-height: 2.75rem !important;
+  border: 3px solid #fff !important;
+  border-radius: 50% 50% 50% 16% !important;
+  background: #334b5c !important;
+  box-shadow: 0 7px 15px rgb(21 39 52 / 32%) !important;
+  color: #fff !important;
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.summit-stage-sign > svg {
+  width: 1rem;
+  height: 1rem;
+  transform: rotate(45deg);
+}
+
+.summit-stage-sign.is-completed { background: #1263d6 !important; }
+.summit-stage-sign.is-unlocked { background: #0e6380 !important; }
+.summit-stage-sign.is-next { box-shadow: 0 0 0 6px rgb(224 157 48 / 24%), 0 7px 15px rgb(21 39 52 / 32%) !important; }
+.summit-stage-sign.is-locked { background: #647079 !important; opacity: .94 !important; }
+
+.summit-stage-number {
+  position: absolute;
+  top: -9px;
+  right: -7px;
+  display: grid;
+  width: 1.25rem;
+  height: 1.25rem;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #18384e;
+  color: #fff;
+  font-size: .65rem;
+  line-height: 1;
+  transform: rotate(45deg);
+}
+
+.summit-location-marker {
+  z-index: 28;
+  display: grid;
+  width: 1.85rem;
+  height: 1.85rem;
+  place-items: center;
+  border: 4px solid #fff;
+  border-radius: 999px;
+  background: #1263d6;
+  box-shadow: 0 0 0 9px rgb(18 99 214 / 20%), 0 7px 14px rgb(16 39 56 / 32%);
+  color: #fff;
+  pointer-events: none;
+  transition: left .65s ease, top .65s ease;
+}
+
+.summit-location-marker span {
+  position: absolute;
+  bottom: 2.3rem;
+  padding: .28rem .55rem;
+  border-radius: .5rem;
+  background: rgb(18 48 69 / 94%);
+  color: #fff;
+  font-size: .72rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.summit-mystery-goal { z-index: 24; display: grid; place-items: center; }
+.summit-goal-mask {
+  position: absolute;
+  width: 8.5rem;
+  height: 6.5rem;
+  border: 1px solid rgb(24 54 75 / 20%);
+  border-radius: 48%;
+  background: repeating-linear-gradient(135deg, rgb(33 56 70 / 91%) 0 9px, rgb(48 73 87 / 90%) 9px 18px);
+  box-shadow: 0 12px 28px rgb(29 49 62 / 28%);
+  transition: opacity .35s ease;
+}
+
+.summit-goal-pin {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  place-items: center;
+  border: 3px solid #fff;
+  border-radius: 50% 50% 50% 16%;
+  background: #1e394b;
+  color: #fff;
+  transform: rotate(-45deg);
+}
+
+.summit-goal-pin svg { width: 1.15rem; transform: rotate(45deg); }
+.summit-mystery-goal > span {
+  position: relative;
+  z-index: 3;
+  margin-top: 4.8rem;
+  padding: .28rem .65rem;
+  border-radius: .55rem;
+  background: #1e394b;
+  color: #fff;
+  font-size: .72rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.summit-mystery-goal.is-revealed .summit-goal-mask { opacity: .15; }
+.summit-mystery-goal.is-revealed .summit-goal-pin { background: #1263d6; }
+
+.summit-map-controls {
+  position: absolute;
+  bottom: calc(env(safe-area-inset-bottom) + 1rem);
+  left: 1rem;
+  z-index: 55;
+  display: grid;
+  gap: .4rem;
+}
+
+.summit-map-controls button {
+  border: 1px solid rgb(255 255 255 / 42%);
+  background: rgb(20 48 67 / 91%);
+  box-shadow: 0 6px 16px rgb(20 39 53 / 20%);
+  color: #fff;
+  backdrop-filter: blur(8px);
+}
+
+.summit-map-controls button:hover { background: #173c54; color: #fff; }
+.summit-map-controls button svg { width: 1.2rem; height: 1.2rem; }
+
+@media (min-width: 640px) {
+  .summit-map-controls { bottom: 1.5rem; left: 1.5rem; }
+  .summit-view-toggle { right: 1.5rem; bottom: calc(env(safe-area-inset-bottom) + 1.5rem); }
+  .qassim-road-sign { top: 61%; left: 79%; transform: translate(-50%, -100%) scale(.92); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .summit-location-marker,
+  .summit-goal-mask,
+  .qassim-road-goal { transition: none; }
+  .qassim-road-backdrop { animation: none; }
+}
