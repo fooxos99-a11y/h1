@@ -54,7 +54,7 @@ export default function PageLoadingBoundary({ children, scope, initialScreen = f
     {owner ? children : <div className="page-loading-boundary relative min-h-64" aria-busy={!ready}>
       <div className="contents" inert={covered ? '' : undefined} aria-hidden={covered || undefined} style={covered ? { visibility: 'hidden' } : undefined}>{children}</div>
       {covered && <div className={loadingSurfaceClass(resolvedScope)}
-        data-loading-indicator={resolvedScope === 'screen' ? 'screen' : 'content'} role="status" aria-live="polite" aria-label="جاري التحميل"><ScreenLoadingVisual branded={false} /></div>}
+        data-loading-indicator={resolvedScope === 'screen' ? 'screen' : 'content'} role="status" aria-live="polite" aria-label="جاري التحميل"><ScreenLoadingVisual /></div>}
     </div>}
   </PageLoadingContext.Provider>;
 }

@@ -1,19 +1,21 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 const browser = await chromium.launch();
-const properties = ['width','height','color','borderTopColor','borderRightWidth','backgroundColor','boxShadow'];
+const properties = ['width','height','backgroundImage','animationName','backgroundColor','boxShadow'];
 try {
   for (const width of [360,768,1440]) {
     const page = await browser.newPage({viewport:{width,height:800}});
     let release;
     const gate = new Promise(resolve => { release = resolve; });
     await page.route('**/src/main.jsx', async route => { await gate; await route.continue(); });
-    await page.goto('http://localhost:3000/',{waitUntil:'commit'});
+    await page.goto('http://127.0.0.1:3017/',{waitUntil:'commit'});
     const boot = page.locator('.boot-loader .loading-spinner--screen');
     await boot.waitFor();
-    await page.waitForFunction(() => globalThis.getComputedStyle(globalThis.document.querySelector('.loading-spinner--screen')).width === '36px');
+    await page.waitForFunction(() => globalThis.getComputedStyle(globalThis.document.querySelector('.loading-spinner--screen')).width === '80px');
     const initial = await boot.evaluate((el,keys) => Object.fromEntries(keys.map(key => [key,globalThis.getComputedStyle(el)[key]])), properties);
-    assert.equal(initial.color,'rgb(10, 163, 180)');
+    assert.ok(initial.backgroundImage.includes('alhabib-map-color-320.webp'));
+    const box = await boot.boundingBox();
+    assert.ok(Math.abs(box.x + box.width / 2 - width / 2) < 1);
     assert.equal(initial.backgroundColor,'rgba(0, 0, 0, 0)');
     assert.equal(await page.locator('.boot-loader__panel').count(),0);
     await page.screenshot({path:`outputs/startup-spinner-${width}.png`});

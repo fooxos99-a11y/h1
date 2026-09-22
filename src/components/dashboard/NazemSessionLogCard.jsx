@@ -1,3 +1,4 @@
+import LoadingSpinner from '@/components/ui/loading-spinner';
 import React from 'react';
 import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,7 +34,7 @@ export default function NazemSessionLogCard({ group, retryJob, retryingJobId }) 
           {entry.errorCode && <p className="break-all" dir="ltr">{entry.errorCode}</p>}
         </details>
         {entry.jobId && canRetryNazemIssue(entry) && <Button type="button" variant="outline" size="sm" className="min-h-11 gap-2" disabled={retryingJobId != null} onClick={() => retryJob(entry.jobId)}>
-          <RefreshCw className={`h-4 w-4 ${retryingJobId === entry.jobId ? 'animate-spin' : ''}`} />{nazemRetryLabel(entry)}
+          {retryingJobId === entry.jobId ? <LoadingSpinner /> : <RefreshCw aria-hidden="true" className="h-4 w-4" />}{nazemRetryLabel(entry)}
         </Button>}
       </div>)}
     </div>

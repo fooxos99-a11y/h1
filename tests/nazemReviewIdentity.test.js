@@ -145,3 +145,13 @@ test('Nazem-enabled local task generation exits before creating its own review',
   const body = source.slice(source.indexOf('async function ensureStudentPlanTasks('));
   assert.match(body, /if \(settings\.nazemIntegrationEnabled\) \{\s*await ensureNazemLinkTasks\(connection, plan, date\);\s*return \[\];/);
 });
+
+test('legacy daily loading uses the recorded attempt link only when task review identity is absent', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('../server/integrations/nazem/service.js', import.meta.url), 'utf8');
+  const loader = source.slice(source.indexOf('async function loadDailyFollowUp('), source.indexOf('async function syncRecitation('));
+  assert.match(loader, /COALESCE\(task\.nazem_review_id, receipt\.daily_follow_up_id\) = \?/);
+  assert.match(loader, /receipt\.ruwasi_recitation_id = attempt\.id/);
+  assert.match(loader, /attempt\.is_official = 1/);
+  assert.match(loader, /task\.plan_id = \? AND task\.student_id = \?/);
+});

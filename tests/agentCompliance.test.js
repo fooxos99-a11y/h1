@@ -6,7 +6,13 @@ import {
   collectComplianceFailures,
   inspectCssFonts,
   inspectSource,
+  sha256,
 } from "../scripts/check-agent-compliance.mjs";
+
+test('instruction hashes are platform independent but reject changed content', () => {
+  assert.equal(sha256('rule\r\nnext\r\n'), sha256('rule\nnext\n'));
+  assert.notEqual(sha256('rule\nnext\n'), sha256('changed\nnext\n'));
+});
 
 test("يرتبط فاحص AGENTS ببوابة مدارج ويجتاز المشروع", async () => {
   const packageJson = JSON.parse(await readFile(path.resolve("package.json"), "utf8"));

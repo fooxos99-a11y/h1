@@ -1,19 +1,13 @@
-/* Shared by the initial HTML and React, including native web builds. */
-.loading-spinner--screen {
+/* One logo and opacity-only animation for pre-React boot and every React loader. */
+.loading-logo {
   display: inline-block;
-  box-sizing: border-box;
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  color: #0aa3b4;
-  border: 3px solid currentColor;
-  border-top-color: transparent;
-  border-radius: 50%;
-  background: transparent;
-  box-shadow: none;
-  animation: loading-spinner-rotate 1s linear infinite;
+  background: url('/branding/rawasi/alhabib-map-color-320.webp') center / contain no-repeat;
+  animation: loading-logo-in .35s ease-out both, loading-logo-breathe 1.8s .35s ease-in-out infinite;
 }
-
-@keyframes loading-spinner-rotate {
-  to { transform: rotate(360deg); }
-}
+.loading-spinner--screen { width: 80px; height: 80px; }
+/* Scrollbar changes must not shift the indicator during login handoff. */
+.boot-loader, [data-loading-indicator="screen"] { box-sizing: border-box; width: 100vw; }
+@keyframes loading-logo-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes loading-logo-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .loading-logo { animation: none; } }

@@ -8,7 +8,8 @@ const supportedSource = /\.(?:css|js|jsx|mjs|ts|tsx)$/;
 const ignoredDirectories = new Set(["node_modules", "dist", ".git", "testsprite_tests"]);
 
 export function sha256(value) {
-  return createHash("sha256").update(value).digest("hex");
+  // Git checks text out as CRLF on Windows and LF on Linux runners.
+  return createHash("sha256").update(String(value).replaceAll("\r\n", "\n")).digest("hex");
 }
 
 export function inspectCssFonts(source, relativePath) {
