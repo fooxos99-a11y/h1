@@ -16,7 +16,7 @@ import tarfile
 import tempfile
 import time
 import urllib.request
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 ROOTS = {'server', 'shared', 'src', 'scripts', 'config', 'public', 'dist'}
 FILES = {'package.json', 'package-lock.json', 'index.html', 'vite.config.js',
@@ -141,25 +141,35 @@ class Assets(HTMLParser):
             self.urls.append(attrs['href'])
 
 
-def fetch(url):
-    request = urllib.request.Request(url, headers={'Cache-Control': 'no-cache', 'User-Agent': 'AlhabibMap-Release-Verification'})
-    with urllib.request.urlopen(request, timeout=30) as response:
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ValueError('Release probes cannot follow redirects')
+
+
+def fetch(base, relative=''):
+    # The origin comes only from server-owned configuration, never HTML content.
+    if relative and (not re.fullmatch(r'[A-Za-z0-9_./-]+', relative) or '..' in relative or relative.startswith('/')):
+        raise ValueError('Invalid asset path')
+    request = urllib.request.Request(base + relative, headers={'Cache-Control': 'no-cache', 'User-Agent': 'AlhabibMap-Release-Verification'})
+    with urllib.request.build_opener(NoRedirect()).open(request, timeout=30) as response:
         return response.read()
 
 
 def verify_public_files(release, config):
     for target in config['public_checks']:
         base, folder = target['url'], release / target['directory']
-        html = fetch(base + '?release=' + release.name)
+        html = fetch(base)
         html = re.sub(rb'<script\b[^>]*src="https://static\.cloudflareinsights\.com/beacon\.min\.js/[^\"]+"[^>]*></script>\s*', b'', html)
         if html != (folder / 'index.html').read_bytes():
             raise RuntimeError('Published HTML does not match release')
         parser = Assets()
         parser.feed(html.decode())
         for asset in parser.urls:
-            url = urljoin(base, asset)
-            relative = urlparse(url).path.removeprefix(urlparse(base).path)
-            if fetch(url) != (folder / relative).read_bytes():
+            parsed = urlparse(asset)
+            if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
+                raise ValueError('Only local built assets can be verified')
+            relative = parsed.path.removeprefix(urlparse(base).path)
+            if fetch(base, relative) != (folder / relative).read_bytes():
                 raise RuntimeError('Published asset does not match release')
 
 
