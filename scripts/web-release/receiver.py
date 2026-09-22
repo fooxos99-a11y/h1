@@ -16,11 +16,11 @@ import sys
 import tarfile
 import tempfile
 import time
-import urllib.request
 from urllib.parse import urlparse
 
 ROOTS = {'server', 'shared', 'src', 'scripts', 'config', 'public', 'dist'}
-FILES = {'package.json', 'package-lock.json', 'index.html', 'vite.config.js',
+INDEX_FILE = 'index.html'
+FILES = {'package.json', 'package-lock.json', INDEX_FILE, 'vite.config.js',
          'tailwind.config.js', 'postcss.config.js'}
 
 
@@ -106,10 +106,8 @@ def prepare_dependencies(release, config):
 
 
 def health(url):
-    request = urllib.request.Request(url, headers={'User-Agent': 'AlhabibMap-Release-Verification'})
-    with urllib.request.urlopen(request, timeout=15) as response:
-        if response.status != 200 or not json.load(response).get('ok'):
-            raise RuntimeError('Health check failed')
+    if not json.loads(fetch(url)).get('ok'):
+        raise RuntimeError('Health check failed')
 
 
 def switch(current, target):
@@ -169,10 +167,10 @@ def verify_public_files(release, config):
         base, folder = target['url'], release / target['directory']
         html = fetch(base)
         html = re.sub(rb'<script\b[^>]*src="https://static\.cloudflareinsights\.com/beacon\.min\.js/[^\"]+"[^>]*></script>\s*', b'', html)
-        if html != (folder / 'index.html').read_bytes():
+        if html != (folder / INDEX_FILE).read_bytes():
             raise RuntimeError('Published HTML does not match release')
         parser = Assets()
-        parser.feed((folder / 'index.html').read_text())
+        parser.feed((folder / INDEX_FILE).read_text())
         for asset in parser.urls:
             parsed = urlparse(asset)
             if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:

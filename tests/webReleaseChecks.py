@@ -30,11 +30,11 @@ class ReleaseTests(unittest.TestCase):
         response = MagicMock()
         response.status = 200
         response.read.return_value = b'{"ok":true}'
-        with patch.object(receiver.urllib.request, 'urlopen') as open_url:
-            open_url.return_value.__enter__.return_value = response
+        with patch.object(receiver.http.client, 'HTTPSConnection') as connection:
+            connection.return_value.getresponse.return_value = response
             receiver.health('https://example.test/api/health')
-            request = open_url.call_args.args[0]
-            self.assertEqual(request.get_header('User-agent'), 'AlhabibMap-Release-Verification')
+            headers = connection.return_value.request.call_args.kwargs['headers']
+            self.assertEqual(headers['User-Agent'], 'AlhabibMap-Release-Verification')
 
     def test_command_is_not_a_shell(self):
         self.assertEqual(receiver.command('deploy ' + 'a' * 40 + ' ' + 'b' * 64), ('a' * 40, 'b' * 64))
