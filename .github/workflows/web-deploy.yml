@@ -20,6 +20,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Prepare public web build settings
+        run: cp config/web-build.env .env.madarij
       - name: Quality gate
         run: npm run verify
       - name: Build configured website targets
