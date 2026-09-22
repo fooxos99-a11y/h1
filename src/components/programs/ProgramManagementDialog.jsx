@@ -4,7 +4,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export default function ProgramManagementDialog({ program, onClose, onGrade, onEdit }) {
-  const items = program?.sectionsEnabled ? program.sections || [] : program ? [program] : [];
+  const singleProgram = program ? [program] : [];
+  const items = program?.sectionsEnabled ? program.sections || [] : singleProgram;
   return <Dialog open={Boolean(program)} onOpenChange={open => { if (!open) onClose(); }}>
     <DialogContent dir="rtl" className="max-w-2xl [font-family:var(--font-ui)]">
       <DialogHeader><DialogTitle>{program?.title}</DialogTitle></DialogHeader>

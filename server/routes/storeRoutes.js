@@ -240,7 +240,7 @@ export function createStoreRouter({
         id: Number(row.id),
         pointsPrice: Number(row.pointsPrice || 0),
         fulfilled: Boolean(row.fulfilledAt),
-        status: row.rejectedAt ? 'rejected' : row.fulfilledAt ? 'accepted' : 'pending',
+        status: resolveStoreOrderStatus(row),
       })));
     } catch (error) {
       return next(error);
@@ -394,4 +394,9 @@ async function applyStoreRankingDeduction({ settings, applyStudentPointDelta, co
       });
     }
   }
+}
+
+function resolveStoreOrderStatus(row) {
+  if (row.rejectedAt) return 'rejected';
+  return row.fulfilledAt ? 'accepted' : 'pending';
 }

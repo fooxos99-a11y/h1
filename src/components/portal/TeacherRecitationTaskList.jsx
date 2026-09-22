@@ -160,46 +160,7 @@ const TeacherRecitationTaskList = ({
           };
           const defaultListeningCount = _resolveDefaultListeningCount();
           const actionAmount = action.empty ? 'لا يوجد محفوظ للربط' : formatContinuousRecitationRange(action.tasks);
-          const amountControl = lateOptions.length > 1 ? (
-            <RecitationEndSelector
-              start={{ surah: action.tasks[0].fromSurah, ayah: action.tasks[0].fromAyah, surahName: action.tasks[0].fromSurahName }}
-              options={lateOptions}
-              value={lateOptions.find(option => Number(option.task.id) === Number(action.tasks.at(-1).id))}
-              onChange={(value) => updateSelectedEnd(actionKey, value)}
-            />
-          ) : teacherExecutionMode
-            && !hasNazemFixedRange(action.tasks[0])
-            && actionTeacherExecutionMode
-            && ['saved', 'review', 'mastery'].includes(action.key)
-            && !nazemLate
-            && action.tasks[0]?.options?.length > 0
-            ? (() => {
-                const firstTask = action.tasks[0];
-                const selected = selectedEnds[actionKey] || firstTask.normalEnd || {
-                  page: action.tasks[action.tasks.length - 1]?.toPage,
-                  surah: action.tasks[action.tasks.length - 1]?.toSurah,
-                  ayah: action.tasks[action.tasks.length - 1]?.toAyah,
-                  surahName: action.tasks[action.tasks.length - 1]?.toSurahName,
-                };
-                return (
-                  <RecitationEndSelector
-                    start={{
-                      page: firstTask.fromPage,
-                      surah: firstTask.fromSurah,
-                      ayah: firstTask.fromAyah,
-                      surahName: firstTask.fromSurahName,
-                    }}
-                    options={firstTask.options}
-                    value={selected}
-                    chapters={['saved', 'review', 'mastery'].includes(action.key) ? quranChapters : []}
-                    allowedStart={firstTask.selectionStart}
-                    allowedEnd={firstTask.selectionEnd}
-                    direction={firstTask.selectionDirection}
-                    onChange={(value) => updateSelectedEnd(actionKey, value)}
-                  />
-                );
-              })()
-            : null;
+          const amountControl = renderRecitationAmountControl({ lateOptions, action, actionKey, selectedEnds, updateSelectedEnd, teacherExecutionMode, actionTeacherExecutionMode, nazemLate, quranChapters });
           const repeatEditable = teacherExecutionMode && (nazemManaged || ['teacher', 'both'].includes(executionSources?.repeat || 'teacher')) && action.key === 'saved';
           const repeatControl = action.key === 'saved' ? (
             <RepeatCountSelector label="" editable={repeatEditable && (nazemManaged || !repeatClaimedByStudent)}
@@ -419,3 +380,45 @@ const TeacherRecitationTaskList = ({
 };
 
 export default TeacherRecitationTaskList;
+
+function renderRecitationAmountControl({ lateOptions, action, actionKey, selectedEnds, updateSelectedEnd, teacherExecutionMode, actionTeacherExecutionMode, nazemLate, quranChapters }) {
+  if (lateOptions.length > 1) return (
+  <RecitationEndSelector
+    start={{ surah: action.tasks[0].fromSurah, ayah: action.tasks[0].fromAyah, surahName: action.tasks[0].fromSurahName }}
+    options={lateOptions}
+    value={lateOptions.find(option => Number(option.task.id) === Number(action.tasks.at(-1).id))}
+    onChange={(value) => updateSelectedEnd(actionKey, value)}
+  />
+  );
+  const canSelectEnd = teacherExecutionMode
+  && !hasNazemFixedRange(action.tasks[0])
+  && actionTeacherExecutionMode
+  && ['saved', 'review', 'mastery'].includes(action.key)
+  && !nazemLate
+  && action.tasks[0]?.options?.length > 0;
+  if (!canSelectEnd) return null;
+  const firstTask = action.tasks[0];
+  const selected = selectedEnds[actionKey] || firstTask.normalEnd || {
+    page: action.tasks[action.tasks.length - 1]?.toPage,
+    surah: action.tasks[action.tasks.length - 1]?.toSurah,
+    ayah: action.tasks[action.tasks.length - 1]?.toAyah,
+    surahName: action.tasks[action.tasks.length - 1]?.toSurahName,
+  };
+  return (
+    <RecitationEndSelector
+      start={{
+        page: firstTask.fromPage,
+        surah: firstTask.fromSurah,
+        ayah: firstTask.fromAyah,
+        surahName: firstTask.fromSurahName,
+      }}
+      options={firstTask.options}
+      value={selected}
+      chapters={['saved', 'review', 'mastery'].includes(action.key) ? quranChapters : []}
+      allowedStart={firstTask.selectionStart}
+      allowedEnd={firstTask.selectionEnd}
+      direction={firstTask.selectionDirection}
+      onChange={(value) => updateSelectedEnd(actionKey, value)}
+    />
+  );
+}

@@ -239,6 +239,7 @@ const StudentsSection = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [bulkStudents, setBulkStudents] = useState([]);
   const [isBulkSaving, setIsBulkSaving] = useState(false);
+  const pointField = studentPointField(studentForm, rewardUnits);
 
   const selectedCommitteeName = useMemo(() => {
     return committees.find((committee) => String(committee.id) === String(moveCommitteeId))?.name || '';
@@ -616,22 +617,22 @@ const StudentsSection = () => {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>{studentForm.pointTarget === 'balance' ? 'الرصيد' : rewardUnits.text('الكيلومترات')}</Label>
+                    <Label>{pointField.label}</Label>
                     <Input
                       type="number"
-                      aria-label={studentForm.pointTarget === 'balance' ? 'الرصيد' : rewardUnits.text('الكيلومترات')}
+                      aria-label={pointField.label}
                       min="0"
-                      value={studentForm.pointTarget === 'balance' ? studentForm.storeBalance : studentForm.points}
-                      onChange={(event) => setStudentForm({ ...studentForm, [studentForm.pointTarget === 'balance' ? 'storeBalance' : 'points']: Number(event.target.value || 0) })}
+                      value={studentForm[pointField.key]}
+                      onChange={(event) => setStudentForm({ ...studentForm, [pointField.key]: Number(event.target.value || 0) })}
                     />
                   </div>
                   {(Number(studentForm.points) !== Number(selectedStudent?.points || 0)
                     || Number(studentForm.storeBalance) !== Number(selectedStudent?.storeBalance || 0)) && (
                     <div className="space-y-2">
-                      <Label>{studentForm.pointTarget === 'balance' ? 'سبب تعديل الرصيد' : rewardUnits.text('سبب تعديل الكيلومترات')}</Label>
+                      <Label>{pointField.reasonLabel}</Label>
                       <Input
                         value={studentForm.pointReason}
-                        aria-label={studentForm.pointTarget === 'balance' ? 'سبب تعديل الرصيد' : rewardUnits.text('سبب تعديل الكيلومترات')}
+                        aria-label={pointField.reasonLabel}
                         onChange={(event) => setStudentForm({ ...studentForm, pointReason: event.target.value })}
                         placeholder="اكتب سبب الزيادة أو الخصم"
                       />
@@ -715,3 +716,8 @@ const StudentsSection = () => {
 };
 
 export default StudentsSection;
+
+function studentPointField(form, units) {
+  if (form.pointTarget === 'balance') return { key: 'storeBalance', label: 'الرصيد', reasonLabel: 'سبب تعديل الرصيد' };
+  return { key: 'points', label: units.text('الكيلومترات'), reasonLabel: units.text('سبب تعديل الكيلومترات') };
+}

@@ -56,7 +56,7 @@ const NazemLogDialog = ({ open, onOpenChange }) => {
     if (!entries) {
       return <DashboardLoader />;
     }
-    return <div className="space-y-2 overflow-y-auto overscroll-contain">
+    return <div className="space-y-2">
             {entries.length ? groupNazemLogEntries(entries).map((group) => <NazemSessionLogCard key={group.key} group={group} retryJob={retryJob} retryingJobId={retryingJobId} />) : (
               <div className="rounded-xl border border-primary/15 p-4 text-center text-sm font-bold text-muted-foreground">
                 لا توجد عمليات في سجل ناظم.

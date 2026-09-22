@@ -13,6 +13,9 @@ const SummitJourneyMap = ({ journey, onStageClick, embedded = false, showViewTog
   const routeOptions = getQassimJourneyRouteOptions(journey);
   const progress = getQassimRoadProgress(journey.points, routeOptions);
   const isRoad = mode === 'road';
+  let scene = <QassimOverviewMap journey={journey} onStageClick={onStageClick} />;
+  if (isRoad) scene = <QassimRoadScene journey={journey} onStageClick={onStageClick} />;
+  if (journey.activeStation) scene = <SummitGatheringStation station={journey.activeStation} embedded={embedded} />;
 
 
   return (
@@ -21,11 +24,7 @@ const SummitJourneyMap = ({ journey, onStageClick, embedded = false, showViewTog
       aria-label={`رحلة القصيم، قطعت ${progress.distanceKm.toLocaleString('ar-SA-u-nu-latn', { maximumFractionDigits: 0 })} من ${routeOptions.totalKilometers.toLocaleString('ar-SA-u-nu-latn')} كيلومتر`}
     >
       {isRoad && !embedded && <SummitJourneyBoard journey={journey} />}
-      {journey.activeStation ? <SummitGatheringStation station={journey.activeStation} embedded={embedded} /> : isRoad ? (
-        <QassimRoadScene journey={journey} onStageClick={onStageClick} />
-      ) : (
-        <QassimOverviewMap journey={journey} onStageClick={onStageClick} />
-      )}
+      {scene}
 
       {showViewToggle && !journey.activeStation && (
         <Button

@@ -18,8 +18,8 @@ export default function StartupVisual() {
     return () => window.clearTimeout(timer);
   }, []);
   if (timedOut) return <div className="startup-scene p-5"><ErrorState message="تعذر إكمال التحميل. تحقق من الاتصال ثم أعد المحاولة." onRetry={() => window.location.reload()} /></div>;
-  return <div className="startup-scene startup-waiting" role="status" aria-label="جاري التحميل">
+  return <output className="startup-scene startup-waiting" aria-label="جاري التحميل">
     <StartupLines />
-    <div className="startup-hexagon">{site.logo && <img src={resolveAssetUrl(site.logo)} alt={site.name} />}</div>
-  </div>;
+    <span className="startup-hexagon">{site.logo && <img src={resolveAssetUrl(site.logo)} alt={site.name} />}</span>
+  </output>;
 }

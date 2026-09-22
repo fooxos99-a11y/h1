@@ -21,7 +21,7 @@ try {
         await page.route('**/StudentStoreSection.jsx*', async route => { await delay(450); await route.continue(); });
       }
       await page.addInitScript(({ role }) => {
-        globalThis.localStorage.setItem('wajeh_role', role === 'portalTeacher' ? 'supervisor' : role === 'guest' ? '' : role);
+        globalThis.localStorage.setItem('wajeh_role', ({ portalTeacher: 'supervisor', guest: '' })[role] ?? role);
         globalThis.localStorage.setItem('wajeh_account_id', '991');
         globalThis.localStorage.setItem('wajeh_student_id', '991');
         globalThis.localStorage.setItem('wajeh_supervisor_id', '991');
@@ -47,32 +47,21 @@ try {
         const path = new URL(route.request().url()).pathname;
         if (route.request().method() !== 'GET' && !/\/offline-(recitation|student)\/bootstrap$/.test(path) && !path.endsWith('/auth/login')) writes.push(path);
         let json = [];
-        if (path.endsWith('/site-config')) json = {};
         if (path.endsWith('/auth/login')) {
           await delay(300);
           if (++loginAttempts === 1) return route.fulfill({ status: 400, json: { message: 'تعذر الدخول' } });
           json = { role: 'manager', id: 991, name: 'حساب الاختبار', dashboardPermissions: ['reports'] };
         }
-        const settings = { reportsSectionEnabled: true, learningPathsEnabled: true, hasStudentQuranExecution: true, storeEnabled: true, pointsSystemEnabled: true, summitEnabled: false, dailyChallengeEnabled: false, staffAttendanceSource: 'teacher', studentRankingsVisible: true, familyRankingsVisible: true };
-        if (path.endsWith('/public-settings')) json = settings;
-        if (path.endsWith('/reports/committees')) { await delay(750); json = [{ id: 1, name: 'حلقة الاختبار' }]; }
-        if (path.endsWith('/programs/configuration')) json = { learningPathsEnabled: true };
-        if (path.endsWith('/dashboard-bootstrap')) { await delay(200); json = { settings, permissions: ['reports', 'quranEvaluation', 'programs'] }; }
-        if (path.endsWith('/staff-attendance/me')) { await delay(250); json = { alreadyPresent: true }; }
+        if (!path.endsWith('/auth/login')) json = await loadingMockResponse(path);
         if (path.endsWith('/reports/overview')) {
           reports += 1;
           await delay(450);
           json = { period: { from: '2026-08-25', to: '2026-09-22' }, totals: { studentsCount: 114, familiesCount: 6 }, committeeIndicators: [] };
         }
-        if (path.endsWith('/quran-evaluation')) { await delay(500); json = { students: [], tasks: [], taskQueue: [] }; }
-        if (path.endsWith('/quran-today')) { await delay(200); json = { plan: null, tasks: [], todayAmounts: [] }; }
-        if (path.endsWith('/quran-sessions')) json = { rows: [], points: { total: 12, days: [] } };
-        if (path.includes('/rankings/')) { await delay(650); json = [{ id: 991, name: 'طالب الاختبار', rank: 1, points: 12 }]; }
-        if (path.endsWith('/programs')) { await delay(450); json = { programs: [] }; }
-        if (path.endsWith('/store/products')) { await delay(900); json = { storeBalance: 100, products: [{ id: 1, name: 'منتج التحميل', pointsPrice: 10, stock: 2 }] }; }
         await route.fulfill({ json });
       });
-      const path = ['student', 'guest'].includes(role) ? '/' : role === 'portalTeacher' ? '/portal/recitation-sessions' : role === 'reciter' ? '/dashboard/recitation-sessions' : '/dashboard/reports';
+      const paths = { student: '/', guest: '/', portalTeacher: '/portal/recitation-sessions', reciter: '/dashboard/recitation-sessions' };
+      const path = paths[role] || '/dashboard/reports';
       await page.goto(base + path);
       if (role === 'guest') {
         await page.locator('[data-loading-indicator="screen"]').waitFor({ state: 'hidden' });
@@ -92,7 +81,7 @@ try {
       const first = samples.findIndex(sample => sample.screen);
       assert.ok(first >= 0, `${role}: missing loading cover`);
       const covered = samples.filter(sample => sample.screen);
-      assert.ok(covered.every(sample => /^rgb\(/.test(sample.background) && sample.opacity === '1'), `${role}: loading cover must remain fully opaque`);
+      assert.ok(covered.every(sample => String(sample.background).startsWith('rgb(') && sample.opacity === '1'), `${role}: loading cover must remain fully opaque`);
       assert.equal(new Set(covered.map(sample => sample.shape)).size, 1, `${role}: shape changed`);
       assert.ok(covered.every(sample => Math.abs(sample.x - width / 2) < 2), `${role}: spinner moved horizontally`);
       assert.ok(covered.every(sample => Math.abs(sample.y - covered[0].y) < 2), `${role}: spinner moved vertically`);
@@ -144,7 +133,7 @@ try {
           assert.equal(sample.screen, false, 'navigation must keep the shell visible');
           if (!sample.content) revealed = true;
           assert.ok(!revealed || !sample.content, 'section cover must not reappear');
-          if (sample.content) assert.ok(/^rgb\(/.test(sample.background) && sample.opacity === '1', 'navigation cover must remain fully opaque');
+          if (sample.content) assert.ok(String(sample.background).startsWith('rgb(') && sample.opacity === '1', 'navigation cover must remain fully opaque');
           assert.equal(sample.local, 0, 'section data loader must not appear separately');
         }
         assert.deepEqual(errors, [], 'navigation runtime errors');
@@ -167,3 +156,22 @@ try {
   await stalled.close();
   console.info('Stalled loading exposes retry, StrictMode cleanup releases the cover and restores keyboard access.');
 } finally { await browser.close(); }
+
+async function loadingMockResponse(path) {
+  let json = [];
+  if (path.endsWith('/site-config')) return {};
+  const settings = { reportsSectionEnabled: true, learningPathsEnabled: true, hasStudentQuranExecution: true, storeEnabled: true, pointsSystemEnabled: true, summitEnabled: false, dailyChallengeEnabled: false, staffAttendanceSource: 'teacher', studentRankingsVisible: true, familyRankingsVisible: true };
+  if (path.endsWith('/public-settings')) json = settings;
+  if (path.endsWith('/reports/committees')) { await delay(750); json = [{ id: 1, name: 'حلقة الاختبار' }]; }
+  if (path.endsWith('/programs/configuration')) json = { learningPathsEnabled: true };
+  if (path.endsWith('/dashboard-bootstrap')) { await delay(200); json = { settings, permissions: ['reports', 'quranEvaluation', 'programs'] }; }
+  if (path.endsWith('/staff-attendance/me')) { await delay(250); json = { alreadyPresent: true }; }
+  if (path.endsWith('/quran-evaluation')) { await delay(500); json = { students: [], tasks: [], taskQueue: [] }; }
+  if (path.endsWith('/quran-today')) { await delay(200); json = { plan: null, tasks: [], todayAmounts: [] }; }
+  if (path.endsWith('/quran-sessions')) json = { rows: [], points: { total: 12, days: [] } };
+  if (path.includes('/rankings/')) { await delay(650); json = [{ id: 991, name: 'طالب الاختبار', rank: 1, points: 12 }]; }
+  if (path.endsWith('/programs')) { await delay(450); json = { programs: [] }; }
+  if (path.endsWith('/store/products')) { await delay(900); json = { storeBalance: 100, products: [{ id: 1, name: 'منتج التحميل', pointsPrice: 10, stock: 2 }] }; }
+
+  return json;
+}

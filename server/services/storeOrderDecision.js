@@ -10,7 +10,8 @@ export async function decideStoreOrder(connection, { id, status, actor, settings
     product_name AS productName, points_price AS pointsPrice, fulfilled_at AS fulfilledAt,
     rejected_at AS rejectedAt, stock_reserved AS stockReserved FROM store_orders WHERE id = ? FOR UPDATE`, [id]);
   if (!order) throw failure('الطلب غير موجود.', 404);
-  const current = order.rejectedAt ? 'rejected' : order.fulfilledAt ? 'accepted' : 'pending';
+  const fulfillmentStatus = order.fulfilledAt ? 'accepted' : 'pending';
+  const current = order.rejectedAt ? 'rejected' : fulfillmentStatus;
   if (current === status) return { ok: true, status, alreadyProcessed: true };
   if (current !== 'pending') throw failure('سبق اتخاذ قرار لهذا الطلب؛ حدّث القائمة.', 409);
   if (status === 'rejected') {

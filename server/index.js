@@ -13425,14 +13425,7 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
     );
     const rejectInvalidRecitationTaskResult = await rejectInvalidRecitationTask({ task, settings, connection, res, req, notMemorized });
     if (rejectInvalidRecitationTaskResult) { return rejectInvalidRecitationTaskResult; }
-    if (Number(task.nazemManaged) && !(req.recitationSessionTaskIds || []).length
-      && !await validateNazemLateSession(connection, {
-        studentId: task.studentId, sessionDate: date, sessionId: req.body.sessionId,
-        tasks: [{ taskId }],
-      }, supervisorId)) {
-      await connection.rollback();
-      return res.status(409).json({ code: 'INVALID_SEQUENCE', message: 'يجب البدء بأقدم مقطع متأخر متاح.' });
-    }
+    if (await rejectOutOfSequenceRecitation({ task, req, connection, date, taskId, supervisorId, res })) return;
     if (notMemorized) {
       warningCount = 0;
       mistakeCount = 0;
@@ -18561,9 +18554,7 @@ try {
     await ensureManagerSupervisorAccount();
     await reconcileAllTenantStartupState();
     startAutomaticAbsenceScheduler();
-    void refreshWhatsAppState({ waitMs: 15000 }).catch((error) => {
-      console.error('WhatsApp warmup failed:', error.message);
-    });
+    void warmupWhatsApp();
     app.listen(port);
 } catch (error) {
     console.error('MySQL initialization failed:', error);
@@ -19318,4 +19309,19 @@ async function rejectMissingExecutionTasks({ taskRows, taskIds, connection, res 
     return res.status(404).json({ message: 'بعض المهام غير موجودة أو تم تقييمها.' });
   }
   return null;
+}
+
+async function warmupWhatsApp() {
+  try { await refreshWhatsAppState({ waitMs: 15000 }); }
+  catch (error) { console.error('WhatsApp warmup failed:', error.message); }
+}
+
+async function rejectOutOfSequenceRecitation({ task, req, connection, date, taskId, supervisorId, res }) {
+  if (!Number(task.nazemManaged) || (req.recitationSessionTaskIds || []).length) return false;
+  if (await validateNazemLateSession(connection, {
+    studentId: task.studentId, sessionDate: date, sessionId: req.body.sessionId, tasks: [{ taskId }],
+  }, supervisorId)) return false;
+  await connection.rollback();
+  res.status(409).json({ code: 'INVALID_SEQUENCE', message: 'يجب البدء بأقدم مقطع متأخر متاح.' });
+  return true;
 }

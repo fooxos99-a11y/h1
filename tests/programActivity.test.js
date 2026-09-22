@@ -13,3 +13,15 @@ test('manual programs and empty sections have no activity, including blank rich 
   assert.equal(hasProgramActivity({ contents: [{ type: 'text', value: '<p>محتوى</p>' }] }), true);
   assert.equal(hasProgramActivity({ contents: [{ type: 'file', value: '/file.pdf' }] }), true);
 });
+
+test('activity detection handles unmatched and repeated markup brackets without losing real content', () => {
+  for (const [value, expected] of [
+    ['<'.repeat(100000), true],
+    ['<'.repeat(100000) + '>', false],
+    ['<p></p>نص<unfinished', true],
+    ['<p> &NBSP; </p>', false],
+    ['<p><br></p>'.repeat(10000), false],
+  ]) {
+    assert.equal(hasProgramActivity({ contents: [{ value }] }), expected);
+  }
+});

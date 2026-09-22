@@ -53,12 +53,14 @@ export default function PageLoadingBoundary({ children, scope, initialScreen = f
   return <PageLoadingContext.Provider value={value}>
     {owner ? children : <div className="page-loading-boundary relative min-h-64" aria-busy={!ready}>
       <div className="contents" inert={covered ? '' : undefined} aria-hidden={covered || undefined} style={covered ? { visibility: 'hidden' } : undefined}>{children}</div>
-      {covered && <div className={resolvedScope === 'screen'
-        ? 'screen-loading-surface fixed inset-0 z-[1000] grid place-items-center text-[#0aa3b4] [font-family:var(--font-ui)]'
-        : resolvedScope === 'dashboard'
-        ? 'screen-loading-surface fixed bottom-0 left-0 right-0 top-[68px] z-30 grid place-items-center lg:right-[276px] lg:top-[84px] text-[#0aa3b4] [font-family:var(--font-ui)]'
-        : 'screen-loading-surface absolute inset-0 z-30 grid place-items-center text-[#0aa3b4] [font-family:var(--font-ui)]'}
+      {covered && <div className={loadingSurfaceClass(resolvedScope)}
         data-loading-indicator={resolvedScope === 'screen' ? 'screen' : 'content'} role="status" aria-live="polite" aria-label="جاري التحميل"><ScreenLoadingVisual branded={false} /></div>}
     </div>}
   </PageLoadingContext.Provider>;
+}
+
+function loadingSurfaceClass(scope) {
+  if (scope === 'screen') return 'screen-loading-surface fixed inset-0 z-[1000] grid place-items-center text-[#0aa3b4] [font-family:var(--font-ui)]';
+  if (scope === 'dashboard') return 'screen-loading-surface fixed bottom-0 left-0 right-0 top-[68px] z-30 grid place-items-center lg:right-[276px] lg:top-[84px] text-[#0aa3b4] [font-family:var(--font-ui)]';
+  return 'screen-loading-surface absolute inset-0 z-30 grid place-items-center text-[#0aa3b4] [font-family:var(--font-ui)]';
 }

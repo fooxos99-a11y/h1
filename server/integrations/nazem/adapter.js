@@ -1321,7 +1321,7 @@ export class NazemAdapter {
         .sort((first, second) => String(second.date).localeCompare(String(first.date)));
       const late = pending.filter(day => day.nazemLate).sort((a, b) => String(a.date).localeCompare(String(b.date)));
       const blocked = pending.filter(day => day.nazemPendingDay).sort((a, b) => String(a.date).localeCompare(String(b.date)));
-      const overdueDates = [late[0]?.date, blocked[0]?.date].filter(Boolean).sort();
+      const overdueDates = [late[0]?.date, blocked[0]?.date].filter(Boolean).sort((first, second) => String(first).localeCompare(String(second)));
       const actionableDate = overdueDates[0] || pending[0]?.date || null;
       for (const day of [...rows, ...pending].filter(day => day.remoteType === remoteType)) {
         day.nazemQueueDate = queueDate;
@@ -1795,16 +1795,9 @@ export class NazemAdapter {
     try {
       const initial = await this.resolveRecitationFollowUp(studentLink, planLink, mapped);
       if (!initial.item) throw reviewNazemError('خطة الطالب في ناظم لا تحتوي نوع الورد المرتبط.', 'NAZEM_PLAN_TRACK_MISSING');
-      const lateLookupDate = initial.followUpDate;
       const matchingLate = initial.late;
       if (matchingLate) {
-        const lateItems = await this.datedLateItems(initial.item, planLink.nazemPlanId, studentLink, mapped.remoteType);
-        const earliest = lateItems.filter(item => !isNazemFollowUpCompleted(item.status))
-          .sort((a, b) => String(a.date).localeCompare(String(b.date)) || Number(a.id) - Number(b.id))[0];
-        if (String(earliest?.id) !== String(matchingLate.id)) {
-          throw blockedNazemError('ينتظر هذا المقطع تأكيد إكمال المتأخر الأقدم في ناظم.', 'NAZEM_PREVIOUS_DAYS_BLOCKING');
-        }
-        return await submitLateRecitation({ adapter: this, matchingLate, mapped, planLink, studentLink, lateLookupDate });
+        return await submitOldestLateRecitation(this, initial, studentLink, planLink, mapped);
       }
 
       if (!initial.day) {
@@ -2134,15 +2127,7 @@ for (const remoteType of ['conserve', 'revision', 'master']) {
           if (!scheduled.has(key)) scheduled.set(key, late);
         });
         if (!day) continue;
-        const normalized = {
-          ...day,
-          ...(item?.id ? { nazemItemId: String(item.id) } : {}),
-          date: normalizeDateOnly(day.date) || date,
-          remoteType,
-          taskType: remoteType === 'revision' ? 'review' : 'memorization',
-          attendanceStatus: student?.attendance_status ?? null,
-          nazemLate: false,
-        };
+        const normalized = normalizeCurrentFollowUp(day, item, student, remoteType, date);
         if (FINAL_FOLLOW_UP_STATUSES.has(String(day.status || ''))) rows.push(normalized);
         else {
           const key = scheduledFollowUpKey(normalized);
@@ -2291,4 +2276,27 @@ async function cacheFollowUpApiSession({ adapter, response, externalPlanId, norm
   }
   adapter.followUpPayloadCache.set(cacheKey, payload);
 
+}
+
+async function submitOldestLateRecitation(adapter, initial, studentLink, planLink, mapped) {
+  const lateLookupDate = initial.followUpDate;
+  const lateItems = await adapter.datedLateItems(initial.item, planLink.nazemPlanId, studentLink, mapped.remoteType);
+  const earliest = lateItems.filter(item => !isNazemFollowUpCompleted(item.status))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)) || Number(a.id) - Number(b.id))[0];
+  if (String(earliest?.id) !== String(initial.late.id)) {
+    throw blockedNazemError('ينتظر هذا المقطع تأكيد إكمال المتأخر الأقدم في ناظم.', 'NAZEM_PREVIOUS_DAYS_BLOCKING');
+  }
+  return await submitLateRecitation({ adapter, matchingLate: initial.late, mapped, planLink, studentLink, lateLookupDate });
+}
+
+function normalizeCurrentFollowUp(day, item, student, remoteType, date) {
+  return {
+    ...day,
+    ...(item?.id ? { nazemItemId: String(item.id) } : {}),
+    date: normalizeDateOnly(day.date) || date,
+    remoteType,
+    taskType: remoteType === 'revision' ? 'review' : 'memorization',
+    attendanceStatus: student?.attendance_status ?? null,
+    nazemLate: false,
+  };
 }
