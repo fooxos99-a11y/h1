@@ -1,0 +1,40 @@
+import json
+import re
+import urllib.parse
+import urllib.request
+from urllib.error import HTTPError
+
+
+API_ROOT = "https://api.appstoreconnect.apple.com/v1"
+
+
+def app_store_url(path):
+    if not isinstance(path, str) or re.search(r"[\s\\\x00-\x1f\x7f]", path):
+        raise ValueError("Invalid App Store Connect API path")
+    parts = urllib.parse.urlsplit(path)
+    if (parts.scheme or parts.netloc or parts.fragment
+            or not re.fullmatch(r"/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+", parts.path)):
+        raise ValueError("Invalid App Store Connect API path")
+    return API_ROOT + path
+
+
+class NoRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ValueError("App Store Connect API redirects are not allowed")
+
+
+def request_json(path, token, method="GET", payload=None):
+    url = app_store_url(path)
+    body = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"Authorization": f"Bearer {token}"}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, data=body, headers=headers, method=method)
+    try:
+        with urllib.request.build_opener(NoRedirects()).open(request, timeout=30) as response:
+            if response.status == 204:
+                return None
+            return json.load(response)
+    except HTTPError as error:
+        details = error.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"App Store Connect returned HTTP {error.code}: {details}") from error

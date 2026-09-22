@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { trimTrailingCharacter } from '../shared/string-suffix.js';
 import express from 'express';
 import { hashPlatformToken, platformDb } from './platformDb.js';
 import { db, initDatabase, runWithDatabase } from './db.js';
@@ -41,7 +42,7 @@ const loginNumberPattern = /^\d{1,80}$/;
 const databaseNamePattern = /^[a-zA-Z0-9_]+$/;
 
 const normalizeText = (value, maxLength = 180) => String(value || '').trim().slice(0, maxLength);
-const normalizeUrl = (value) => String(value || '').trim().replace(/\/+$/, '');
+const normalizeUrl = (value) => trimTrailingCharacter(String(value || '').trim(), '/');
 async function requirePlatformOwner(req, res, next) {
   try {
     const authorization = String(req.get('authorization') || '');

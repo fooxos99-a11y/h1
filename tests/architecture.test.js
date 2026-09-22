@@ -319,13 +319,38 @@ test('iOS GitHub workflow builds safely and keeps Apple credentials out of sourc
   assert.match(workflowText, /runs-on: macos-26/);
   assert.match(workflowText, /run: npm run native:ios/);
   assert.match(workflowText, /bundle-id: sa\.madarij\.app/);
-  assert.match(workflowText, /apple-actions\/import-codesign-certs@v7/);
+  assert.match(workflowText, /apple-actions\/import-codesign-certs@[a-f0-9]{40} # v7/);
   assert.match(workflowText, /xcrun altool[\s\S]*--upload-app[\s\S]*--apiKey[\s\S]*--apiIssuer/);
   assert.match(workflowText, /\.appstoreconnect\/private_keys\/AuthKey_\$\{APPSTORE_API_KEY_ID\}\.p8/);
   assert.doesNotMatch(jobEnvironment, /APPSTORE_API_PRIVATE_KEY|APPSTORE_CERTIFICATES/);
   assert.match(gitignoreText, /^\*\.p8$/m);
   assert.match(gitignoreText, /^\*\.p12$/m);
   assert.match(gitignoreText, /^\*\.mobileprovision$/m);
+});
+
+test('inbox tests import the production handler without executing source text', async () => {
+  const [testSource, routes] = await Promise.all([
+    readFile(new URL('./sessionInbox.test.js', import.meta.url), 'utf8'),
+    readFile(new URL('../server/routes/notificationRoutes.js', import.meta.url), 'utf8'),
+  ]);
+  assert.match(testSource, /import \{ createNotificationReadHandler \} from '\.\.\/server\/routes\/notificationReadHandler\.js'/);
+  assert.doesNotMatch(testSource, /node:vm|\beval\s*\(|\bFunction\s*\(/);
+  assert.match(routes, /notificationRouter\.post\('\/read', createNotificationReadHandler\(db\)\)/);
+});
+
+test('external GitHub Actions are pinned to full commit SHAs', async () => {
+  const workflowsDirectory = new URL('../.github/workflows/', import.meta.url);
+  const files = (await readdir(workflowsDirectory)).filter((file) => /\.ya?ml$/.test(file));
+  let checked = 0;
+  for (const file of files) {
+    const workflow = await readFile(new URL(file, workflowsDirectory), 'utf8');
+    for (const [, action] of workflow.matchAll(/^\s*(?:-\s*)?uses:\s*([^\s#]+)/gm)) {
+      if (action.startsWith('./')) continue;
+      assert.match(action, /^[\w.-]+\/[\w./-]+@[a-f0-9]{40}$/, `${file}: ${action} must use a full commit SHA`);
+      checked += 1;
+    }
+  }
+  assert.ok(checked > 0, 'Expected external actions to be checked');
 });
 
 test('both iOS releases use a push-capable profile for archive and export', async () => {
@@ -343,6 +368,20 @@ test('both iOS releases use a push-capable profile for archive and export', asyn
   }
   const entitlement = await readFile(new URL('../ios/App/App/App.entitlements', import.meta.url), 'utf8');
   assert.match(entitlement, /<key>aps-environment<\/key>/);
+});
+
+test('App Store build number is passed through environment variables, never shell source', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/ios-app-store-release.yml', import.meta.url), 'utf8');
+  const buildInputLines = workflow.split(/\r?\n/).filter((line) => line.includes('inputs.build_number'));
+
+  assert.equal(buildInputLines.length, 2);
+  for (const line of buildInputLines) {
+    assert.match(line, /^ {10}(?:TARGET_BUILD_NUMBER|BUILD_NUMBER): \$\{\{ inputs\.build_number \}\}$/);
+  }
+  const submission = workflow.slice(workflow.indexOf('      - name: Select processed build and submit for review'));
+  assert.match(submission, /env:\r?\n {10}BUILD_NUMBER: \$\{\{ inputs\.build_number \}\}\r?\n {8}run:/);
+  assert.doesNotMatch(submission.slice(submission.indexOf('        run:')), /\$\{\{\s*inputs\./);
+  assert.match(submission, /build_number\(ENV\.fetch\("BUILD_NUMBER"\)\)/);
 });
 
 test('App Store release replaces older draft and waiting-for-review builds before submission', async () => {

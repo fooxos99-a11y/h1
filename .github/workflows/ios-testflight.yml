@@ -31,10 +31,10 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
@@ -48,7 +48,7 @@ jobs:
           fi
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Build and sync Capacitor iOS
         run: npm run native:ios
@@ -58,7 +58,8 @@ jobs:
           xcodebuild \
             -project ios/App/App.xcodeproj \
             -scheme App \
-            -resolvePackageDependencies
+            -resolvePackageDependencies \
+            -onlyUsePackageVersionsFromResolvedFile
 
       - name: Build unsigned simulator app
         if: ${{ !inputs.publish }}
@@ -67,6 +68,7 @@ jobs:
             -project ios/App/App.xcodeproj \
             -scheme App \
             -configuration Debug \
+            -onlyUsePackageVersionsFromResolvedFile \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
@@ -98,14 +100,14 @@ jobs:
 
       - name: Import Apple distribution certificate
         if: ${{ inputs.publish }}
-        uses: apple-actions/import-codesign-certs@v7
+        uses: apple-actions/import-codesign-certs@7abe6dfe88f6bf6b1fa06e6a5704a2605d897418 # v7
         with:
           p12-file-base64: ${{ secrets.APPSTORE_CERTIFICATES_FILE_BASE64 }}
           p12-password: ${{ secrets.APPSTORE_CERTIFICATES_PASSWORD }}
 
       - name: Download App Store provisioning profile
         if: ${{ inputs.publish }}
-        uses: apple-actions/download-provisioning-profiles@v4
+        uses: apple-actions/download-provisioning-profiles@c0047984c626d0c444c6b6018b92fcbe74eaf7b5 # v4
         with:
           bundle-id: sa.madarij.app
           profile-type: IOS_APP_STORE
@@ -144,6 +146,7 @@ jobs:
             -project ios/App/App.xcodeproj \
             -scheme App \
             -configuration Release \
+            -onlyUsePackageVersionsFromResolvedFile \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/Madarij.xcarchive" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
@@ -222,7 +225,7 @@ jobs:
       - name: Store signed IPA artifact
         if: ${{ inputs.publish }}
         continue-on-error: true
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: madarij-ios-${{ github.run_number }}
           path: ${{ env.IPA_PATH }}

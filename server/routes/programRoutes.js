@@ -1,4 +1,5 @@
 import { groupProgramSections } from '../../shared/program-sections.js';
+import { countTrailingCharacter } from '../../shared/string-suffix.js';
 import { saveProgramSections } from '../services/programSections.js';
 import { saveManualProgramPoints } from '../services/manualProgramPoints.js';
 import express from 'express';
@@ -12,7 +13,7 @@ const fail = (message, statusCode = 422) => Object.assign(new Error(message), { 
 const clean = (value, max) => String(value || '').trim().slice(0, max);
 const dataBytes = (value) => {
   const base64 = String(value || '').split(',')[1] || '';
-  const padding = (base64.match(/=+$/) || [''])[0].length;
+  const padding = countTrailingCharacter(base64, '=');
   return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
 };
 

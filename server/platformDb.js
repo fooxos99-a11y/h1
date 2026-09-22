@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { trimTrailingCharacter } from '../shared/string-suffix.js';
 import mysql from 'mysql2/promise';
 import { instrumentDatabase } from './services/requestDiagnostics.js';
 import './loadEnvironment.js';
@@ -26,7 +27,7 @@ const baseConfig = {
 
 let platformPool;
 
-const normalizeUrl = (value) => String(value || '').trim().replace(/\/+$/, '');
+const normalizeUrl = (value) => trimTrailingCharacter(String(value || '').trim(), '/');
 
 export async function initPlatformDatabase(currentComplex = null) {
   const bootstrapPool = mysql.createPool(baseConfig);

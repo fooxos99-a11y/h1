@@ -1,4 +1,5 @@
 import { canTeacherSetRecitationAttendance, isRecitationAttendanceVisible } from '../shared/recitation-attendance-policy.js';
+import { getDatesInRange } from './services/dateRanges.js';
 import { studentVisibleToday, studentVisibleTasks } from '../shared/student-amount-visibility.js';
 import { measureQuranFaces, quranRangeFacesSql, acceptedQuranExecutionSql } from './services/quranFaceMeasurement.js';
 import { readQuranAyah, readQuranRange, readDescendingNextAyah } from './services/quranReferenceCache.js';
@@ -1255,7 +1256,7 @@ function wait(ms) {
 }
 
 function randomWhatsAppDelay() {
-  return 6000 + Math.floor(Math.random() * 4001);
+  return crypto.randomInt(6000, 10001);
 }
 
 async function disconnectWhatsAppClient() {
@@ -1530,18 +1531,6 @@ function isValidDateOnly(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
   const parsed = new Date(`${date}T00:00:00Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
-}
-
-function getDatesInRange(startDate, endDate) {
-  const start = new Date(`${startDate}T00:00:00Z`);
-  const end = new Date(`${endDate}T00:00:00Z`);
-  const dates = [];
-  const cursor = new Date(start);
-  while (cursor <= end) {
-    dates.push(cursor.toISOString().slice(0, 10));
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
-  return dates;
 }
 
 function getAttendanceDatesInRange(startDate, endDate, settings) {
@@ -2898,7 +2887,7 @@ async function ensureNazemLinkTasks(connection, plan, date) {
     );
     ranges = scheduled;
   }
-  const keys = (items) => items.map(quranRangeKey).sort().join('|');
+  const keys = (items) => items.map(quranRangeKey).sort((a, b) => a.localeCompare(b)).join('|');
   if (keys(tasks) === keys(ranges)) return;
   if (tasks.length) await connection.query(
     `DELETE FROM student_quran_tasks WHERE id IN (${tasks.map(() => '?').join(',')})`, tasks.map((task) => task.id),
@@ -14891,7 +14880,7 @@ app.get('/api/reports/recitation-session-dates', requireReportsOrOwnCommittee, a
       if (date >= today && isRecitationSessionDay(date, settings)) dates.add(date);
     });
 
-    res.json({ dates: [...dates].sort() });
+    res.json({ dates: [...dates].sort((a, b) => a.localeCompare(b)) });
   } catch (error) {
     next(error);
   }
@@ -15951,7 +15940,7 @@ async function buildProgressReport({
         ...studentTasks
           .filter((task) => task.taskDate >= startDate && task.taskDate <= endDate)
           .map((task) => task.taskDate),
-      ])].sort().map((detailDate) => {
+      ])].sort((a, b) => a.localeCompare(b)).map((detailDate) => {
         const attendanceRecord = attendanceRecords.find((record) => record.recordDate === detailDate);
         const dateTasks = studentTasks.filter((task) => task.taskDate === detailDate);
         const taskItems = Object.fromEntries(progressTaskTypes.map((type) => [

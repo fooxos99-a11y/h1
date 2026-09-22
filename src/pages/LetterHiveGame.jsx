@@ -15,6 +15,7 @@ import { allocateQuestionGroups } from '@/services/gameUsedQuestions';
 import useGamePresenterOrigin from '@/hooks/useGamePresenterOrigin';
 import { getCulturalCompetitionHomePath } from '@/lib/culturalCompetitionNavigation';
 import '@/components/games/letter-hive/letterHive.css';
+import { secureRandomId } from '../../shared/secure-random.js';
 
 const DEFAULT_TEAMS = ['الأحمر', 'الأخضر'];
 
@@ -95,7 +96,7 @@ const LetterHiveGame = () => {
   };
 
   const createSession = async (state) => {
-    const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = secureRandomId('letter-hive');
     const response = await fetch('/api/cultural-games/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

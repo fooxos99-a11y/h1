@@ -14,6 +14,7 @@ import { studentsApi } from '@/services/studentsApi';
 import useOnlineStatus from '@/hooks/useOnlineStatus';
 import { loadOfflineSnapshot } from '@/services/offlineOperationsService';
 import useRewardUnits from '@/hooks/useRewardUnits';
+import { generateThreeDigitLoginNumber as generateLoginNumber } from '../../../shared/login-numbers.js';
 
 const emptyStudent = {
   name: '',
@@ -64,26 +65,6 @@ const toNamePart = (value) =>
     .replace(/[0-9+]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-
-const generateLoginNumber = (usedNumbers) => {
-  for (let attempt = 0; attempt < 1000; attempt += 1) {
-    const value = String(Math.floor(100 + Math.random() * 900));
-    if (!usedNumbers.has(value)) {
-      usedNumbers.add(value);
-      return value;
-    }
-  }
-
-  for (let number = 100; number <= 999; number += 1) {
-    const value = String(number);
-    if (!usedNumbers.has(value)) {
-      usedNumbers.add(value);
-      return value;
-    }
-  }
-
-  return '';
-};
 
 const headerAliases = {
   name: ['اسم', 'الاسم', 'اسمالطالب', 'الطالب', 'student', 'studentname', 'name'],

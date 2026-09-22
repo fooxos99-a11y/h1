@@ -24,6 +24,30 @@ export function inspectCssFonts(source, relativePath) {
   return failures;
 }
 
+function hasEmptyCatchBlock(source) {
+  let cursor = 0;
+  const skipWhitespace = () => {
+    while (cursor < source.length && /\s/.test(source[cursor])) cursor += 1;
+  };
+  while (cursor < source.length) {
+    const start = source.indexOf("catch", cursor);
+    if (start === -1) return false;
+    cursor = start + 5;
+    skipWhitespace();
+    if (source[cursor] === "(") {
+      const close = source.indexOf(")", cursor + 1);
+      if (close === -1) return false;
+      cursor = close + 1;
+      skipWhitespace();
+    }
+    if (source[cursor] !== "{") continue;
+    cursor += 1;
+    skipWhitespace();
+    if (source[cursor] === "}") return true;
+  }
+  return false;
+}
+
 export function inspectSource(source, relativePath) {
   const failures = [];
   const isRuntimeSource = relativePath.startsWith("src/") || relativePath.startsWith("server/");
@@ -33,7 +57,7 @@ export function inspectSource(source, relativePath) {
   if (relativePath.startsWith("src/") && /\bwindow\.(?:alert|confirm|prompt)\s*\(/.test(source)) {
     failures.push(`${relativePath}: استخدم مكوّن Dialog المشترك بدل حوارات المتصفح الأصلية`);
   }
-  if (isRuntimeSource && /catch\s*(?:\([^)]*\))?\s*\{\s*\}/s.test(source)) {
+  if (isRuntimeSource && hasEmptyCatchBlock(source)) {
     failures.push(`${relativePath}: empty catch blocks are not allowed`);
   }
   if (isRuntimeSource && /\bconsole\.(?:log|debug)\s*\(/.test(source)) {

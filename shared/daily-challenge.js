@@ -1,3 +1,5 @@
+import { secureRandomInt } from './secure-random.js';
+
 export const DAILY_CHALLENGE_GAMES = Object.freeze([
   { value: 'size_ordering', label: 'ترتيب الأحجام' },
   { value: 'color_difference', label: 'اللون المختلف' },
@@ -39,8 +41,9 @@ export function getDailyChallengeWeekDay(date) {
   return new Date(`${date}T00:00:00Z`).getUTCDay();
 }
 
-export function pickRandomDailyChallengeGame(enabledGames, randomValue = Math.random()) {
+export function pickRandomDailyChallengeGame(enabledGames, randomValue) {
   const games = normalizeDailyChallengeGames(enabledGames);
+  if (randomValue === undefined) return games[secureRandomInt(games.length)];
   const safeRandom = Number.isFinite(randomValue) ? Math.max(0, Math.min(0.999999, randomValue)) : 0;
   return games[Math.floor(safeRandom * games.length)];
 }

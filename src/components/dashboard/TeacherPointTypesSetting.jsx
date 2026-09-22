@@ -6,9 +6,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import useRewardUnits from '@/hooks/useRewardUnits';
 import { MAX_TEACHER_POINT_TYPES, normalizeTeacherPointTypes } from '../../../shared/teacher-point-types.js';
+import { secureRandomId } from '../../../shared/secure-random.js';
 
 const createType = () => ({
-  id: `type-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+  id: secureRandomId('type'),
   label: 'نوع خصم',
   operation: 'deduction',
   points: 1,

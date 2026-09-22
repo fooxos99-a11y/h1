@@ -15,8 +15,9 @@ import { pickRandomMushafEntry } from '@/lib/randomMushafExcerpt';
 import { studentsApi } from '@/services/studentsApi';
 import { getRecitationDraft, saveRecitationDraft } from '@/services/offlineRecitationService';
 import { formatQuranSelectionText } from '../../../shared/quranSelectionText.js';
+import { secureRandomId } from '../../../shared/secure-random.js';
 
-const temporaryId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const temporaryId = () => secureRandomId('mark');
 
 const taskLoadKey = (tasks = []) => tasks.map((task) => [
   task?.id,

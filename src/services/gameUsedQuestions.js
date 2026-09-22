@@ -1,3 +1,5 @@
+import { secureShuffle } from '../../shared/secure-random.js';
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
 const requestJson = async (path, options = {}) => {
@@ -24,7 +26,7 @@ export const allocateQuestionGroups = async (gameType, groups, maxPerGroup = 1) 
 export const pickUnusedQuestion = async (gameType, questions) => {
   if (!questions.length) return null;
 
-  const shuffled = [...questions].sort(() => Math.random() - 0.5);
+  const shuffled = secureShuffle(questions);
   const allocated = await allocateQuestionGroups(gameType, [{
     id: 'draw',
     questionIds: shuffled.map((question) => question.id),

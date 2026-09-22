@@ -5,6 +5,7 @@ import { loadNotificationAudience, normalizeNotification, selectNotificationReci
 import { deviceTokenHash, getNotificationPushConfig } from '../services/notificationPush.js';
 import { notificationInboxFilter } from '../services/notificationInbox.js';
 import { notificationStaffRoles } from '../../shared/notification-roles.js';
+import { createNotificationReadHandler } from './notificationReadHandler.js';
 
 export const notificationRouter = express.Router();
 export const notificationManagementRouter = express.Router();
@@ -47,18 +48,7 @@ notificationRouter.get('/', async (req, res, next) => {
     res.json(rows.map((row) => ({ ...row, id: String(row.id), isRead: Boolean(row.isRead) })));
   } catch (error) { next(error); }
 });
-notificationRouter.post('/read', async (req, res, next) => {
-  try {
-    const ids = req.body.ids;
-    if (!Array.isArray(ids) || ids.length > 100 || ids.some((id) => !/^\d+$/.test(String(id)))) {
-      return res.status(422).json({ message: 'الإشعارات المحددة غير صالحة.' });
-    }
-    if (ids.length) await db().query(`UPDATE app_notification_recipients
-      SET read_at = COALESCE(read_at, NOW())
-      WHERE user_role = ? AND user_id = ? AND notification_id IN (?)`, [req.auth.role, req.auth.id, ids]);
-    res.json({ ok: true });
-  } catch (error) { next(error); }
-});
+notificationRouter.post('/read', createNotificationReadHandler(db));
 notificationRouter.post('/:id/read', async (req, res, next) => {
   try {
     await db().query(`UPDATE app_notification_recipients SET read_at = COALESCE(read_at, NOW())

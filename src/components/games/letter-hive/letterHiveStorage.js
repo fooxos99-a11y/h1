@@ -1,4 +1,5 @@
-import { LETTER_HIVE_QUESTIONS } from './letterHiveData';
+import { LETTER_HIVE_QUESTIONS } from './letterHiveData.js';
+import { secureRandomId } from '../../../../shared/secure-random.js';
 
 const LETTER_HIVE_STORAGE_KEY = 'road-letter-hive-question-bank-v5';
 
@@ -52,7 +53,7 @@ export const saveSharedQuestionBank = async (nextBank) => {
 
 export const addQuestionToBank = (bank, { letter, question, answer }) => ({
   ...bank,
-  [letter]: [...(bank[letter] || []), { id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, letter, question, answer }],
+  [letter]: [...(bank[letter] || []), { id: secureRandomId('question'), letter, question, answer }],
 });
 
 export const updateQuestionInBank = (bank, id, payload) => {

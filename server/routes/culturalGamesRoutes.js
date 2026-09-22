@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import os from 'node:os';
+import { selectRandomItems } from '../services/randomSelection.js';
 
 const GAME_TYPES = new Set(['letter-hive', 'categories', 'auction', 'guess-image']);
 const SESSION_LIFETIME_HOURS = 12;
@@ -212,7 +213,7 @@ export function createCulturalGamesRouter({ db, requirePermission }) {
       groups.forEach((group) => {
         const fresh = group.questionIds.filter((id) => !usedIds.has(id));
         const pool = fresh.length ? fresh : group.questionIds;
-        const picked = [...pool].sort(() => Math.random() - 0.5).slice(0, maxPerGroup);
+        const picked = selectRandomItems(pool, maxPerGroup);
         allocated[group.id] = picked;
         picked.forEach((id) => { usedIds.add(id); claimed.push(id); });
       });

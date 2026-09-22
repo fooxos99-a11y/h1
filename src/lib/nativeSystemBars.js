@@ -33,7 +33,8 @@ export function createNativeBarSynchronizer({ readAppearance, applyAppearance, o
       if (force) appliedKey = null;
       if (running) return running;
       running = (async () => {
-        while (pending && !disposed) {
+        while (pending) {
+          if (disposed) break;
           pending = false;
           const appearance = readAppearance();
           const key = JSON.stringify(appearance);

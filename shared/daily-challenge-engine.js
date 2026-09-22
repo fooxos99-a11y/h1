@@ -1,10 +1,9 @@
 import { DAILY_CHALLENGE_GAMES, SUMMIT_DAILY_CHALLENGE_GAME_TYPES } from './daily-challenge.js';
 import { createSummitGameChallenge, sanitizeSummitChallenge, scoreSummitChallenge } from './summit-engine.js';
+import { secureRandomInt, secureRandomItem as randomItem, secureShuffle as shuffle } from './secure-random.js';
 
 const colors = ['#e4ad38', '#0f6d83', '#e96b67', '#6d5bd0', '#25a18e', '#f28f3b'];
 const shapes = ['دائرة', 'مربع', 'مثلث', 'نجمة', 'سداسي', 'مستطيل'];
-const shuffle = (items) => [...items].sort(() => Math.random() - 0.5);
-const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
 
 export const getDailyChallengeGameLabel = (type) => (
   DAILY_CHALLENGE_GAMES.find((game) => game.value === type)?.label || 'التحدي اليومي'
@@ -28,8 +27,8 @@ export function createDailyChallenge(type) {
   }
   if (type === 'color_difference') {
     const rounds = [9, 12, 16, 20, 25].map((count, roundIndex) => {
-      const answer = Math.floor(Math.random() * count);
-      const hue = Math.floor(Math.random() * 260) + 20;
+      const answer = secureRandomInt(count);
+      const hue = secureRandomInt(260) + 20;
       const hueDifference = [26, 20, 15, 11, 7][roundIndex];
       return {
         colors: Array.from({ length: count }, (_, index) => `hsl(${hue + (index === answer ? hueDifference : 0)} 68% 54%)`),
@@ -40,8 +39,8 @@ export function createDailyChallenge(type) {
   }
   if (type === 'math_problems') {
     const problems = Array.from({ length: 3 }, (_, index) => {
-      const left = 4 + Math.floor(Math.random() * 18);
-      const right = 2 + Math.floor(Math.random() * 12);
+      const left = 4 + secureRandomInt(18);
+      const right = 2 + secureRandomInt(12);
       const operator = index === 1 ? '−' : '+';
       const answer = operator === '+' ? left + right : left - right;
       return { question: `${left} ${operator} ${right}`, options: shuffle([answer, answer + 2, answer - 1, answer + 5]), answer };

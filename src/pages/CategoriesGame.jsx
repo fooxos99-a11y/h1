@@ -10,6 +10,7 @@ import { loadCategoriesBank } from '@/components/games/categories/categoriesData
 import { allocateQuestionGroups } from '@/services/gameUsedQuestions';
 import { getCulturalCompetitionHomePath } from '@/lib/culturalCompetitionNavigation';
 import '@/components/games/categories/categoriesGame.css';
+import { secureRandomItem } from '../../shared/secure-random.js';
 
 const MAX_CATEGORIES = 6;
 const DEFAULT_TEAMS = ['الفريق الأول', 'الفريق الثاني'];
@@ -179,7 +180,7 @@ const CategoriesGame = () => {
     if (!activeQuestion) return;
     const available = replacementPools[activeQuestion.categoryId] || [];
     if (!available.length) return;
-    const selected = available[Math.floor(Math.random() * available.length)];
+    const selected = secureRandomItem(available);
     setReplacementPools((current) => ({
       ...current,
       [activeQuestion.categoryId]: (current[activeQuestion.categoryId] || []).filter((question) => question.id !== selected.id),

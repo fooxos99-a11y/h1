@@ -212,7 +212,7 @@ export async function getCachedTeacherEvaluation(supervisorId) {
     ));
     const unresolvedDates = [...new Set(history
       .filter((task) => task.taskDate >= base.date && Number(task.teacherCompleted) !== 1)
-      .map((task) => task.taskDate))].sort();
+      .map((task) => task.taskDate))].sort((a, b) => a.localeCompare(b));
     let carry = null;
     let blocked = !trustedEnough;
     for (const taskDate of unresolvedDates) {

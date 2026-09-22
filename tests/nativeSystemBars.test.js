@@ -3,6 +3,23 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { getNativeBarAppearance, syncNativeSystemBars, createNativeBarSynchronizer } from '../src/lib/nativeSystemBars.js';
 
+test('disposing an in-flight native update cancels queued updates and future requests', async () => {
+  let release;
+  let calls = 0;
+  const sync = createNativeBarSynchronizer({
+    readAppearance: () => ({ color: '#ffffff', style: 'LIGHT' }),
+    applyAppearance: () => { calls += 1; return new Promise((resolve) => { release = resolve; }); },
+    onSuccess: () => {}, onError: assert.fail,
+  });
+  const running = sync.request();
+  sync.request(true);
+  sync.dispose();
+  release();
+  await running;
+  await sync.request(true);
+  assert.equal(calls, 1);
+});
+
 test('native bar follows the actual page color, with readable icons and Mushaf overrides', () => {
   const root = { dataset: {}, classList: { contains: () => true } };
   assert.deepEqual(getNativeBarAppearance(root, 'rgb(0, 31, 41)'), { color: '#001f29', style: 'DARK' });

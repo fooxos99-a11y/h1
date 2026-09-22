@@ -3,17 +3,8 @@ import { Helmet } from 'react-helmet';
 import { Eye, Gavel, Minus, Plus, RefreshCw, RotateCcw, Trophy } from 'lucide-react';
 import GameThemeToggle from '@/components/games/shared/GameThemeToggle';
 import QuestionTimer from '@/components/games/shared/QuestionTimer';
-import WinEffects from '@/components/games/shared/WinEffects';
+import AuctionDialog from './AuctionDialog';
 import useRewardUnits from '@/hooks/useRewardUnits';
-
-const AuctionDialog = ({ children, onClose, celebrate = false }) => (
-  <div className="auction-modal-backdrop" onClick={onClose}>
-    {celebrate ? <WinEffects fullscreen /> : null}
-    <div className="auction-modal" onClick={(event) => event.stopPropagation()}>
-      {children}
-    </div>
-  </div>
-);
 
 const AuctionBoardView = ({
   teams,

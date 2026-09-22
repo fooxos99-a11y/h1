@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Edit3, Plus, Save, Trash2, X } from 'lucide-react';
 import { BASE_LETTERS } from './letterHiveData';
+import GameDialog from '@/components/games/shared/GameDialog';
 
 const emptyForm = { letter: BASE_LETTERS[0], question: '', answer: '' };
 
@@ -44,8 +45,7 @@ const LetterHiveQuestionBank = ({ questions, onAdd, onUpdate, onDelete, onClose 
   };
 
   return (
-    <div className="letter-hive-bank-backdrop" onClick={onClose}>
-      <section className="letter-hive-bank" onClick={(event) => event.stopPropagation()}>
+    <GameDialog title="بنك الأسئلة" backdropClassName="letter-hive-bank-backdrop" className="letter-hive-bank" onClose={onClose}>
         <header className="letter-hive-bank-header">
           <div>
             <p>مشترك في المنصة</p>
@@ -125,8 +125,7 @@ const LetterHiveQuestionBank = ({ questions, onAdd, onUpdate, onDelete, onClose 
             </article>
           ))}
         </div>
-      </section>
-    </div>
+    </GameDialog>
   );
 };
 

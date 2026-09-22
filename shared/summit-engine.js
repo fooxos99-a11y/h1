@@ -5,8 +5,7 @@ import {
   normalizeSummitStageChallenges,
 } from './summit.js';
 
-const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
-const shuffled = (items) => [...items].sort(() => Math.random() - 0.5);
+import { secureRandomItem as randomItem, secureShuffle as shuffled } from './secure-random.js';
 
 const FOREST_GAP_X_VALUES = [20, 32, 44, 56, 68, 80];
 const FOREST_WALL_Y_VALUES = [80, 60, 40, 20];

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from '@/lib/router';
 import useGamePresenterOrigin from '@/hooks/useGamePresenterOrigin';
+import { secureRandomId } from '../../shared/secure-random.js';
 
 const SESSION_API = '/api/cultural-games/sessions';
 
@@ -31,7 +32,7 @@ const useGamePresentation = ({ gameKey, gamePath, initialState, onRemoteState, e
 
   const createSession = useCallback(async (state = initialStateRef.current) => {
     if (!enabled) return { id: '', controlToken: '' };
-    const id = `${gameKey}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    const id = secureRandomId(gameKey);
     const data = await fetch(SESSION_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

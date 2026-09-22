@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import { readFile } from 'node:fs/promises';
-import vm from 'node:vm';
-import { URL } from 'node:url';
+import { createNotificationReadHandler } from '../server/routes/notificationReadHandler.js';
 import { notificationInboxFilter } from '../server/services/notificationInbox.js';
 import { nazemEvaluationEndDateSql } from '../server/integrations/nazem/evaluationScope.js';
 import { processNotificationPushBatch } from '../server/services/notificationPush.js';
@@ -86,24 +84,17 @@ test('opening the inbox marks only supplied messages belonging to the authentica
     database.exec(`CREATE TABLE app_notification_recipients (notification_id, user_role, user_id, read_at);
       INSERT INTO app_notification_recipients VALUES (1,'student',7,NULL),(2,'student',8,NULL),
         (3,'supervisor',7,NULL),(4,'student',7,NULL);`);
-    const routes = {};
-    const router = () => ({ use() {}, get() {}, delete() {}, post(path, handler) { routes[path] = handler; } });
-    const source = (await readFile(new URL('../server/routes/notificationRoutes.js', import.meta.url), 'utf8'))
-      .replace(/^import .+;\r?$/gm, '').replace(/export const /g, 'const ');
-    vm.runInNewContext(source, {
-      express: { Router: router }, requirePermission: () => () => {},
-      db: () => ({ query: async (sql, values) => {
-        const ids = values.at(-1);
-        database.prepare(sql.replace('NOW()', 'CURRENT_TIMESTAMP').replace('IN (?)', `IN (${ids.map(() => '?').join(',')})`))
-          .run(...values.slice(0, -1), ...ids);
-      } }),
-    });
+    const readNotifications = createNotificationReadHandler(() => ({ query: async (sql, values) => {
+      const ids = values.at(-1);
+      database.prepare(sql.replace('NOW()', 'CURRENT_TIMESTAMP').replace('IN (?)', `IN (${ids.map(() => '?').join(',')})`))
+        .run(...values.slice(0, -1), ...ids);
+    } }));
     let status = 200;
     const res = { status(value) { status = value; return this; }, json() {} };
-    await routes['/read']({ auth: { role: 'student', id: 7 }, body: { ids: [1, 2, 3] } }, res, (error) => { throw error; });
+    await readNotifications({ auth: { role: 'student', id: 7 }, body: { ids: [1, 2, 3] } }, res, (error) => { throw error; });
     assert.equal(status, 200);
     assert.deepEqual(database.prepare('SELECT notification_id FROM app_notification_recipients WHERE read_at IS NOT NULL').all().map((r) => r.notification_id), [1]);
-    await routes['/read']({ auth: { role: 'student', id: 7 }, body: { ids: ['1 OR 1=1'] } }, res, (error) => { throw error; });
+    await readNotifications({ auth: { role: 'student', id: 7 }, body: { ids: ['1 OR 1=1'] } }, res, (error) => { throw error; });
     assert.equal(status, 422);
   } finally { database.close(); }
 });

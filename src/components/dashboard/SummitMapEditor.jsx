@@ -16,8 +16,8 @@ import {
   normalizeSummitMapConfig,
 } from '../../../shared/summit-map.js';
 import '@/components/summit/SummitJourneyMap.css';
+import { secureRandomId as createId } from '../../../shared/secure-random.js';
 
-const createId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 const clampKilometer = (value, maximum = SUMMIT_MAX_CONFIGURABLE_KILOMETERS) => Math.min(maximum, Math.max(0, Math.trunc(Number(value) || 0)));
 const clampReward = (value) => Math.min(10000, Math.max(0, Math.trunc(Number(value) || 0)));
 const optionLabel = (entity) => `${entity.name || entity.text || 'بدون اسم'} — ${Number(entity.kilometer).toLocaleString('ar-SA-u-nu-latn')} كم`;

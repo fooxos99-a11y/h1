@@ -242,8 +242,8 @@ async function run() {
   const complexes = await api(primary.baseUrl, '/platform/complexes', { token: ownerLogin.token });
   checked('both isolated complexes registered centrally', () => {
     assert.deepEqual(
-      complexes.map((complex) => complex.registrationNumber).sort(),
-      ['1000', '101'].sort(),
+      complexes.map((complex) => complex.registrationNumber).sort((a, b) => a.localeCompare(b)),
+      ['1000', '101'].sort((a, b) => a.localeCompare(b)),
     );
   });
   const provisionedComplex = await api(primary.baseUrl, '/platform/complexes', {
@@ -1102,7 +1102,8 @@ async function cleanup() {
     return new Promise((resolve) => {
       child.once('exit', resolve);
       if (process.platform === 'win32') {
-        spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], {
+        spawn('C:\\Windows\\System32\\taskkill.exe', ['/pid', String(child.pid), '/t', '/f'], {
+          shell: false,
           stdio: 'ignore',
           windowsHide: true,
         }).once('exit', resolve);

@@ -1,3 +1,5 @@
+import { UTC_DAY_MS } from './dateRanges.js';
+
 const toUtcDate = (value) => {
   const [year, month, day] = String(value || '').split('-').map(Number);
   if (!year || !month || !day) return null;
@@ -12,8 +14,8 @@ export function countScheduledPlanDays({ startDate, endDate, scheduleDays = [0, 
   if (!start || !end || start > end) return 0;
   const allowed = new Set((Array.isArray(scheduleDays) ? scheduleDays : []).map(Number));
   let count = 0;
-  for (const cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
-    if (allowed.has(cursor.getUTCDay())) count += 1;
+  for (let cursor = start.getTime(); cursor <= end.getTime(); cursor += UTC_DAY_MS) {
+    if (allowed.has(new Date(cursor).getUTCDay())) count += 1;
   }
   return count;
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import { RefreshCw } from 'lucide-react';
 import QuestionTimer from '@/components/games/shared/QuestionTimer';
+import GameDialog from '@/components/games/shared/GameDialog';
 
 const LetterHiveQuestionModal = ({
   questionId,
@@ -14,8 +15,7 @@ const LetterHiveQuestionModal = ({
   onShowAnswer,
   onAssign,
 }) => (
-  <div className="letter-hive-modal-backdrop" onClick={onClose}>
-    <div className="letter-hive-modal" onClick={(event) => event.stopPropagation()}>
+  <GameDialog title={question} backdropClassName="letter-hive-modal-backdrop" className="letter-hive-modal" onClose={onClose}>
       <div className="letter-hive-modal-tools">
         <QuestionTimer resetKey={questionId || question} />
         <button type="button" className="letter-hive-change-question" onClick={onChangeQuestion} title="تغيير السؤال">
@@ -41,8 +41,7 @@ const LetterHiveQuestionModal = ({
           </div>
         </>
       ) : null}
-    </div>
-  </div>
+  </GameDialog>
 );
 
 export default LetterHiveQuestionModal;

@@ -2,35 +2,10 @@ import json
 import os
 import time
 import urllib.parse
-import urllib.request
-from urllib.error import HTTPError
 
 import jwt
 from app_store_review_state import wait_for_review_cancellation
-
-
-API_ROOT = "https://api.appstoreconnect.apple.com/v1"
-
-
-def request_json(path, token, method="GET", payload=None):
-    body = json.dumps(payload).encode("utf-8") if payload is not None else None
-    headers = {"Authorization": f"Bearer {token}"}
-    if body is not None:
-        headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(
-        f"{API_ROOT}{path}",
-        data=body,
-        headers=headers,
-        method=method,
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            if response.status == 204:
-                return None
-            return json.load(response)
-    except HTTPError as error:
-        details = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"App Store Connect returned HTTP {error.code}: {details}") from error
+from app_store_http import request_json
 
 
 def ensure_release_notes(app_id, version_id, token, retry_state_transition=False):

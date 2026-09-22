@@ -1,4 +1,5 @@
 import express from 'express';
+import { trimTrailingCharacter } from '../../shared/string-suffix.js';
 import { db, getDatabaseContext } from '../db.js';
 import {
   DASHBOARD_PERMISSION_KEYS,
@@ -47,11 +48,11 @@ router.post('/login', async (req, res, next) => {
       return res.status(422).json({ message: 'رقم الحساب مطلوب.' });
     }
 
-    const nativeApiBase = String(
+    const nativeApiBase = trimTrailingCharacter(String(
       process.env.PLATFORM_PUBLIC_API_URL
       || process.env.PUBLIC_API_URL
       || `${req.protocol}://${req.get('host')}/api`,
-    ).replace(/\/+$/, '');
+    ), '/');
     const tenantPayload = {
       ...(isNativeApiRequest(req) ? { apiBase: nativeApiBase } : {}),
       complex: { registrationNumber, name: tenant?.name || '' },
