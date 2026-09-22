@@ -1519,7 +1519,10 @@ test('Nazem discovers student plans and treats Nazem as the authoritative import
   assert.match(service, /updateNazemJobProgress/);
   assert.match(queue, /progress_percent = 100/);
   assert.match(progressMigration, /ADD COLUMN progress_percent/);
-  assert.match(progressBar, /role="progressbar"/);
+  assert.match(progressBar, /<ProgressValue/);
+  const progressValue = readFileSync(new URL('../src/components/ui/progress-value.jsx', import.meta.url), 'utf8');
+  assert.match(progressValue, /<progress/);
+  assert.match(progressValue, /value=\{value\}/);
   assert.match(integrationApi, /latest\.status !== 'synced'/);
   assert.match(integrationApi, /تعذر جلب الطلاب والخطط كاملة من ناظم/);
   assert.match(integrationApi, /Promise\.all\(\[[\s\S]*getImportPreview\(teacherId, '', \{ signal \}\)[\s\S]*getConflicts\(teacherId, \{ signal \}\)/);

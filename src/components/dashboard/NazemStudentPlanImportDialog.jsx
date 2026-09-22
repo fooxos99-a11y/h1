@@ -66,6 +66,10 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
   const [conflicts, setConflicts] = useState(prepared?.conflicts || []);
   const [hiddenConflictIds, setHiddenConflictIds] = useState([]);
   const [excludedCandidateIds, setExcludedCandidateIds] = useState([]);
+  const toggleCandidate = (candidateId) => setExcludedCandidateIds((current) => (
+    current.includes(candidateId) ? current.filter((id) => id !== candidateId) : [...current, candidateId]
+  ));
+  const hideConflict = (conflictId) => setHiddenConflictIds((current) => [...current, conflictId]);
   const [busyConflictId, setBusyConflictId] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -359,11 +363,7 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
                             size="sm"
                             variant={isExcluded ? 'outline' : 'ghost'}
                             className="min-h-11 gap-2"
-                            onClick={() => setExcludedCandidateIds((current) => (
-                              current.includes(candidate.id)
-                                ? current.filter((id) => id !== candidate.id)
-                                : [...current, candidate.id]
-                            ))}
+                            onClick={() => toggleCandidate(candidate.id)}
                           >
                             {isExcluded
                               ? <RotateCcw className="h-4 w-4" />
@@ -456,7 +456,7 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
                         row={row}
                         busy={busyConflictId === row.id}
                         onResolve={resolveConflict}
-                        onLeave={(conflictId) => setHiddenConflictIds((current) => [...current, conflictId])}
+                        onLeave={hideConflict}
                       />
                     ))}
                   </div>

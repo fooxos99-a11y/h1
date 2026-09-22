@@ -17,6 +17,7 @@ const OwnerSettingsSection = ({ complexes }) => {
   const activeComplexes = complexes.filter((complex) => complex.status === 'active');
   const [complexId, setComplexId] = useState(() => String(activeComplexes[0]?.id || ''));
   const [settings, setSettings] = useState(null);
+  const updateSetting = (key, value) => setSettings((current) => ({ ...current, [key]: value }));
   const [policies, setPolicies] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
@@ -91,7 +92,7 @@ const OwnerSettingsSection = ({ complexes }) => {
                         definition={{ ...definition, label: rewardUnits.text(definition.label) }}
                         value={settings[definition.key]}
                         policy={policies[definition.key] || 'tenant'}
-                        onValueChange={(value) => setSettings((current) => ({ ...current, [definition.key]: value }))}
+                        onValueChange={(value) => updateSetting(definition.key, value)}
                         onPolicyChange={(policy) => updatePolicy(definition, policy)}
                       />
                     ))}

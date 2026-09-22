@@ -140,13 +140,11 @@ const ManualAttendanceSection = ({ teacherScoped = false }) => {
         } else {
           result = await studentsApi.checkInStudent(row.id, payload);
         }
-      } else {
-        if (status === 'absent') {
+      } else if (status === 'absent') {
           result = await studentsApi.markSupervisorAbsent(row.id, payload);
         } else {
           result = await studentsApi.checkInSupervisor(row.id, payload);
         }
-      }
 
       updateRowStatus(row.id, result.status || status, Number(result.points || 0));
       toast({

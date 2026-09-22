@@ -129,8 +129,7 @@ const mountApp = () => {
   observer.observe(appRoot, { childList: true, subtree: true });
 
   ReactDOM.createRoot(appRoot).render(
-    <>
-      <BrowserRouter
+    <BrowserRouter
         basename={routerBasename}
       >
         <SiteProvider>
@@ -141,7 +140,6 @@ const mountApp = () => {
           <App />
         </SiteProvider>
       </BrowserRouter>
-    </>
   );
   window.requestAnimationFrame(revealWhenScreenIsReady);
 };

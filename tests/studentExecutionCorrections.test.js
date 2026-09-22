@@ -52,6 +52,6 @@ test('correction page is hidden unless student execution is enabled', async () =
 
   assert.match(dashboard, /key: 'studentExecutionCorrections'[\s\S]*label: 'تصحيح تنفيذ الطلاب'[\s\S]*permissionKey: 'studentPlans'/);
   assert.match(dashboard, /section\.key === 'studentExecutionCorrections' && settings\.hasStudentQuranExecution === false/);
-  assert.match(dashboard, /visibleActiveSection === 'studentExecutionCorrections'[\s\S]*<StudentExecutionCorrectionsSection/);
+  assert.match(dashboard, /case 'studentExecutionCorrections':[\s\S]*<StudentExecutionCorrectionsSection/);
   assert.match(routes, /\['studentExecutionCorrections', 'student-execution-corrections'\]/);
 });

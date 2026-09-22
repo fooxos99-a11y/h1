@@ -39,9 +39,7 @@ export default function StudentProgramsSection() {
   const activity = _resolveActivity();
   const _resolveConditional = () => {
     if (programId && !selected || sectionId && !section) {
-      return <>
-      <output >البرنامج غير متاح.</output>
-    </>;
+      return <output >البرنامج غير متاح.</output>;
     }
     if (activity) {
       return <StudentProgramContent key={activity.id} program={activity}

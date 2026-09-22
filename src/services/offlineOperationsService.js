@@ -106,13 +106,7 @@ export async function syncOfflineActions(accountId, { force = false, actorRole =
     await offlineRecitationStore.updateAction(actorKey, action.actionId, { status: 'syncing', lastError: '' });
     try {
       const result = await handler(action.payload);
-      if (action.actionType === 'staff_attendance' && result?.date) {
-        const key = `${actorKey}:resource:staff-attendance:me`;
-        const cached = await offlineRecitationStore.getSnapshot(key);
-        if (!cached?.date || result.date >= cached.date) {
-          await offlineRecitationStore.cacheSnapshot(key, result);
-        }
-      }
+      await cacheSyncedStaffAttendance(action, result, actorKey);
       results.push(await offlineRecitationStore.updateAction(actorKey, action.actionId, {
         status: 'synced', result, nextRetryAt: null, lastError: '',
       }));
@@ -143,6 +137,17 @@ export async function syncOfflineActions(accountId, { force = false, actorRole =
     }
   }
   return results;
+}
+
+/** Refresh the attendance cache only when the synchronized record is at least as recent as the cached date. */
+async function cacheSyncedStaffAttendance(action, result, actorKey) {
+  if (action.actionType === 'staff_attendance' && result?.date) {
+    const key = `${actorKey}:resource:staff-attendance:me`;
+    const cached = await offlineRecitationStore.getSnapshot(key);
+    if (!cached?.date || result.date >= cached.date) {
+      await offlineRecitationStore.cacheSnapshot(key, result);
+    }
+  }
 }
 
 export async function prefetchOfflineWorkspace(accountId) {

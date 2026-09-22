@@ -343,26 +343,7 @@ export function createStoreRouter({
         await connection.query('UPDATE store_products SET stock = stock - 1 WHERE id = ?', [product.id]);
       }
 
-      if (settings.storePurchaseDeductsRanking) {
-        const effectiveDelta = await applyStudentPointDelta(connection, student.id, -price, settings, {
-          date: purchaseDate,
-          updateStoreBalance: false,
-        });
-        if (effectiveDelta) {
-          await logStudentPointTransaction(connection, {
-            studentId: student.id,
-            actorRole: 'student',
-            actorName: req.auth?.name || 'الطالب',
-            type: 'deduction',
-            points: Math.abs(effectiveDelta),
-            reason: `شراء ${product.name}`,
-            date: purchaseDate,
-            sourceType: 'store_purchase',
-            sourceId: orderResult.insertId,
-            dedupeKey: `store_purchase:${orderResult.insertId}`,
-          });
-        }
-      }
+      await applyStoreRankingDeduction({ settings, applyStudentPointDelta, connection, student, price, purchaseDate, logStudentPointTransaction, req, product, orderResult });
 
       await connection.commit();
       return res.status(201).json({
@@ -381,4 +362,28 @@ export function createStoreRouter({
   });
 
   return router;
+}
+
+/** Apply the optional ranking deduction with the purchase deduplication key in the same transaction. */
+async function applyStoreRankingDeduction({ settings, applyStudentPointDelta, connection, student, price, purchaseDate, logStudentPointTransaction, req, product, orderResult }) {
+  if (settings.storePurchaseDeductsRanking) {
+    const effectiveDelta = await applyStudentPointDelta(connection, student.id, -price, settings, {
+      date: purchaseDate,
+      updateStoreBalance: false,
+    });
+    if (effectiveDelta) {
+      await logStudentPointTransaction(connection, {
+        studentId: student.id,
+        actorRole: 'student',
+        actorName: req.auth?.name || 'الطالب',
+        type: 'deduction',
+        points: Math.abs(effectiveDelta),
+        reason: `شراء ${product.name}`,
+        date: purchaseDate,
+        sourceType: 'store_purchase',
+        sourceId: orderResult.insertId,
+        dedupeKey: `store_purchase:${orderResult.insertId}`,
+      });
+    }
+  }
 }

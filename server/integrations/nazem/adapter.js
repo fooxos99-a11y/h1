@@ -173,7 +173,7 @@ function verifyFollowUpMetrics(day, mapped) {
 }
 
 function verifyFinalFollowUp(day, mapped) {
-  if (!day || !FINAL_FOLLOW_UP_STATUSES.has(String(day.status || ''))) return false;
+  if (!day || !FINAL_FOLLOW_UP_STATUSES.has(String(day.status || ''))) return null;
   verifyScheduledStart(day, mapped);
   const remoteCompleted = isNazemFollowUpCompleted(day.status);
   if (remoteCompleted !== mapped.completed) {
@@ -526,19 +526,7 @@ export class NazemAdapter {
       const passwordInput = this.page.locator(SELECTORS.loginPassword).first();
       stage = 'login-form';
       let loginFormReady = false;
-      for (let loginPageAttempt = 0; loginPageAttempt < 2; loginPageAttempt += 1) {
-        await this.page.goto(`${NAZEM_BASE_URL}/login`, { waitUntil: 'domcontentloaded' });
-        try {
-          await Promise.all([
-            usernameInput.waitFor({ state: 'visible', timeout: 7_000 }),
-            passwordInput.waitFor({ state: 'visible', timeout: 7_000 }),
-          ]);
-          loginFormReady = true;
-          break;
-        } catch (error) {
-          if (loginPageAttempt === 1) throw error;
-        }
-      }
+      loginFormReady = await waitForNazemLoginForm(this, usernameInput, passwordInput);
       if (!loginFormReady) {
         throw transientNazemError('تعذر تحميل نموذج الدخول إلى ناظم.', 'NAZEM_LOGIN_FORM_TIMEOUT');
       }
@@ -1027,13 +1015,7 @@ export class NazemAdapter {
     for (let apiAttempt = 0; apiAttempt < 2; apiAttempt += 1) {
       try {
         let payload = this.planApiFirstPage || await this.capturePlanApiSession({ forceFresh: apiAttempt > 0 });
-        for (let pageNumber = 0; pageNumber < 50; pageNumber += 1) {
-          const page = extractNazemPlanApiPage(payload);
-          page.groups.forEach((group) => groups.set(group.externalId, group));
-          if (!page.nextPageUrl || page.currentPage >= page.lastPage) break;
-          const nextUrl = new URL(page.nextPageUrl);
-          payload = await this.getPlanApi(`${nextUrl.pathname}${nextUrl.search}`);
-        }
+        await collectPlanApiPages(this, payload, groups);
         return [...groups.values()];
       } catch (error) {
         planApiError = error;
@@ -1056,23 +1038,7 @@ export class NazemAdapter {
       }
       const pageGroups = [];
       const count = await rows.count();
-      for (let index = firstDataRow; index < count; index += 1) {
-        const row = rows.nth(index);
-        const text = cleanText(await row.innerText());
-        if (!text || text.includes('لا توجد خطط') || text.includes('جاري التحميل')) continue;
-        const editLink = row.locator('a[href*="/educational-plans/"]').first();
-        const href = await editLink.count() ? await editLink.getAttribute('href') : '';
-        const externalId = /\/educational-plans\/(\d+)(?:\/|$)/.exec(String(href || ''))?.[1]
-          || /^(\d+)\b/.exec(text)?.[1]
-          || null;
-        if (externalId) {
-          const cells = row.getByRole('cell');
-          const studentCount = await cells.count() > 4
-            ? Number(cleanText(await cells.nth(4).innerText()) || 0)
-            : 0;
-          pageGroups.push({ externalId, text, studentCount });
-        }
-      }
+      await collectVisiblePlanGroups(firstDataRow, count, rows, pageGroups);
       const signature = pageGroups.map((group) => group.externalId).join(',');
       if (groupPageSignatures.has(signature)) break;
       groupPageSignatures.add(signature);
@@ -1082,16 +1048,7 @@ export class NazemAdapter {
       await nextPage.click();
       await this.page.waitForTimeout(500);
     }
-    if (!groups.size) {
-      const pageText = cleanText(await this.page.locator('main').innerText().catch(() => ''));
-      if (!/لا توجد خطط|لا توجد بيانات/.test(pageText)) {
-        if (planApiError) throw planApiError;
-        throw transientNazemError(
-          'لم يكتمل تحميل قائمة خطط ناظم، وستعاد المحاولة تلقائيًا.',
-          'NAZEM_PLAN_LIST_LOAD_INCOMPLETE',
-        );
-      }
-    }
+    await assertPlanListLoaded(this, groups, planApiError);
     return [...groups.values()];
   }
 
@@ -1099,41 +1056,7 @@ export class NazemAdapter {
     const students = this.page.locator('.epe-student');
     const identities = [];
     const count = await students.count();
-    for (let index = 0; index < count; index += 1) {
-      const student = students.nth(index);
-      const name = student.locator('.epe-student__name').first();
-      const studentName = await name.count() ? cleanText(await name.innerText()) : '';
-      let externalId = null;
-      for (const attribute of ['data-student-id', 'data-id', 'data-value', 'data-key']) {
-        const value = cleanText(await student.getAttribute(attribute));
-        if (isNazemExternalStudentId(value)) {
-          externalId = value;
-          break;
-        }
-      }
-      if (!externalId) {
-        const identityElement = student.locator([
-          '[data-student-id]',
-          'input[name*="student_id"][value]',
-          'input[name*="studentId"][value]',
-          'input[name*="student"][value]',
-          'a[href*="/students/"]',
-        ].join(', ')).first();
-        if (await identityElement.count()) {
-          const directId = cleanText(await identityElement.getAttribute('data-student-id'))
-            || cleanText(await identityElement.getAttribute('value'));
-          const hrefId = /\/students\/(\d+)(?:\/|$)/.exec(cleanText(await identityElement.getAttribute('href')))?.[1];
-          const candidateId = directId || hrefId;
-          if (isNazemExternalStudentId(candidateId)) externalId = candidateId;
-        }
-      }
-      identities.push({
-        container: student,
-        externalId,
-        name: studentName,
-        normalizedName: normalizeArabicPersonName(studentName),
-      });
-    }
+    await collectNazemStudentIdentities(count, students, identities);
     return identities;
   }
 
@@ -1311,81 +1234,7 @@ export class NazemAdapter {
         || ((!scopedCandidates.length || scopedCandidates.includes(student))
           && fallbackStudentNames.has(normalizeArabicPersonName(student.name)))
       ));
-      for (const remoteStudent of candidates) {
-        const studentLink = {
-          nazemStudentId: remoteStudent.externalId,
-          nazemStudentName: remoteStudent.name,
-          externalOrganizationId: remoteStudent.organization?.id || null,
-          externalOrganizationName: remoteStudent.organization?.name || null,
-          externalCircleId: remoteStudent.circle?.id || null,
-          externalCircleName: remoteStudent.circle?.name || null,
-        };
-        try {
-          const apiBundle = planDetails ? mapNazemApiPlanBundle(planDetails, studentLink) : null;
-          let conserve;
-          if (apiBundle) {
-            if (apiBundle.primary?.tab === 'الحفظ') {
-              conserve = apiBundle.primary;
-            } else {
-              conserve = null;
-            }
-          } else {
-            conserve = await this.readPlan(group.externalId, studentLink, 'الحفظ', { navigate: false });
-          }
-          let master;
-          if (apiBundle?.primary?.tab === 'الإتقان') {
-            master = apiBundle.primary;
-          } else {
-            if (!apiBundle) {
-              master = await this.readPlan(group.externalId, studentLink, 'الإتقان', { navigate: false });
-            } else {
-              master = null;
-            }
-          }
-          const primary = conserve || master;
-          if (!primary) continue;
-          const revision = apiBundle
-            ? apiBundle.revision
-            : await this.readPlan(group.externalId, studentLink, 'المراجعة', { navigate: false });
-          const remoteType = primary.tab === 'الإتقان' ? 'master' : 'conserve';
-          let latestFollowUp = null;
-          for (const entry of followUpHistory) {
-            const match = findFollowUpDay(entry.payload, studentLink, remoteType);
-            const hasAttendance = [2, 3, 4, 5].includes(Number(match.student?.attendance_status));
-            if (match.day || hasAttendance) {
-              latestFollowUp = { ...match, date: entry.date };
-              break;
-            }
-          }
-          const { student = null, day = null, date = null } = latestFollowUp || {};
-          discovered.push({
-            externalId: String(group.externalId),
-            student: remoteStudent,
-            primary,
-            revision,
-            startDate: primary.startDate || revision?.startDate || null,
-            progress: (day || [2, 3, 4, 5].includes(Number(student?.attendance_status))) ? {
-              date,
-              status: day?.status || null,
-              scheduledFromSurah: day?.surah_from || null,
-              scheduledFromAyah: day?.verse_from || null,
-              scheduledToSurah: day?.surah_to || null,
-              scheduledToAyah: day?.verse_to || null,
-              actualToSurah: day?.actual_surah_to || null,
-              actualToAyah: day?.actual_verse_to || null,
-              attendanceStatus: student?.attendance_status ?? null,
-            } : null,
-          });
-        } catch (error) {
-          issues.push({
-            groupExternalId: String(group.externalId),
-            studentExternalId: String(remoteStudent.externalId || ''),
-            studentName: remoteStudent.name,
-            errorCode: error?.code || 'NAZEM_PLAN_STUDENT_DISCOVERY_FAILED',
-            message: String(error?.message || 'تعذرت قراءة خطة الطالب من ناظم.').slice(0, 500),
-          });
-        }
-      }
+      await discoverCandidatePlans({ adapter: this, candidates, planDetails, group, followUpHistory, discovered, issues });
       await reportProgress();
       } catch (error) {
         issues.push({
@@ -1443,43 +1292,7 @@ export class NazemAdapter {
       if ([2, 3, 4, 5].includes(Number(attendanceStudent?.attendance_status))) {
         attendance.push({ date, attendanceStatus: Number(attendanceStudent.attendance_status) });
       }
-      for (const remoteType of ['conserve', 'revision', 'master']) {
-        const { student, item, day } = findFollowUpDay(payload, studentLink, remoteType, { confirmedRecordIds });
-        const pendingDay = item?.pending_day;
-        if (daysAgo === 0 && pendingDay?.id && normalizeDateOnly(pendingDay.date)
-          && !FINAL_FOLLOW_UP_STATUSES.has(String(pendingDay.status || ''))) {
-          const pending = {
-            ...pendingDay, date: normalizeDateOnly(pendingDay.date), remoteType,
-            taskType: remoteType === 'revision' ? 'review' : 'memorization',
-            attendanceStatus: null, nazemLate: false, nazemPendingDay: true,
-            nazemLateAvailableOn: date,
-          };
-          scheduled.set(scheduledFollowUpKey(pending), pending);
-        }
-        const lateItems = daysAgo === 0 && (!endDate || endDate === saudiDate(0)) ? await this.datedLateItems(item, externalPlanId, studentLink, remoteType) : [];
-        (daysAgo === 0 && (!endDate || endDate === saudiDate(0)) ? mapNazemPendingFollowUps({ ...item, late_items: lateItems }, {
-          remoteType,
-          attendanceStatus: student?.attendance_status ?? null,
-        }) : []).forEach((late) => {
-          late.nazemLateAvailableOn = date;
-          const key = scheduledFollowUpKey(late);
-          if (!scheduled.has(key)) scheduled.set(key, late);
-        });
-        if (!day) continue;
-        const normalized = {
-          ...day,
-          date: normalizeDateOnly(day.date) || date,
-          remoteType,
-          taskType: remoteType === 'revision' ? 'review' : 'memorization',
-          attendanceStatus: student?.attendance_status ?? null,
-          nazemLate: false,
-        };
-        if (FINAL_FOLLOW_UP_STATUSES.has(String(day.status || ''))) rows.push(normalized);
-        else {
-          const key = scheduledFollowUpKey(normalized);
-          if (!scheduled.has(key)) scheduled.set(key, normalized);
-        }
-      }
+      await collectRemoteFollowUpTypes({ adapter: this, payload, studentLink, confirmedRecordIds, daysAgo, endDate, externalPlanId, date, scheduled, rows });
     }
     const queueDate = endDate || saudiDate();
     for (const remoteType of ['conserve', 'revision', 'master']) {
@@ -1514,17 +1327,7 @@ export class NazemAdapter {
       throw reviewNazemError('تغيرت بنية حقول تعديل خطة ناظم.', 'NAZEM_PLAN_EDIT_FIELDS_CHANGED');
     }
     const range = [mappedPlan.startSurah, mappedPlan.startAyah, mappedPlan.endSurah, mappedPlan.endAyah];
-    for (let index = 0; index < range.length; index += 1) {
-      const input = textboxes.nth(index);
-      if (await input.isDisabled()) {
-        const current = cleanText(await input.inputValue());
-        if (current !== String(range[index])) {
-          throw reviewNazemError('ناظم يسمح بعد بدء المتابعة بتعديل نهاية الخطة فقط.', 'NAZEM_PLAN_FIELD_LOCKED');
-        }
-      } else {
-        await this.selectFromInput(input, range[index]);
-      }
-    }
+    await updateUnlockedPlanRange(this, range, textboxes);
     const numbers = planContainer.getByRole('spinbutton');
     if (await numbers.count() >= 2) {
       if (!await numbers.nth(0).isDisabled()) await numbers.nth(0).fill(String(mappedPlan.repeatCount));
@@ -1649,19 +1452,7 @@ export class NazemAdapter {
           .replace('{planId}', encodeURIComponent(String(externalPlanId)))
           .replace('{date}', encodeURIComponent(normalizedDate))
         : '');
-    if (this.followUpApiBase && directPath) {
-      try {
-        const payload = await this.readFollowUpApi(directPath);
-        this.followUpPayloadCache.set(cacheKey, payload);
-        return payload;
-      } catch (cause) {
-        const status = String(cause?.cause?.message || '');
-        if (!retryAuthentication || !/HTTP (401|419)/.test(status)) throw cause;
-        this.resetFollowUpApiSession();
-        await this.login({ forceFresh: true });
-        return this.openFollowUp(externalPlanId, normalizedDate, { fresh: true, retryAuthentication: false });
-      }
-    }
+    if (this.followUpApiBase && directPath) return readCachedFollowUpPath({ adapter: this, directPath, cacheKey, retryAuthentication, externalPlanId, normalizedDate });
     let response;
     try {
       [response] = await Promise.all([
@@ -2001,41 +1792,7 @@ export class NazemAdapter {
       if (!initial.item) throw reviewNazemError('خطة الطالب في ناظم لا تحتوي نوع الورد المرتبط.', 'NAZEM_PLAN_TRACK_MISSING');
       const lateLookupDate = initial.followUpDate;
       const matchingLate = initial.late;
-      if (matchingLate) {
-        if (!mapped.completed) {
-          return {
-            externalId: String(matchingLate.id),
-            status: 'not_completed',
-            latePending: true,
-            alreadyRecorded: true,
-            metrics: {},
-          };
-        }
-        await this.postRecitationApi(`/educational-plans/item-late/${matchingLate.id}/complete`);
-        await this.postRecitationApi(`/educational-plans/${planLink.nazemPlanId}/attendance`, {
-          student_id: Number(studentLink.nazemStudentId),
-          attendance_status: Number(mapped.attendanceStatus),
-          date: lateLookupDate,
-        });
-        const lateRefreshed = await this.openFollowUp(planLink.nazemPlanId, lateLookupDate, { fresh: true });
-        const refreshed = findFollowUpDay(lateRefreshed, studentLink, mapped.remoteType);
-        const refreshedStudent = refreshed.student;
-        if (!refreshedStudent || Number(refreshedStudent.attendance_status) !== Number(mapped.attendanceStatus)) {
-          throw reviewNazemError('اكتمل المتأخر في ناظم لكن تعذر التحقق من الحضور.', 'NAZEM_LATE_ATTENDANCE_UNVERIFIED');
-        }
-        const remainingLate = normalizeNazemFollowUpItems(refreshed.item?.late_items)
-          .find((late) => String(late.id) === String(matchingLate.id));
-        if (remainingLate && !isNazemFollowUpCompleted(remainingLate.status)) {
-          throw reviewNazemError('تعذر التحقق من اكتمال التعويض في ناظم.', 'NAZEM_LATE_COMPLETION_UNVERIFIED');
-        }
-        return {
-          externalId: String(matchingLate.id),
-          status: 'completed_late',
-          attendanceStatus: Number(refreshedStudent.attendance_status),
-          lateCompleted: true,
-          metrics: {},
-        };
-      }
+      if (matchingLate) return await submitLateRecitation({ adapter: this, matchingLate, mapped, planLink, studentLink, lateLookupDate });
 
       if (!initial.day) {
         throw blockedNazemError('لا يوجد ورد مجدول في ناظم لهذا الطالب في تاريخ التسميع.', 'NAZEM_NO_SCHEDULED_TASK');
@@ -2114,3 +1871,345 @@ export class NazemAdapter {
 }
 
 export { SELECTORS as NAZEM_SELECTORS };
+
+  async function collectNazemStudentIdentities(count, students, identities) {
+    for (let index = 0;index < count;index += 1) {
+      const student = students.nth(index);
+      const name = student.locator('.epe-student__name').first();
+      const studentName = await name.count() ? cleanText(await name.innerText()) : '';
+      let externalId = null;
+      for (const attribute of ['data-student-id', 'data-id', 'data-value', 'data-key']) {
+        const value = cleanText(await student.getAttribute(attribute));
+        if (isNazemExternalStudentId(value)) {
+          externalId = value;
+          break;
+        }
+      }
+      externalId = await readFallbackStudentIdentity(externalId, student);
+      identities.push({
+        container: student,
+        externalId,
+        name: studentName,
+        normalizedName: normalizeArabicPersonName(studentName),
+      });
+    }
+  }
+
+/** Read an authoritative student identifier from supported nested attributes or links. */
+async function readFallbackStudentIdentity(externalId, student) {
+  if (!externalId) {
+    const identityElement = student.locator([
+      '[data-student-id]',
+      'input[name*="student_id"][value]',
+      'input[name*="studentId"][value]',
+      'input[name*="student"][value]',
+      'a[href*="/students/"]',
+    ].join(', ')).first();
+    if (await identityElement.count()) {
+      const directId = cleanText(await identityElement.getAttribute('data-student-id'))
+        || cleanText(await identityElement.getAttribute('value'));
+      const hrefId = /\/students\/(\d+)(?:\/|$)/.exec(cleanText(await identityElement.getAttribute('href')))?.[1];
+      const candidateId = directId || hrefId;
+      if (isNazemExternalStudentId(candidateId)) externalId = candidateId;
+    }
+  }
+  return externalId;
+}
+
+/** Retry form loading once before filling credentials. */
+async function waitForNazemLoginForm(adapter, usernameInput, passwordInput) {
+let loginFormReady = false;
+for (let loginPageAttempt = 0; loginPageAttempt < 2; loginPageAttempt += 1) {
+        await adapter.page.goto(`${NAZEM_BASE_URL}/login`, { waitUntil: 'domcontentloaded' });
+        try {
+          await Promise.all([
+            usernameInput.waitFor({ state: 'visible', timeout: 7_000 }),
+            passwordInput.waitFor({ state: 'visible', timeout: 7_000 }),
+          ]);
+          loginFormReady = true;
+          break;
+        } catch (error) {
+          if (loginPageAttempt === 1) throw error;
+        }
+      }
+return loginFormReady;
+}
+
+/** Read bounded API pages and deduplicate plans by external identity. */
+async function collectPlanApiPages(adapter, payload, groups) {
+
+for (let pageNumber = 0; pageNumber < 50; pageNumber += 1) {
+          const page = extractNazemPlanApiPage(payload);
+          page.groups.forEach((group) => groups.set(group.externalId, group));
+          if (!page.nextPageUrl || page.currentPage >= page.lastPage) break;
+          const nextUrl = new URL(page.nextPageUrl);
+          payload = await adapter.getPlanApi(`${nextUrl.pathname}${nextUrl.search}`);
+        }
+
+}
+
+/** Extract visible plan identities and counts from the supported table layouts. */
+async function collectVisiblePlanGroups(firstDataRow, count, rows, pageGroups) {
+
+for (let index = firstDataRow; index < count; index += 1) {
+        const row = rows.nth(index);
+        const text = cleanText(await row.innerText());
+        if (!text || text.includes('لا توجد خطط') || text.includes('جاري التحميل')) continue;
+        const editLink = row.locator('a[href*="/educational-plans/"]').first();
+        const href = await editLink.count() ? await editLink.getAttribute('href') : '';
+        const externalId = /\/educational-plans\/(\d+)(?:\/|$)/.exec(String(href || ''))?.[1]
+          || /^(\d+)\b/.exec(text)?.[1]
+          || null;
+        if (externalId) {
+          const cells = row.getByRole('cell');
+          const studentCount = await cells.count() > 4
+            ? Number(cleanText(await cells.nth(4).innerText()) || 0)
+            : 0;
+          pageGroups.push({ externalId, text, studentCount });
+        }
+      }
+
+}
+
+/** Distinguish an empty remote list from an incomplete load before accepting results. */
+async function assertPlanListLoaded(adapter, groups, planApiError) {
+
+if (!groups.size) {
+      const pageText = cleanText(await adapter.page.locator('main').innerText().catch(() => ''));
+      if (!/لا توجد خطط|لا توجد بيانات/.test(pageText)) {
+        if (planApiError) throw planApiError;
+        throw transientNazemError(
+          'لم يكتمل تحميل قائمة خطط ناظم، وستعاد المحاولة تلقائيًا.',
+          'NAZEM_PLAN_LIST_LOAD_INCOMPLETE',
+        );
+      }
+    }
+
+}
+
+/** Discover each matched student plan while retaining per-student failures for review. */
+async function discoverCandidatePlans({ adapter, candidates, planDetails, group, followUpHistory, discovered, issues }) {
+
+for (const remoteStudent of candidates) {
+        const studentLink = {
+          nazemStudentId: remoteStudent.externalId,
+          nazemStudentName: remoteStudent.name,
+          externalOrganizationId: remoteStudent.organization?.id || null,
+          externalOrganizationName: remoteStudent.organization?.name || null,
+          externalCircleId: remoteStudent.circle?.id || null,
+          externalCircleName: remoteStudent.circle?.name || null,
+        };
+        try {
+          const apiBundle = planDetails ? mapNazemApiPlanBundle(planDetails, studentLink) : null;
+          let conserve;
+          conserve = await readConservePlan(apiBundle, conserve, adapter, group, studentLink);
+          let master;
+          master = await readMasteryPlan(apiBundle, master, adapter, group, studentLink);
+          const primary = conserve || master;
+          if (!primary) continue;
+          const revision = apiBundle
+            ? apiBundle.revision
+            : await adapter.readPlan(group.externalId, studentLink, 'المراجعة', { navigate: false });
+          const remoteType = primary.tab === 'الإتقان' ? 'master' : 'conserve';
+          let latestFollowUp = null;
+          latestFollowUp = findRecentPlanFollowUp(followUpHistory, studentLink, remoteType, latestFollowUp);
+          const { student = null, day = null, date = null } = latestFollowUp || {};
+          discovered.push({
+            externalId: String(group.externalId),
+            student: remoteStudent,
+            primary,
+            revision,
+            startDate: primary.startDate || revision?.startDate || null,
+            progress: (day || [2, 3, 4, 5].includes(Number(student?.attendance_status))) ? {
+              date,
+              status: day?.status || null,
+              scheduledFromSurah: day?.surah_from || null,
+              scheduledFromAyah: day?.verse_from || null,
+              scheduledToSurah: day?.surah_to || null,
+              scheduledToAyah: day?.verse_to || null,
+              actualToSurah: day?.actual_surah_to || null,
+              actualToAyah: day?.actual_verse_to || null,
+              attendanceStatus: student?.attendance_status ?? null,
+            } : null,
+          });
+        } catch (error) {
+          issues.push({
+            groupExternalId: String(group.externalId),
+            studentExternalId: String(remoteStudent.externalId || ''),
+            studentName: remoteStudent.name,
+            errorCode: error?.code || 'NAZEM_PLAN_STUDENT_DISCOVERY_FAILED',
+            message: String(error?.message || 'تعذرت قراءة خطة الطالب من ناظم.').slice(0, 500),
+          });
+        }
+      }
+
+}
+
+/** Reuse API mastery data or read the supported plan form when unavailable. */
+async function readMasteryPlan(apiBundle, master, adapter, group, studentLink) {
+  if (apiBundle?.primary?.tab === 'الإتقان') {
+    master = apiBundle.primary;
+  } else if (!apiBundle) {
+    master = await adapter.readPlan(group.externalId, studentLink, 'الإتقان', { navigate: false });
+  } else {
+    master = null;
+  }
+  return master;
+}
+
+/** Reuse API memorization data or read the supported plan form when unavailable. */
+async function readConservePlan(apiBundle, conserve, adapter, group, studentLink) {
+  if (apiBundle) {
+    if (apiBundle.primary?.tab === 'الحفظ') {
+      conserve = apiBundle.primary;
+    } else {
+      conserve = null;
+    }
+  } else {
+    conserve = await adapter.readPlan(group.externalId, studentLink, 'الحفظ', { navigate: false });
+  }
+  return conserve;
+}
+
+/** Select the latest matching follow-up or attendance record from the ordered history. */
+function findRecentPlanFollowUp(followUpHistory, studentLink, remoteType, latestFollowUp) {
+  for (const entry of followUpHistory) {
+    const match = findFollowUpDay(entry.payload, studentLink, remoteType);
+    const hasAttendance = [2, 3, 4, 5].includes(Number(match.student?.attendance_status));
+    if (match.day || hasAttendance) {
+      latestFollowUp = { ...match, date: entry.date };
+      break;
+    }
+  }
+  return latestFollowUp;
+}
+
+/** Normalize each remote task type while retaining current pending and late records. */
+async function collectRemoteFollowUpTypes({ adapter, payload, studentLink, confirmedRecordIds, daysAgo, endDate, externalPlanId, date, scheduled, rows }) {
+
+for (const remoteType of ['conserve', 'revision', 'master']) {
+        const { student, item, day } = findFollowUpDay(payload, studentLink, remoteType, { confirmedRecordIds });
+        const pendingDay = item?.pending_day;
+        collectCurrentPendingDay(daysAgo, pendingDay, remoteType, date, scheduled);
+        const lateItems = await loadCurrentLateItems({ daysAgo, endDate, adapter, item, externalPlanId, studentLink, remoteType });
+        (daysAgo === 0 && (!endDate || endDate === saudiDate(0)) ? mapNazemPendingFollowUps({ ...item, late_items: lateItems }, {
+          remoteType,
+          attendanceStatus: student?.attendance_status ?? null,
+        }) : []).forEach((late) => {
+          late.nazemLateAvailableOn = date;
+          const key = scheduledFollowUpKey(late);
+          if (!scheduled.has(key)) scheduled.set(key, late);
+        });
+        if (!day) continue;
+        const normalized = {
+          ...day,
+          date: normalizeDateOnly(day.date) || date,
+          remoteType,
+          taskType: remoteType === 'revision' ? 'review' : 'memorization',
+          attendanceStatus: student?.attendance_status ?? null,
+          nazemLate: false,
+        };
+        if (FINAL_FOLLOW_UP_STATUSES.has(String(day.status || ''))) rows.push(normalized);
+        else {
+          const key = scheduledFollowUpKey(normalized);
+          if (!scheduled.has(key)) scheduled.set(key, normalized);
+        }
+      }
+
+}
+
+/** Load late records only for the current requested day. */
+async function loadCurrentLateItems({ daysAgo, endDate, adapter, item, externalPlanId, studentLink, remoteType }) {
+  return daysAgo === 0 && (!endDate || endDate === saudiDate(0)) ? await adapter.datedLateItems(item, externalPlanId, studentLink, remoteType) : [];
+}
+
+/** Preserve the current unfinished remote day as its own scheduled identity. */
+function collectCurrentPendingDay(daysAgo, pendingDay, remoteType, date, scheduled) {
+  if (daysAgo === 0 && pendingDay?.id && normalizeDateOnly(pendingDay.date)
+    && !FINAL_FOLLOW_UP_STATUSES.has(String(pendingDay.status || ''))) {
+    const pending = {
+      ...pendingDay, date: normalizeDateOnly(pendingDay.date), remoteType,
+      taskType: remoteType === 'revision' ? 'review' : 'memorization',
+      attendanceStatus: null, nazemLate: false, nazemPendingDay: true,
+      nazemLateAvailableOn: date,
+    };
+    scheduled.set(scheduledFollowUpKey(pending), pending);
+  }
+}
+
+/** Verify locked fields match and edit only the range inputs enabled by Nazem. */
+async function updateUnlockedPlanRange(adapter, range, textboxes) {
+
+for (let index = 0; index < range.length; index += 1) {
+      const input = textboxes.nth(index);
+      if (await input.isDisabled()) {
+        const current = cleanText(await input.inputValue());
+        if (current !== String(range[index])) {
+          throw reviewNazemError('ناظم يسمح بعد بدء المتابعة بتعديل نهاية الخطة فقط.', 'NAZEM_PLAN_FIELD_LOCKED');
+        }
+      } else {
+        await adapter.selectFromInput(input, range[index]);
+      }
+    }
+
+}
+
+/** Complete a matched late record and verify both attendance and completion before accepting success. */
+async function submitLateRecitation({ adapter, matchingLate, mapped, planLink, studentLink, lateLookupDate }) {
+
+if (matchingLate) {
+        if (!mapped.completed) {
+          return {
+            externalId: String(matchingLate.id),
+            status: 'not_completed',
+            latePending: true,
+            alreadyRecorded: true,
+            metrics: {},
+          };
+        }
+        await adapter.postRecitationApi(`/educational-plans/item-late/${matchingLate.id}/complete`);
+        await adapter.postRecitationApi(`/educational-plans/${planLink.nazemPlanId}/attendance`, {
+          student_id: Number(studentLink.nazemStudentId),
+          attendance_status: Number(mapped.attendanceStatus),
+          date: lateLookupDate,
+        });
+        const lateRefreshed = await adapter.openFollowUp(planLink.nazemPlanId, lateLookupDate, { fresh: true });
+        const refreshed = findFollowUpDay(lateRefreshed, studentLink, mapped.remoteType);
+        const refreshedStudent = refreshed.student;
+        if (!refreshedStudent || Number(refreshedStudent.attendance_status) !== Number(mapped.attendanceStatus)) {
+          throw reviewNazemError('اكتمل المتأخر في ناظم لكن تعذر التحقق من الحضور.', 'NAZEM_LATE_ATTENDANCE_UNVERIFIED');
+        }
+        const remainingLate = normalizeNazemFollowUpItems(refreshed.item?.late_items)
+          .find((late) => String(late.id) === String(matchingLate.id));
+        if (remainingLate && !isNazemFollowUpCompleted(remainingLate.status)) {
+          throw reviewNazemError('تعذر التحقق من اكتمال التعويض في ناظم.', 'NAZEM_LATE_COMPLETION_UNVERIFIED');
+        }
+        return {
+          externalId: String(matchingLate.id),
+          status: 'completed_late',
+          attendanceStatus: Number(refreshedStudent.attendance_status),
+          lateCompleted: true,
+          metrics: {},
+        };
+      }
+
+}
+
+/** Reuse the captured follow-up endpoint and retry authentication at most once. */
+async function readCachedFollowUpPath({ adapter, directPath, cacheKey, retryAuthentication, externalPlanId, normalizedDate }) {
+
+if (adapter.followUpApiBase && directPath) {
+      try {
+        const payload = await adapter.readFollowUpApi(directPath);
+        adapter.followUpPayloadCache.set(cacheKey, payload);
+        return payload;
+      } catch (cause) {
+        const status = String(cause?.cause?.message || '');
+        if (!retryAuthentication || !/HTTP (401|419)/.test(status)) throw cause;
+        adapter.resetFollowUpApiSession();
+        await adapter.login({ forceFresh: true });
+        return adapter.openFollowUp(externalPlanId, normalizedDate, { fresh: true, retryAuthentication: false });
+      }
+    }
+
+}

@@ -107,7 +107,7 @@ export async function syncNazemScheduledTaskRange(connection, link, day, { inTra
 async function syncScheduledRange(connection, link, day) {
   const taskType = String(day?.taskType || '');
   if (!supportedTaskTypes.has(taskType)) return { matched: false, changed: false, reason: 'unsupported_type' };
-  if (taskType === 'review' && !(Number(link.teacherId) > 0)) {
+  if (taskType === 'review' && ((Number(link.teacherId) || 0) <= 0)) {
     return { matched: false, changed: false, reason: 'teacher_missing' };
   }
   const values = [day.surah_from, day.verse_from, day.surah_to, day.verse_to].map(Number);
@@ -126,21 +126,7 @@ async function syncScheduledRange(connection, link, day) {
     plan.linkPages = await loadNazemPlanLinkCount(connection, link) ?? plan.linkPages;
   }
   let dailyId = null;
-  if (Number(link.teacherId || 0) > 0) {
-    const [daily] = await connection.query(
-      `INSERT INTO nazem_daily_follow_up_links
-        (ruwasi_plan_id, ruwasi_student_id, teacher_id, follow_up_date, task_type, track,
-         nazem_record_id, sync_status, last_remote_checked_at, remote_snapshot)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW(3), ?)
-       ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id),
-         nazem_record_id = IF(local_snapshot IS NULL, COALESCE(VALUES(nazem_record_id), nazem_record_id), nazem_record_id),
-         sync_status = IF(sync_status = 'synced', sync_status, 'pending'),
-         last_remote_checked_at = NOW(3), remote_snapshot = IF(local_snapshot IS NULL, VALUES(remote_snapshot), remote_snapshot)`,
-      [plan.id, plan.studentId, Number(link.teacherId), day.date, taskType, plan.track,
-        day.id == null ? null : String(day.id), JSON.stringify(day)],
-    );
-    dailyId = Number(daily.insertId);
-  }
+  dailyId = await upsertScheduledDailyLink({ link, connection, plan, day, taskType, dailyId });
   const [fromPage, toPage] = await Promise.all([
     loadAyahPage(connection, values[0], values[1]),
     loadAyahPage(connection, values[2], values[3]),
@@ -148,18 +134,8 @@ async function syncScheduledRange(connection, link, day) {
   if (!fromPage || !toPage) return { matched: false, changed: false, reason: 'ayah_page_missing' };
 
   if (taskType === 'review') {
-    const review = await reconcileNazemReview(connection, plan, day.date, {
-      fromSurah: values[0], fromAyah: values[1], toSurah: values[2], toAyah: values[3],
-    }, dailyId);
-    if (review.keeper) return { matched: true, changed: review.changed };
-    if (review.preserveExisting) {
-      await insertTaskRange(connection, {
-        plan, date: day.date, taskType, fromPage, toPage,
-        fromSurah: values[0], fromAyah: values[1], toSurah: values[2], toAyah: values[3],
-        nazemReviewId: dailyId,
-      });
-      return { matched: true, changed: true };
-    }
+    const result = await reconcileScheduledReviewRange({ connection, plan, day, values, dailyId, fromPage, toPage });
+    if (result) return result;
   }
 
   const primary = await replaceUntouchedTaskType(connection, {
@@ -175,16 +151,7 @@ async function syncScheduledRange(connection, link, day) {
     nazemReviewId: taskType === 'review' ? dailyId : null,
   });
   if (!primary.matched || taskType !== 'memorization') return primary;
-  if (plan.track !== 'mastery' && Number(plan.linkPages) > 0) {
-    const [[existingLink]] = await connection.query(
-      `SELECT id FROM student_quran_tasks WHERE plan_id = ? AND student_id = ?
-       AND task_date = ? AND task_type = 'link' LIMIT 1`, [plan.id, plan.studentId, day.date],
-    );
-    if (!existingLink) await replaceUntouchedTaskType(connection, {
-      plan, date: day.date, taskType: 'link', fromPage, toPage,
-      fromSurah: values[0], fromAyah: values[1], toSurah: values[2], toAyah: values[3],
-    });
-  }
+  await ensureScheduledLinkTask({ plan, connection, day, fromPage, toPage, values });
   const repeat = await replaceUntouchedTaskType(connection, {
     plan,
     date: day.date,
@@ -198,3 +165,54 @@ async function syncScheduledRange(connection, link, day) {
   });
   return { matched: true, changed: primary.changed || repeat.changed };
 }
+
+/** Add a missing link task without overwriting an existing assignment. */
+async function ensureScheduledLinkTask({ plan, connection, day, fromPage, toPage, values }) {
+  if (plan.track !== 'mastery' && Number(plan.linkPages) > 0) {
+    const [[existingLink]] = await connection.query(
+      `SELECT id FROM student_quran_tasks WHERE plan_id = ? AND student_id = ?
+       AND task_date = ? AND task_type = 'link' LIMIT 1`, [plan.id, plan.studentId, day.date]
+    );
+    if (!existingLink) await replaceUntouchedTaskType(connection, {
+      plan, date: day.date, taskType: 'link', fromPage, toPage,
+      fromSurah: values[0], fromAyah: values[1], toSurah: values[2], toAyah: values[3],
+    });
+  }
+}
+
+/** Store the remote schedule using bound values without replacing a pending local submission snapshot. */
+async function upsertScheduledDailyLink({ link, connection, plan, day, taskType, dailyId }) {
+  if (Number(link.teacherId || 0) > 0) {
+    const [daily] = await connection.query(
+      `INSERT INTO nazem_daily_follow_up_links
+        (ruwasi_plan_id, ruwasi_student_id, teacher_id, follow_up_date, task_type, track,
+         nazem_record_id, sync_status, last_remote_checked_at, remote_snapshot)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW(3), ?)
+       ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id),
+         nazem_record_id = IF(local_snapshot IS NULL, COALESCE(VALUES(nazem_record_id), nazem_record_id), nazem_record_id),
+         sync_status = IF(sync_status = 'synced', sync_status, 'pending'),
+         last_remote_checked_at = NOW(3), remote_snapshot = IF(local_snapshot IS NULL, VALUES(remote_snapshot), remote_snapshot)`,
+      [plan.id, plan.studentId, Number(link.teacherId), day.date, taskType, plan.track,
+      day.id == null ? null : String(day.id), JSON.stringify(day)]
+    );
+    dailyId = Number(daily.insertId);
+  }
+  return dailyId;
+}
+
+
+/** Reconcile review identities without overwriting work already recorded locally. */
+async function reconcileScheduledReviewRange({ connection, plan, day, values, dailyId, fromPage, toPage }) {
+    const review = await reconcileNazemReview(connection, plan, day.date, {
+      fromSurah: values[0], fromAyah: values[1], toSurah: values[2], toAyah: values[3],
+    }, dailyId);
+    if (review.keeper) return { matched: true, changed: review.changed };
+    if (review.preserveExisting) {
+      await insertTaskRange(connection, {
+        plan, date: day.date, taskType: 'review', fromPage, toPage,
+        fromSurah: values[0], fromAyah: values[1], toSurah: values[2], toAyah: values[3],
+        nazemReviewId: dailyId,
+      });
+      return { matched: true, changed: true };
+    }
+  }

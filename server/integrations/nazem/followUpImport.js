@@ -34,14 +34,7 @@ export async function importNazemFollowUpHistory(history, link, {
     }
   }
   const days = [...(history.followUps || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  for (const day of days) {
-    // Do not overwrite a new completion attempt with the old "not completed" result.
-    if (day.status === 'not_completed' && lateKeys.has(followUpRangeKey(day))) continue;
-    await syncScheduled(link, day);
-    const saved = await saveFollowUp(link, day);
-    for (const key of Object.keys(result)) result[key] += Number(saved[key] || 0);
-    if (saved.review) issue(saved.issueCode || 'NAZEM_FOLLOW_UP_REVIEW', day);
-  }
+  await importHistoricalFollowUpDays({ days, lateKeys, syncScheduled, link, saveFollowUp, result, issue });
   // Current late_items are authoritative after importing historical outcomes.
   for (const day of (history.scheduledFollowUps || []).filter(day => day.nazemLate)) {
     const scheduled = await syncScheduled(link, day);
@@ -51,6 +44,18 @@ export async function importNazemFollowUpHistory(history, link, {
     }
   }
   return issues.length ? { ...result, issues } : result;
+}
+
+/** Import historical results in date order without overwriting a current late completion attempt. */
+async function importHistoricalFollowUpDays({ days, lateKeys, syncScheduled, link, saveFollowUp, result, issue }) {
+  for (const day of days) {
+    // Do not overwrite a new completion attempt with the old "not completed" result.
+    if (day.status === 'not_completed' && lateKeys.has(followUpRangeKey(day))) continue;
+    await syncScheduled(link, day);
+    const saved = await saveFollowUp(link, day);
+    for (const key of Object.keys(result)) result[key] += Number(saved[key] || 0);
+    if (saved.review) issue(saved.issueCode || 'NAZEM_FOLLOW_UP_REVIEW', day);
+  }
 }
 
 export async function markNazemFollowUpRefreshSucceeded(connection, teacherId, encryptedSessionState) {

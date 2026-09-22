@@ -300,7 +300,9 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
   });
 }
 
-run().catch((error) => {
+try {
+  await run();
+} catch (error) {
   console.error('Nazem worker failed to start:', error.message);
   process.exitCode = 1;
-});
+}

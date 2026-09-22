@@ -13,20 +13,25 @@ export function reviewStartFromHistory(rows, fallbackPage) {
     // Generated future/pending rows are not evidence of progress.
     if (initialized && !touched) continue;
     initialized = true;
-    const ascending = [...day].sort((a, b) => Number(a.fromPage) - Number(b.fromPage));
-    let start = ascending.findIndex((row) => Number(row.toPage) >= cursor);
-    if (start < 0) start = 0;
-    const ordered = [...ascending.slice(start), ...ascending.slice(0, start)];
-    const incomplete = ordered.find((row) => Number(row.teacherCompleted) !== 1
-      && (row.teacherCompleted != null || row.studentStatus !== 'done' || row.executionState === 'partial'));
-    if (incomplete) {
-      cursor = Number(incomplete.teacherCompleted == null && incomplete.executionState === 'partial'
-        ? incomplete.actualToPage || incomplete.fromPage : incomplete.fromPage);
-      if (incomplete.teacherCompleted == null && incomplete.executionState === 'partial' && incomplete.actualCompletesPage) cursor += 1;
-    } else {
-      const last = ordered.at(-1);
-      cursor = Number(last.toPage) + 1;
-    }
+    cursor = reviewCursorAfterDay(day, cursor);
+  }
+  return cursor;
+}
+
+function reviewCursorAfterDay(day, cursor) {
+  const ascending = [...day].sort((a, b) => Number(a.fromPage) - Number(b.fromPage));
+  let start = ascending.findIndex((row) => Number(row.toPage) >= cursor);
+  if (start < 0) start = 0;
+  const ordered = [...ascending.slice(start), ...ascending.slice(0, start)];
+  const incomplete = ordered.find((row) => Number(row.teacherCompleted) !== 1
+    && (row.teacherCompleted != null || row.studentStatus !== 'done' || row.executionState === 'partial'));
+  if (incomplete) {
+    cursor = Number(incomplete.teacherCompleted == null && incomplete.executionState === 'partial'
+      ? incomplete.actualToPage || incomplete.fromPage : incomplete.fromPage);
+    if (incomplete.teacherCompleted == null && incomplete.executionState === 'partial' && incomplete.actualCompletesPage) cursor += 1;
+  } else {
+    const last = ordered.at(-1);
+    cursor = Number(last.toPage) + 1;
   }
   return cursor;
 }

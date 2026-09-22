@@ -21,7 +21,7 @@ export default function ProgramGradesDialog({ program, onClose }) {
     studentsApi.getProgramGrades(program.id).then(({ students: rows }) => {
       if (!active) return;
       setStudents(rows); setValues(Object.fromEntries(rows.map(row => [row.id, row.completedAt ? String(row.earnedPoints) : ''])));
-    }).catch(failure => { if (active) setError(failure.message); }).finally(() => { if (active) setLoading(false); });
+    }).catch(error_ => { if (active) setError(error_.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [program, retry]);
   const save = async (student) => {
@@ -29,7 +29,7 @@ export default function ProgramGradesDialog({ program, onClose }) {
     try {
       const result = await studentsApi.saveProgramGrade(program.id, student.id, Number(values[student.id]));
       setStudents(rows => rows.map(row => row.id === student.id ? { ...row, earnedPoints: result.earnedPoints, completedAt: true } : row));
-    } catch (failure) { setError(failure.message); } finally { setSaving(null); }
+    } catch (error_) { setError(error_.message); } finally { setSaving(null); }
   };
   return <Dialog open={Boolean(program)} onOpenChange={open => { if (!open && !saving) onClose(); }}>
     <DialogContent dir="rtl" className="max-h-[90dvh] max-w-2xl overflow-y-auto [font-family:var(--font-ui)]">

@@ -24,24 +24,7 @@ export const planProgressPercent = (plan) => {
 };
 
 export const buildStudentPlanWeeks = ({ rows = [], todayData = null, points = null, today = getBusinessDate() } = {}) => {
-  const tasks = new Map();
-  // Today assignments are authoritative only for the date returned by the server.
-  for (const task of rows) {
-    const date = task.taskDate || task.sessionDate;
-    if (validDate(date) && date <= today && PLAN_TASK_TYPES.includes(task.taskType)) tasks.set(`${date}:${task.id}`, { ...task, taskDate: date });
-  }
-  if (validDate(todayData?.date) && todayData.date <= today) {
-    for (const task of todayData.todayAmounts || todayData.tasks || []) {
-      if (!PLAN_TASK_TYPES.includes(task.taskType)) continue;
-      const key = `${todayData.date}:${task.id}`;
-      const existing = tasks.get(key);
-      tasks.set(key, { ...task, ...existing, taskDate: todayData.date,
-        repeatCount: existing?.repeatCount ?? task.repeatCount ?? todayData.repeatCount,
-        listeningCount: existing?.listeningCount ?? task.listeningCount ?? todayData.listeningCount,
-      });
-    }
-  }
-  const days = new Map([[today, { date: today, tasks: [] }]]);
+  const { days, tasks } = collectStudentPlanTasks(rows, today, todayData);
   const preview = todayData?.nextDay;
   if (todayData?.date === today && preview?.date === shiftDateOnly(today, 1)) {
     const previewTasks = (preview.tasks || []).filter((task) => PLAN_TASK_TYPES.includes(task.taskType));
@@ -56,14 +39,7 @@ export const buildStudentPlanWeeks = ({ rows = [], todayData = null, points = nu
     if (!days.has(summary.date)) days.set(summary.date, { date: summary.date, tasks: [] });
     days.get(summary.date).points = summary;
   }
-  const weeks = new Map();
-  for (const day of [...days.values()].sort((a, b) => b.date.localeCompare(a.date))) {
-    day.tasks.sort((a, b) => Number(a.id) - Number(b.id));
-    const start = planWeekStart(day.date);
-    if (!weeks.has(start)) weeks.set(start, { start, end: shiftDateOnly(start, 6), days: [] });
-    weeks.get(start).days.push(day);
-  }
-  return [...weeks.values()].sort((a, b) => b.start.localeCompare(a.start));
+  return groupPlanDaysIntoWeeks(days);
 };
 
 export const buildPlanMushafTarget = (tasks, label) => {
@@ -81,3 +57,37 @@ export const buildPlanMushafTarget = (tasks, label) => {
 export const buildStudentSessionWeeks = (rows = []) => buildStudentPlanWeeks({
   rows: rows.map((row) => ({ ...row, taskDate: row.sessionDate })),
 }).map((week) => ({ ...week, days: week.days.filter((day) => day.tasks.length > 0) })).filter((week) => week.days.length > 0);
+
+function groupPlanDaysIntoWeeks(days) {
+  const weeks = new Map();
+  for (const day of [...days.values()].sort((a, b) => b.date.localeCompare(a.date))) {
+    day.tasks.sort((a, b) => Number(a.id) - Number(b.id));
+    const start = planWeekStart(day.date);
+    if (!weeks.has(start)) weeks.set(start, { start, end: shiftDateOnly(start, 6), days: [] });
+    weeks.get(start).days.push(day);
+  }
+  return [...weeks.values()].sort((a, b) => b.start.localeCompare(a.start));
+}
+
+function collectStudentPlanTasks(rows, today, todayData) {
+  const tasks = new Map();
+  // Today assignments are authoritative only for the date returned by the server.
+  for (const task of rows) {
+    const date = task.taskDate || task.sessionDate;
+    if (validDate(date) && date <= today && PLAN_TASK_TYPES.includes(task.taskType)) tasks.set(`${date}:${task.id}`, { ...task, taskDate: date });
+  }
+  if (validDate(todayData?.date) && todayData.date <= today) {
+    for (const task of todayData.todayAmounts || todayData.tasks || []) {
+      if (!PLAN_TASK_TYPES.includes(task.taskType)) continue;
+      const key = `${todayData.date}:${task.id}`;
+      const existing = tasks.get(key);
+      tasks.set(key, {
+        ...task, ...existing, taskDate: todayData.date,
+        repeatCount: existing?.repeatCount ?? task.repeatCount ?? todayData.repeatCount,
+        listeningCount: existing?.listeningCount ?? task.listeningCount ?? todayData.listeningCount,
+      });
+    }
+  }
+  const days = new Map([[today, { date: today, tasks: [] }]]);
+  return { days, tasks };
+}

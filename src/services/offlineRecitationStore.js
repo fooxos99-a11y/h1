@@ -65,11 +65,9 @@ const idbTransactionDone = (transaction) => new Promise((resolve, reject) => {
 });
 
 class OfflineRecitationStore {
-  constructor() {
-    this.driver = null;
-    this.connection = null;
-    this.initializing = null;
-  }
+  driver = null;
+  connection = null;
+  initializing = null;
 
   async init() {
     if (this.driver) return this;

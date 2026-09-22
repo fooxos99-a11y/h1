@@ -58,7 +58,7 @@ const NotificationButton = ({ showTrigger = true, presentation = 'dialog', open:
     });
   };
 
-  const trigger = (<Button type="button" variant="outline" size="icon" onClick={presentation === 'popover' ? undefined : () => setOpen(true)} className="relative h-11 w-11 touch-manipulation [font-family:var(--font-ui)]" aria-label={`الإشعارات${unreadCount && !open ? `، ${unreadCount} غير مقروء` : ''}`}>
+  const trigger = (<Button type="button" variant="outline" size="icon" onClick={presentation === 'popover' ? undefined : () => setOpen(true)} className="relative h-11 w-11 touch-manipulation [font-family:var(--font-ui)]" aria-label={`الإشعارات${unreadCount && !open ? '، ' + unreadCount + ' غير مقروء' : ''}`}>
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && !open && <span className="absolute -left-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-black text-white">{Math.min(99, unreadCount)}</span>}
       </Button>);

@@ -298,7 +298,7 @@ export const studentsApi = {
   getHomepageStats: () => request('/homepage-stats'),
   getCommittees: () => request('/committees'),
   getPublicRegistration: (registrationNumber = '') => request(
-    `/registration/public${registrationNumber ? `?registrationNumber=${encodeURIComponent(registrationNumber)}` : ''}`,
+    `/registration/public${registrationNumber ? '?registrationNumber=' + encodeURIComponent(registrationNumber) : ''}`,
   ),
   submitPublicRegistration: (payload, registrationNumber = '') =>
     request('/registration/public', {

@@ -23,7 +23,7 @@ const RepeatCountSelector = ({
   if (!editable) {
     const _resolveRepeatCountSelector = () => {
       if (!label) {
-        return selected;
+        return String(selected);
       }
       if (compact) {
         return `${label}: ${selected}`;

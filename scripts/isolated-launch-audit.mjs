@@ -1061,8 +1061,9 @@ async function run() {
          )`,
       [databaseNames.primary],
     );
+    const qualifiedTables = schemaTables.map(({ tableName }) => `\`${databaseNames.primary}\`.\`${tableName}\``).join(', ');
     const [tableChecks] = await databaseConnection.query(
-      `CHECK TABLE ${schemaTables.map(({ tableName }) => `\`${databaseNames.primary}\`.\`${tableName}\``).join(', ')}`,
+      `CHECK TABLE ${qualifiedTables}`,
     );
     checked('database-level tenant separation is intact', () => {
       assert.equal(Number(primaryCounts.students), 2);
@@ -1102,7 +1103,7 @@ async function cleanup() {
     return new Promise((resolve) => {
       child.once('exit', resolve);
       if (process.platform === 'win32') {
-        spawn('C:\\Windows\\System32\\taskkill.exe', ['/pid', String(child.pid), '/t', '/f'], {
+        spawn(String.raw`C:\Windows\System32\taskkill.exe`, ['/pid', String(child.pid), '/t', '/f'], {
           shell: false,
           stdio: 'ignore',
           windowsHide: true,

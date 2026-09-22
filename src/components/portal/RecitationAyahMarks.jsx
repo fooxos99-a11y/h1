@@ -9,7 +9,7 @@ const normalizeMarks = (marks = []) => {
     const notes = String(mark.notes || '').trim();
     if (!text && !notes) return;
     groups[type].push({
-      key: mark.id || `${mark.startLocation || `${mark.surah}:${mark.ayah}`}-${mark.endLocation || ''}-${index}`,
+      key: mark.id || `${mark.startLocation || (mark.surah + ':' + mark.ayah)}-${mark.endLocation || ''}-${index}`,
       text,
       notes,
     });

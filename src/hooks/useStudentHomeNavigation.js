@@ -11,7 +11,7 @@ export default function useStudentHomeNavigation() {
   const open = useCallback((next) => {
     if (next === readView()) return;
     const depth = Number(window.history.state?.studentHomeDepth || 0);
-    window.history.pushState({ ...window.history.state, studentHomeDepth: depth + 1 }, '', `${window.location.pathname}${window.location.search}${next ? `#student/${next}` : ''}`);
+    window.history.pushState({ ...window.history.state, studentHomeDepth: depth + 1 }, '', `${window.location.pathname}${window.location.search}${next ? '#student/' + next : ''}`);
     setView(next);
   }, []);
   const back = useCallback(() => {

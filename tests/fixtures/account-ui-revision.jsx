@@ -9,7 +9,7 @@ import '../../src/index.css';
 import '../../src/components/portal/home/student-home.css';
 
 if (!import.meta.env.DEV || !['localhost', '127.0.0.1'].includes(location.hostname)) throw new Error('Local test only');
-const shape = (width, height) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="#0799a1"/></svg>`)}`;
+const shape = (width, height) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="#0799a1"/></svg>`);
 function Fixture() {
   const [loading, setLoading] = useState(false);
   if (new URLSearchParams(location.search).has('login')) return <AccountLoginPage site={{ name: 'اختبار' }} loading={loading} onLogin={() => setLoading(true)} />;

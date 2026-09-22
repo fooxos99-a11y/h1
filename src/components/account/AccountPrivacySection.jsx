@@ -119,12 +119,10 @@ const AccountPrivacySection = ({ compact = false, allowDeletion = true, embedded
       ) : null}
 
       {allowDeletion && embeddedConfirmation && !isPending ? (
-        <>
-          <DialogFooter className="grid grid-cols-2 gap-2 sm:grid-cols-2">
+        <DialogFooter className="grid grid-cols-2 gap-2 sm:grid-cols-2">
             <Button type="button" variant="outline" className="min-h-11" onClick={onClose}>إلغاء</Button>
             <Button type="button" variant="destructive" className="min-h-11" onClick={createRequest} loading={isSaving}>تأكيد</Button>
           </DialogFooter>
-        </>
       ) : allowDeletion && (_resolveActions())}
     </>
   );

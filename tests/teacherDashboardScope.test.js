@@ -21,10 +21,10 @@ test('teacher dashboard exposes student plans while keeping other student admini
   assert.match(accountPortal, /key: 'studentPlans', label: 'خطط الطلاب'/);
   assert.match(accountPortal, /settings\.teacherManualPointsEnabled[\s\S]*key: 'teacherPoints', label: 'الإضافة والخصم'/);
   assert.ok(accountPortal.indexOf("key: 'staffAttendance', label: 'التحضير'") < accountPortal.indexOf("key: 'quranEvaluation', label: 'جلسات التسميع'"));
-  assert.match(accountPortal, /activeSection === 'studentPlans'[\s\S]*<StudentPlansSection hideCommitteeFilter/);
+  assert.match(accountPortal, /case 'studentPlans':[\s\S]*<StudentPlansSection hideCommitteeFilter/);
   assert.match(accountPortal, /key: 'previousRecitationSessions'[\s\S]*key: 'teacherPoints'[\s\S]*key: 'teacherReports'[\s\S]*key: 'calls'[\s\S]*key: 'studentPlans'/);
   assert.match(accountPortal, /const ReportsSection = lazy\(\(\) => import\('@\/components\/dashboard\/ReportsSection'\)\);/);
-  assert.match(accountPortal, /activeSection === 'teacherReports'[\s\S]*?<ReportsSection[\s\S]*?teacherScoped[\s\S]*?canViewStandardReports[\s\S]*?canViewExecutionFollowup=\{settings\.hasStudentQuranExecution !== false\}/);
+  assert.match(accountPortal, /case 'teacherReports':[\s\S]*?<ReportsSection[\s\S]*?teacherScoped[\s\S]*?canViewStandardReports[\s\S]*?canViewExecutionFollowup=\{settings\.hasStudentQuranExecution !== false\}/);
   assert.doesNotMatch(accountPortal, /TeacherReportsSection/);
   assert.match(evaluationSection, /<TeacherEvaluationDialog supervisorId=\{supervisorId\} inline \/>/);
   assert.doesNotMatch(evaluationSection, /فتح التقييم|useState/);

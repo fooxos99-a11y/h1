@@ -16,8 +16,8 @@ export default function useStudentPlan(studentId, today) {
       const next = await loadStudentPlan(studentId);
       await todayRequest;
       if (request === revision.current) { setData(next); setError(''); }
-    } catch (failure) {
-      if (request === revision.current) setError(failure.message || 'تعذر تحميل الخطة.');
+    } catch (error_) {
+      if (request === revision.current) setError(error_.message || 'تعذر تحميل الخطة.');
     } finally {
       if (request === revision.current) setLoading(false);
     }

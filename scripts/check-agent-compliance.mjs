@@ -120,6 +120,11 @@ export async function collectComplianceFailures(root = projectRoot) {
     failures.push("src/index.css يجب أن يعرّف ويطبّق var(--font-ui)");
   }
 
+  await inspectProjectSources(policy, root, failures);
+  return failures;
+}
+
+async function inspectProjectSources(policy, root, failures) {
   for (const sourceRoot of policy.sourceRoots) {
     const files = await sourceFiles(path.join(root, sourceRoot));
     for (const file of files) {
@@ -129,7 +134,6 @@ export async function collectComplianceFailures(root = projectRoot) {
       if (file.endsWith(".css")) failures.push(...inspectCssFonts(source, relativePath));
     }
   }
-  return failures;
 }
 
 async function main() {

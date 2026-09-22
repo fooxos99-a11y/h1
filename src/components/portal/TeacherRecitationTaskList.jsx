@@ -56,6 +56,8 @@ const TeacherRecitationTaskList = ({
   const [selectedEnds, setSelectedEnds] = useState({});
   const [selectedRepeatCounts, setSelectedRepeatCounts] = useState({});
   const [selectedListeningCounts, setSelectedListeningCounts] = useState({});
+  const updateSelectedEnd = (key, value) => setSelectedEnds((current) => ({ ...current, [key]: value }));
+  const updateListeningCount = (key, value) => setSelectedListeningCounts((current) => ({ ...current, [key]: value }));
   const grouped = useMemo(() => {
     const map = new Map();
     const studentById = new Map(students.map((student) => [String(student.studentId), student]));
@@ -188,7 +190,7 @@ const TeacherRecitationTaskList = ({
                     allowedStart={firstTask.selectionStart}
                     allowedEnd={firstTask.selectionEnd}
                     direction={firstTask.selectionDirection}
-                    onChange={(value) => setSelectedEnds((current) => ({ ...current, [actionKey]: value }))}
+                    onChange={(value) => updateSelectedEnd(actionKey, value)}
                   />
                 );
               })()
@@ -205,12 +207,12 @@ const TeacherRecitationTaskList = ({
               if (nazemManaged) {
                 return <ListeningChoice label="" value={selectedListeningCounts[actionKey] ?? defaultListeningCount}
               disabled={!repeatEditable} ariaLabel={`هل استمع ${student.studentName}؟`}
-              onChange={(value) => setSelectedListeningCounts((current) => ({ ...current, [actionKey]: value }))} compact />;
+              onChange={(value) => updateListeningCount(actionKey, value)} compact />;
               }
               return <RepeatCountSelector label="" editable={repeatEditable && allowListeningCountEditing && !repeatClaimedByStudent}
               max={Number(action.tasks[0]?.expectedListeningCount || listeningCount || 3)} ariaLabel={`عدد مرات سماع ${student.studentName}`}
               value={selectedListeningCounts[actionKey] ?? defaultListeningCount}
-              onChange={(value) => setSelectedListeningCounts((current) => ({ ...current, [actionKey]: value }))} compact />;
+              onChange={(value) => updateListeningCount(actionKey, value)} compact />;
             }
             return null;
           };
@@ -309,7 +311,7 @@ const TeacherRecitationTaskList = ({
                         disabled={action.empty || !canRecite
                           || action.tasks.length === 0
                           || nazemSubmissionLocked
-                          || (isNazemLinkTask(action.tasks[0]) && !(readNazemLinkCount(action.tasks[0]?.expectedLinkCount) > 0))}
+                          || (isNazemLinkTask(action.tasks[0]) && ((readNazemLinkCount(action.tasks[0]?.expectedLinkCount) || 0) <= 0))}
                         onClick={() => {
                           const selectedStudent = {
                             ...student,

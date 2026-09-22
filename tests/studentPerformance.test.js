@@ -1,7 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readDescendingNextAyah, readQuranAyah, readQuranRange } from '../server/services/quranReferenceCache.js';
+import { readDescendingNextAyah, readQuranAyah, readQuranRange, readQuranChapters } from '../server/services/quranReferenceCache.js';
 import { createRefreshGate } from '../src/lib/refreshGate.js';
+
+test('200 concurrent chapter reads share one query, isolate tenants and protect cached rows', async () => {
+  let calls = 0;
+  const pool = { query: async () => { calls++; return [[{ number: 1, name: 'الفاتحة' }]]; } };
+  const results = await Promise.all(Array.from({ length: 200 }, () => readQuranChapters(pool)));
+  assert.equal(calls, 1);
+  results[0][0].name = 'changed';
+  assert.equal(results[199][0].name, 'الفاتحة');
+  assert.equal((await readQuranChapters(pool))[0].name, 'الفاتحة');
+  const otherPool = { query: async () => [[]] };
+  assert.deepEqual(await readQuranChapters(otherPool), []);
+});
+
+test('chapter cache evicts failed reads so a later request can recover', async () => {
+  let calls = 0;
+  const pool = { query: async () => {
+    if (++calls === 1) throw new Error('temporary failure');
+    return [[{ number: 1 }]];
+  } };
+  await assert.rejects(readQuranChapters(pool), /temporary failure/);
+  assert.deepEqual(await readQuranChapters(pool), [{ number: 1 }]);
+  assert.equal(calls, 2);
+});
 
 test('descending traversal and reference reads share one query, preserve order and isolate connections', async () => {
  const rows = Array.from({length: 700}, (_, i) => ({surah: 2, ayah: i+1, page: Math.floor(i/10)+1, juz: 1, surahName: 'اختبار', textUthmani: 'نص'}));

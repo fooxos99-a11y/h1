@@ -25,28 +25,34 @@ export async function auditDescendingRewards(rows) {
       status: 'requires_review', proposedDeduction: null };
     const from = getQuranVerseLine(start), to = getQuranVerseLine(end);
     const dailyAmount = Number(first.dailyPages);
-    if (!from || !to || !(dailyAmount > 0) || tasks.some(task => !task.evaluatedAt || Number(task.teacherCompleted) !== 1)) {
+    if (!from || !to || ((dailyAmount || 0) <= 0) || tasks.some(task => !task.evaluatedAt || Number(task.teacherCompleted) !== 1)) {
       results.push({ ...result, reason: 'بيانات المقدار أو الاعتماد غير مكتملة' }); continue;
     }
     const scheduledEnd = { surah: Number(last.toSurah), ayah: Number(last.toAyah) };
     if (end.surah !== scheduledEnd.surah || end.ayah !== scheduledEnd.ayah) {
       results.push({ ...result, reason: 'تنفيذ جزئي أو زائد يحتاج مراجعة تقسيم الاستحقاق' }); continue;
     }
-    const segments = await buildRecitationSegmentDetails(null,
-      { actualStart: start, normalEnd: end, scheduledEnd: end, direction: -1 }, end,
-      { allowQuranCompensation: false, allowQuranExtra: false });
-    const basePoints = calculateEvaluatedGroupReward(tasks);
-    const legacyLines = Math.abs(((to.endPage - 1) * 15 + to.endLine) - ((from.startPage - 1) * 15 + from.startLine)) + 1;
-    const legacyAmount = Number((legacyLines / 15).toFixed(2));
-    const legacyPoints = calculateSegmentedPlanPoints({ basePoints, dailyAmount, segments: [{ type: 'normal', amount: legacyAmount }] }).total;
-    const correctedPoints = calculateSegmentedPlanPoints({ basePoints, dailyAmount, segments }).total;
-    const ledgerPoints = tasks.reduce((sum, task) => sum + Number(task.ledgerPoints || 0), 0);
-    const reproducible = recorded === legacyPoints && ledgerPoints === recorded && correctedPoints < recorded;
-    results.push({ ...result, basePoints, dailyAmount, legacyAmount, correctedAmount: segments[0]?.amount,
-      legacyPoints, correctedPoints, ledgerPoints,
-      proposedDeduction: reproducible ? recorded - correctedPoints : null,
-      reason: reproducible ? 'الحساب القديم مطابق؛ يلزم تأكيد إعداد الخطة وقت الاعتماد قبل الخصم'
-        : 'السجل لا يطابق إعادة إنتاج الحساب القديم؛ لا خصم تلقائي' });
+    await appendDescendingRewardEstimate({ start, end, tasks, to, from, dailyAmount, recorded, results, result });
   }
   return results;
+}
+
+async function appendDescendingRewardEstimate({ start, end, tasks, to, from, dailyAmount, recorded, results, result }) {
+  const segments = await buildRecitationSegmentDetails(null,
+    { actualStart: start, normalEnd: end, scheduledEnd: end, direction: -1 }, end,
+    { allowQuranCompensation: false, allowQuranExtra: false });
+  const basePoints = calculateEvaluatedGroupReward(tasks);
+  const legacyLines = Math.abs(((to.endPage - 1) * 15 + to.endLine) - ((from.startPage - 1) * 15 + from.startLine)) + 1;
+  const legacyAmount = Number((legacyLines / 15).toFixed(2));
+  const legacyPoints = calculateSegmentedPlanPoints({ basePoints, dailyAmount, segments: [{ type: 'normal', amount: legacyAmount }] }).total;
+  const correctedPoints = calculateSegmentedPlanPoints({ basePoints, dailyAmount, segments }).total;
+  const ledgerPoints = tasks.reduce((sum, task) => sum + Number(task.ledgerPoints || 0), 0);
+  const reproducible = recorded === legacyPoints && ledgerPoints === recorded && correctedPoints < recorded;
+  results.push({
+    ...result, basePoints, dailyAmount, legacyAmount, correctedAmount: segments[0]?.amount,
+    legacyPoints, correctedPoints, ledgerPoints,
+    proposedDeduction: reproducible ? recorded - correctedPoints : null,
+    reason: reproducible ? 'الحساب القديم مطابق؛ يلزم تأكيد إعداد الخطة وقت الاعتماد قبل الخصم'
+      : 'السجل لا يطابق إعادة إنتاج الحساب القديم؛ لا خصم تلقائي'
+  });
 }

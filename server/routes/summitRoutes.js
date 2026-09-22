@@ -244,44 +244,7 @@ export function createSummitRouter({
         'SELECT best_reward AS bestReward FROM student_summit_stage_rewards WHERE student_id = ? AND stage_points = ? FOR UPDATE',
         [req.auth.id, stage.points],
       );
-      if (score.completed) {
-        const previousBest = Number(previousReward?.bestReward || 0);
-        const maximumPoints = Math.max(0, Number(station.rewardPoints ?? settings.summitChallengeMaxPoints ?? 50));
-        const calculatedPoints = Math.round((score.reward / 50) * maximumPoints);
-        const improvement = Math.max(0, calculatedPoints - previousBest);
-        const storedBest = settings.pointsSystemEnabled ? calculatedPoints : previousBest;
-        if (settings.pointsSystemEnabled && improvement > 0) {
-          awardedPoints = await applyStudentPointDelta(connection, req.auth.id, improvement, settings, { date: getToday() });
-          if (awardedPoints > 0) {
-            await logStudentPointTransaction(connection, {
-              studentId: req.auth.id,
-              actorRole: 'student',
-              actorName: req.auth.name || 'الطالب',
-              type: 'increase',
-              points: awardedPoints,
-              reason: `إكمال تحدي المسار: ${stage.name}`,
-              date: getToday(),
-              sourceType: 'summit_challenge',
-              sourceId: attempt.id,
-              dedupeKey: `summit_challenge:${attempt.id}`,
-            });
-          }
-        }
-        await connection.query(
-          `INSERT INTO student_summit_stage_rewards
-            (student_id, stage_points, best_reward, attempts_count, completed_at)
-           VALUES (?, ?, ?, 1, NOW())
-           ON DUPLICATE KEY UPDATE best_reward = GREATEST(best_reward, VALUES(best_reward)),
-             attempts_count = attempts_count + 1, completed_at = COALESCE(completed_at, NOW())`,
-          [req.auth.id, stage.points, storedBest],
-        );
-      } else {
-        await connection.query(
-          `INSERT INTO student_summit_stage_rewards (student_id, stage_points, attempts_count)
-           VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE attempts_count = attempts_count + 1`,
-          [req.auth.id, stage.points],
-        );
-      }
+      awardedPoints = await saveSummitAttemptReward({ score, previousReward, station, settings, awardedPoints, applyStudentPointDelta, connection, req, getToday, logStudentPointTransaction, stage, attempt });
       await connection.query(
         `UPDATE student_summit_attempts SET status = ?, accuracy = ?, errors_count = ?,
           reward_points = ?, completed_at = NOW() WHERE id = ?`,
@@ -293,4 +256,47 @@ export function createSummitRouter({
   });
 
   return router;
+}
+
+/** Award only an improvement over the locked best reward and preserve attempt counts. */
+async function saveSummitAttemptReward({ score, previousReward, station, settings, awardedPoints, applyStudentPointDelta, connection, req, getToday, logStudentPointTransaction, stage, attempt }) {
+  if (score.completed) {
+    const previousBest = Number(previousReward?.bestReward || 0);
+    const maximumPoints = Math.max(0, Number(station.rewardPoints ?? settings.summitChallengeMaxPoints ?? 50));
+    const calculatedPoints = Math.round((score.reward / 50) * maximumPoints);
+    const improvement = Math.max(0, calculatedPoints - previousBest);
+    const storedBest = settings.pointsSystemEnabled ? calculatedPoints : previousBest;
+    if (settings.pointsSystemEnabled && improvement > 0) {
+      awardedPoints = await applyStudentPointDelta(connection, req.auth.id, improvement, settings, { date: getToday() });
+      if (awardedPoints > 0) {
+        await logStudentPointTransaction(connection, {
+          studentId: req.auth.id,
+          actorRole: 'student',
+          actorName: req.auth.name || 'الطالب',
+          type: 'increase',
+          points: awardedPoints,
+          reason: `إكمال تحدي المسار: ${stage.name}`,
+          date: getToday(),
+          sourceType: 'summit_challenge',
+          sourceId: attempt.id,
+          dedupeKey: `summit_challenge:${attempt.id}`,
+        });
+      }
+    }
+    await connection.query(
+      `INSERT INTO student_summit_stage_rewards
+            (student_id, stage_points, best_reward, attempts_count, completed_at)
+           VALUES (?, ?, ?, 1, NOW())
+           ON DUPLICATE KEY UPDATE best_reward = GREATEST(best_reward, VALUES(best_reward)),
+             attempts_count = attempts_count + 1, completed_at = COALESCE(completed_at, NOW())`,
+      [req.auth.id, stage.points, storedBest]
+    );
+  } else {
+    await connection.query(
+      `INSERT INTO student_summit_stage_rewards (student_id, stage_points, attempts_count)
+           VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE attempts_count = attempts_count + 1`,
+      [req.auth.id, stage.points]
+    );
+  }
+  return awardedPoints;
 }

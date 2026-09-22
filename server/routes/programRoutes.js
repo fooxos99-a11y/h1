@@ -30,23 +30,7 @@ export function normalizePayload(body = {}, child = false) {
     throw fail('عدد الكيلومترات يجب أن يكون بين 0 و10000.');
   }
 
-  const submittedContents = Array.isArray(body.contents) ? body.contents : [];
-  const text = String(submittedContents.find((item) => item?.type === 'text')?.value || '').trim();
-  if (text.length > 20000) throw fail('النص يتجاوز الحد المسموح.');
-  const contents = text ? [{ type: 'text', value: text, fileName: '', mimeType: '' }] : [];
-  const attachment = submittedContents.find((item) => item?.type === 'file');
-  if (attachment?.value) {
-    const value = String(attachment.value).trim();
-    if (!FILE_PATTERN.test(value) || dataBytes(value) > 10 * 1024 * 1024) {
-      throw fail('الملف غير صالح أو يتجاوز حجمه 10 ميجابايت.');
-    }
-    contents.push({
-      type: 'file',
-      value,
-      fileName: clean(attachment.fileName, 255) || 'ملف مرفق',
-      mimeType: clean(attachment.mimeType, 120) || 'application/octet-stream',
-    });
-  }
+  const contents = normalizeProgramContents(body);
 
   const questions = (Array.isArray(body.questions) ? body.questions : []).slice(0, 100).map((item, index) => {
     const text = clean(item?.text, 500);
@@ -64,6 +48,27 @@ export function normalizePayload(body = {}, child = false) {
   });
   return { title, status, pointsReward: sectionsEnabled ? 0 : pointsReward, allowMultipleAttempts: !child && !sectionsEnabled && allowMultipleAttempts, contents, questions: sectionsEnabled ? [] : questions,
     sections: sectionsEnabled ? body.sections.map(section => ({ ...normalizePayload(section, true), id: section.id })) : [] };
+}
+
+function normalizeProgramContents(body) {
+  const submittedContents = Array.isArray(body.contents) ? body.contents : [];
+  const text = String(submittedContents.find((item) => item?.type === 'text')?.value || '').trim();
+  if (text.length > 20000) throw fail('النص يتجاوز الحد المسموح.');
+  const contents = text ? [{ type: 'text', value: text, fileName: '', mimeType: '' }] : [];
+  const attachment = submittedContents.find((item) => item?.type === 'file');
+  if (attachment?.value) {
+    const value = String(attachment.value).trim();
+    if (!FILE_PATTERN.test(value) || dataBytes(value) > 10 * 1024 * 1024) {
+      throw fail('الملف غير صالح أو يتجاوز حجمه 10 ميجابايت.');
+    }
+    contents.push({
+      type: 'file',
+      value,
+      fileName: clean(attachment.fileName, 255) || 'ملف مرفق',
+      mimeType: clean(attachment.mimeType, 120) || 'application/octet-stream',
+    });
+  }
+  return contents;
 }
 
 async function loadPrograms({ studentId = null, pathId = null, includeAnswers = false } = {}) {

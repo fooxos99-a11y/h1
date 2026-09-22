@@ -3,7 +3,7 @@ const escapeAttribute = value => String(value || '').replaceAll('&', '&amp;').re
 export function renderSiteMetadata(site) {
   const name = escapeAttribute(site.name);
   const description = escapeAttribute(site.description);
-  const website = JSON.stringify({ '@context': 'https://schema.org', '@type': 'WebSite', name: site.name, url: site.publicUrl }).replaceAll('<', '\\u003c');
+  const website = JSON.stringify({ '@context': 'https://schema.org', '@type': 'WebSite', name: site.name, url: site.publicUrl }).replaceAll('<', String.raw`\u003c`);
   return `<meta name="description" content="${description}" />
     <meta name="application-name" content="${name}" />
     <meta property="og:type" content="website" />

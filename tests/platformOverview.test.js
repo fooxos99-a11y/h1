@@ -90,7 +90,7 @@ test('platform owner overview aggregates tenants safely and exposes responsive d
   assert.match(routes, /router\.get\('\/settings\/:complexId', requirePlatformOwner/);
   assert.match(routes, /router\.put\('\/settings', requirePlatformOwner/);
   assert.match(routes, /router\.get\('\/complexes\/:id\/overview', requirePlatformOwner/);
-  assert.match(routes, /const \{ databaseName: _databaseName, \.\.\.publicComplex \} = complex/);
+  assert.match(routes, /const publicComplex = \{ \.\.\.complex \};\s*delete publicComplex\.databaseName/);
   assert.match(service, /runWithDatabase/);
   assert.match(service, /mapComplexesWithLimit/);
   assert.match(service, /resolveAnalyticsPeriod/);

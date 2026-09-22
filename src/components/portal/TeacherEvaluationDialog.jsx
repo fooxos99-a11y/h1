@@ -361,8 +361,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
   let recitationDialog;
   if (!selectedStudent) {
     recitationDialog = null;
-  } else {
-    if (selectedEvaluationMode === 'count') {
+  } else if (selectedEvaluationMode === 'count') {
       recitationDialog = <CountOnlyEvaluationDialog
       secondaryAction={notCompletedAction}
       open={Boolean(selectedStudent)}
@@ -411,7 +410,6 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
       onSaved={() => undefined}
     /></Suspense>;
     }
-  }
 
   if (inline) {
     return (

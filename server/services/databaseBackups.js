@@ -398,9 +398,7 @@ export async function restoreDatabaseBackup(runId, actorName = 'المدير') {
   const selected = await resolveBackupForRestore(runId);
   if (!selected) throw backupError('النسخة الاحتياطية غير موجودة.', 404);
   const actualChecksum = await sha256File(selected.filePath);
-  if (!selected.checksum || actualChecksum !== selected.checksum) {
-    throw backupError('فشل التحقق من سلامة النسخة الاحتياطية.', 409);
-  }
+  assertBackupChecksum(selected, actualChecksum);
 
   const safety = await createDatabaseBackup({
     trigger: 'manual',
@@ -420,16 +418,7 @@ export async function restoreDatabaseBackup(runId, actorName = 'المدير') {
     if (!lockAcquired) throw backupError('توجد عملية نسخ أو استعادة قيد التنفيذ حاليًا.', 409);
 
     await connection.query(`CREATE DATABASE \`${temporaryDatabase}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-    try {
-      await restoreCompressedDump(selected.filePath, temporaryDatabase);
-      const [[validation]] = await connection.query(
-        'SELECT COUNT(*) AS tableCount FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ?',
-        [temporaryDatabase],
-      );
-      if (!Number(validation?.tableCount)) throw backupError('النسخة الاحتياطية لا تحتوي على جداول قابلة للاستعادة.', 409);
-    } finally {
-      await connection.query(`DROP DATABASE IF EXISTS \`${temporaryDatabase}\``).catch(() => {});
-    }
+    await validateRestoredBackupTables(selected, temporaryDatabase, connection);
 
     liveRestoreStarted = true;
     await clearDatabase(connection, selected.databaseName);
@@ -441,21 +430,7 @@ export async function restoreDatabaseBackup(runId, actorName = 'المدير') {
     return { restored: true, safetyBackupCreated: true };
   } catch (error) {
     let rollbackSucceeded = false;
-    if (liveRestoreStarted) {
-      try {
-        await clearDatabase(connection, selected.databaseName);
-        await restoreCompressedDump(safetyPath, selected.databaseName);
-        await ensureBackupMetadataSchema(connection, selected.databaseName);
-        await connection.query('DELETE FROM auth_sessions');
-        await recordSafetyBackup(connection, safety, actorName);
-        rollbackSucceeded = true;
-        await applyRetention(selected.databaseName).catch((retentionError) => {
-          console.error('Backup retention after rollback failed:', retentionError.message);
-        });
-      } catch (rollbackError) {
-        console.error('Database restore rollback failed:', rollbackError.message);
-      }
-    }
+    rollbackSucceeded = await rollbackFailedDatabaseRestore({ liveRestoreStarted, connection, selected, safetyPath, safety, actorName, rollbackSucceeded });
     if (liveRestoreStarted && rollbackSucceeded) {
       throw backupError('تعذرت الاستعادة وأعيدت البيانات إلى نسخة الطوارئ.', 503);
     }
@@ -470,6 +445,47 @@ export async function restoreDatabaseBackup(runId, actorName = 'المدير') {
     await connection.query(`DROP DATABASE IF EXISTS \`${temporaryDatabase}\``).catch(() => {});
     if (lockAcquired) await connection.query('SELECT RELEASE_LOCK(?)', [lockName]).catch(() => {});
     connection.release();
+  }
+}
+
+/** Attempt the safety restore after a failed live restore and report whether recovery succeeded. */
+async function rollbackFailedDatabaseRestore({ liveRestoreStarted, connection, selected, safetyPath, safety, actorName, rollbackSucceeded }) {
+  if (liveRestoreStarted) {
+    try {
+      await clearDatabase(connection, selected.databaseName);
+      await restoreCompressedDump(safetyPath, selected.databaseName);
+      await ensureBackupMetadataSchema(connection, selected.databaseName);
+      await connection.query('DELETE FROM auth_sessions');
+      await recordSafetyBackup(connection, safety, actorName);
+      rollbackSucceeded = true;
+      await applyRetention(selected.databaseName).catch((retentionError) => {
+        console.error('Backup retention after rollback failed:', retentionError.message);
+      });
+    } catch (rollbackError) {
+      console.error('Database restore rollback failed:', rollbackError.message);
+    }
+  }
+  return rollbackSucceeded;
+}
+
+/** Reject missing or mismatched checksums before creating a safety backup or touching live tables. */
+function assertBackupChecksum(selected, actualChecksum) {
+  if (!selected.checksum || actualChecksum !== selected.checksum) {
+    throw backupError('فشل التحقق من سلامة النسخة الاحتياطية.', 409);
+  }
+}
+
+/** Verify the dump in the temporary schema before the caller starts restoring the live database. */
+async function validateRestoredBackupTables(selected, temporaryDatabase, connection) {
+  try {
+    await restoreCompressedDump(selected.filePath, temporaryDatabase);
+    const [[validation]] = await connection.query(
+      'SELECT COUNT(*) AS tableCount FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ?',
+      [temporaryDatabase]
+    );
+    if (!Number(validation?.tableCount)) throw backupError('النسخة الاحتياطية لا تحتوي على جداول قابلة للاستعادة.', 409);
+  } finally {
+    await connection.query(`DROP DATABASE IF EXISTS \`${temporaryDatabase}\``).catch(() => { });
   }
 }
 

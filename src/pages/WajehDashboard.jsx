@@ -281,27 +281,10 @@ const WajehDashboard = () => {
       ))
       .sort((first, second) => reciterSectionOrder.get(first.key) - reciterSectionOrder.get(second.key)));
     const filteredSections = baseSections.filter((section) => {
-      const featureKey = sectionFeatureKeys[section.key];
-      if (featureKey && settings[featureKey] === false) return false;
-      if (section.managerOnly && !isManager) return false;
-      if (section.managementOnly && isSupervisor) return false;
-      if (section.key === 'store' && site.features?.store === false) return false;
-      if (section.key === 'teacherPoints' && !settings.teacherManualPointsEnabled) return false;
-      if (section.key === 'studentExecutionCorrections' && settings.hasStudentQuranExecution === false) return false;
-      if (section.supervisorOnly && !isSupervisor) return false;
-      if (isSupervisor && ['manualAttendance', 'students'].includes(section.key)) return false;
+      if (isDashboardSectionDisabled({ section, settings, isManager, isSupervisor, site })) return false;
       if (isSupervisor && section.key === 'studentPlans') return true;
-      if (isSupervisor && section.key === 'teacherPoints') return true;
-      if (isSupervisor && section.key === 'culturalCompetition') return true;
-      if (isSupervisor && section.key === 'calls') return true;
-      if (isSupervisor && section.key === 'reports') return true;
-      if (section.key === 'staffAttendance') {
-        return settings.staffAttendanceSource === 'teacher' && !alreadyPresentToday && (
-          isSupervisor
-          || isReciter
-          || (isAdmin && dashboardPermissions.includes('staffAttendance'))
-        );
-      }
+      if (isSupervisor && ['teacherPoints', 'culturalCompetition', 'calls', 'reports'].includes(section.key)) return true;
+      if (section.key === 'staffAttendance') return canDisplayStaffAttendance({ settings, alreadyPresentToday, isSupervisor, isReciter, isAdmin, dashboardPermissions });
       if (section.key === 'mushaf') return isSupervisor || isReciter;
       const permissionKeys = section.permissionKeys || [section.permissionKey || section.key];
       if (!isManager && !permissionKeys.some((key) => dashboardPermissions.includes(key))) return false;
@@ -359,19 +342,21 @@ const WajehDashboard = () => {
   const restoreActiveCall = useCallback(() => changeSection('calls'), [changeSection]);
 
   const renderSection = () => {
-    if (visibleActiveSection === 'students') return <StudentsSection />;
-    if (visibleActiveSection === 'registrationRequests') return <RegistrationRequestsSection />;
-    if (visibleActiveSection === 'studentPlans') return <StudentPlansSection hideCommitteeFilter={isSupervisor && !isManager} />;
-    if (visibleActiveSection === 'studentExecutionCorrections') return <StudentExecutionCorrectionsSection />;
-    if (visibleActiveSection === 'teacherPoints') return <TeacherPointsAdjustmentSection />;
-    if (visibleActiveSection === 'quranTests') return <QuranTestsSection />;
-    if (visibleActiveSection === 'quranEvaluation') return <TeacherEvaluationSection />;
-    if (visibleActiveSection === 'previousRecitationSessions') return <TeacherPreviousSessionsPanel />;
-    if (visibleActiveSection === 'families') return <FamiliesSection />;
-    if (visibleActiveSection === 'supervisors') return <SupervisorsSection />;
-    if (visibleActiveSection === 'reciters') return <RecitersSection />;
-    if (visibleActiveSection === 'administrators') return <AdministratorsSection />;
-    if (visibleActiveSection === 'reports') return (
+    // Select the requested view without evaluating unrelated page branches.
+    switch (visibleActiveSection) {
+      case 'students': return <StudentsSection />;
+      case 'registrationRequests': return <RegistrationRequestsSection />;
+      case 'studentPlans': return <StudentPlansSection hideCommitteeFilter={isSupervisor && !isManager} />;
+      case 'studentExecutionCorrections': return <StudentExecutionCorrectionsSection />;
+      case 'teacherPoints': return <TeacherPointsAdjustmentSection />;
+      case 'quranTests': return <QuranTestsSection />;
+      case 'quranEvaluation': return <TeacherEvaluationSection />;
+      case 'previousRecitationSessions': return <TeacherPreviousSessionsPanel />;
+      case 'families': return <FamiliesSection />;
+      case 'supervisors': return <SupervisorsSection />;
+      case 'reciters': return <RecitersSection />;
+      case 'administrators': return <AdministratorsSection />;
+      case 'reports': return (
       <ReportsSection
         teacherScoped={isSupervisor}
         canViewStandardReports={isSupervisor || isManager || dashboardPermissions.includes('reports')}
@@ -382,16 +367,17 @@ const WajehDashboard = () => {
         canViewTeacherPoints={settings.teacherManualPointsEnabled}
       />
     );
-    if (visibleActiveSection === 'programs') return <ProgramsSection />;
-    if (visibleActiveSection === 'culturalCompetition') return <CulturalCompetitionSection canManageBank={isManager || isAdmin} />;
-    if (visibleActiveSection === 'calls') return activeCallRoom ? null : <LazyCallsSection onJoinRoom={setActiveCallRoom} />;
-    if (visibleActiveSection === 'narrationDay') return <NarrationDaySection />;
-    if (visibleActiveSection === 'notifications') return <NotificationsSection />;
-    if (visibleActiveSection === 'whatsappSend') return <WhatsAppSendSection />;
-    if (visibleActiveSection === 'contactMessages') return <ContactMessagesSection />;
-    if (visibleActiveSection === 'manualAttendance') return <ManualAttendanceSection teacherScoped={isSupervisor} />;
-    if (visibleActiveSection === 'staffAttendance') return <StaffAttendanceSection attendanceState={staffAttendanceState} />;
-    if (visibleActiveSection === 'mushaf') return <StudentMushafSection />;
+      case 'programs': return <ProgramsSection />;
+      case 'culturalCompetition': return <CulturalCompetitionSection canManageBank={isManager || isAdmin} />;
+      case 'calls': return activeCallRoom ? null : <LazyCallsSection onJoinRoom={setActiveCallRoom} />;
+      case 'narrationDay': return <NarrationDaySection />;
+      case 'notifications': return <NotificationsSection />;
+      case 'whatsappSend': return <WhatsAppSendSection />;
+      case 'contactMessages': return <ContactMessagesSection />;
+      case 'manualAttendance': return <ManualAttendanceSection teacherScoped={isSupervisor} />;
+      case 'staffAttendance': return <StaffAttendanceSection attendanceState={staffAttendanceState} />;
+      case 'mushaf': return <StudentMushafSection />;
+    }
     if (isSettingsNavigationKey(visibleActiveSection)) return (
       <SettingsSection
         activeCategory={visibleActiveSection}
@@ -482,3 +468,27 @@ const WajehDashboard = () => {
 };
 
 export default WajehDashboard;
+
+/** Apply feature and role restrictions before any section permission can grant visibility. */
+function isDashboardSectionDisabled({ section, settings, isManager, isSupervisor, site }) {
+      const featureKey = sectionFeatureKeys[section.key];
+      if (featureKey && settings[featureKey] === false) return true;
+      if ((section.managerOnly && !isManager) || (section.managementOnly && isSupervisor)) return true;
+      if (section.key === 'store' && site.features?.store === false) return true;
+      if (section.key === 'teacherPoints' && !settings.teacherManualPointsEnabled) return true;
+      if (section.key === 'studentExecutionCorrections' && settings.hasStudentQuranExecution === false) return true;
+      if (section.supervisorOnly && !isSupervisor) return true;
+      if (isSupervisor && ['manualAttendance', 'students'].includes(section.key)) return true;
+
+  return false;
+}
+
+/** Show self attendance only before attendance is recorded and for an authorized staff account. */
+function canDisplayStaffAttendance({ settings, alreadyPresentToday, isSupervisor, isReciter, isAdmin, dashboardPermissions }) {
+return settings.staffAttendanceSource === 'teacher' && !alreadyPresentToday && (
+          isSupervisor
+          || isReciter
+          || (isAdmin && dashboardPermissions.includes('staffAttendance'))
+        );
+      
+}

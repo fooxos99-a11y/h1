@@ -33,8 +33,8 @@ try {
         if (evaluationLoads > 1) {
           body.tasks.push({ ...body.tasks[0], id: 901, taskType: 'link', options: [] });
           if (bothTracks || masteryOnly) {
-            body.tasks.push({ ...body.tasks[0], id: 902, taskType: 'review', options: [] });
-            body.tasks.push({ ...body.tasks[0], id: 903, track: 'mastery', options: [] });
+            body.tasks.push({ ...body.tasks[0], id: 902, taskType: 'review', options: [] },
+        { ...body.tasks[0], id: 903, track: 'mastery', options: [] });
             if (masteryOnly) body.tasks = body.tasks.filter((task) => task.id !== 900);
           }
         }

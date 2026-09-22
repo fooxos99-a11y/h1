@@ -1,6 +1,0 @@
-const ts=require('typescript');const fs=require('node:fs');const path=require('node:path');
-const file=path.resolve('server/index.js');const source=fs.readFileSync(file,'utf8');
-const host={getScriptFileNames:()=>[file],getScriptVersion:()=> '1',getScriptSnapshot:f=>fs.existsSync(f)?ts.ScriptSnapshot.fromString(fs.readFileSync(f,'utf8')):undefined,getCurrentDirectory:()=>process.cwd(),getCompilationSettings:()=>({allowJs:true,noResolve:true,target:ts.ScriptTarget.ESNext}),getDefaultLibFileName:o=>ts.getDefaultLibFilePath(o),fileExists:ts.sys.fileExists,readFile:ts.sys.readFile,readDirectory:ts.sys.readDirectory};
-const service=ts.createLanguageService(host);const start=source.indexOf('  const coveredLines = new Set();',source.indexOf('async function getDescendingMushafFractionEnd'));const end=source.indexOf('  return candidate;',start)+'  return candidate;'.length;
-const range={pos:start,end};const options=service.getApplicableRefactors(file,range,{allowTextChangesInNewFiles:true},'invoked');console.log(JSON.stringify(options));
-if(options.length){const refactor=options.find(r=>r.name==='Extract Symbol');const action=refactor?.actions.filter(a=>a.name.startsWith('function_scope')).at(-1);if(action)console.log(JSON.stringify(service.getEditsForRefactor(file,{indentSize:2,tabSize:2,convertTabsToSpaces:true},range,refactor.name,action.name,{}),null,2));}

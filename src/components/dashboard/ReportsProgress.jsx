@@ -1,3 +1,8 @@
+function formatListening(value) {
+  if (value == null) return '-';
+  return value ? 'نعم' : 'لا';
+}
+
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -193,15 +198,6 @@ const ReportsProgress = ({ rows = [], period = null }) => {
           const mastery = getTaskSummary(row, 'memorization', isDaily, period, 'mastery');
           const review = getTaskSummary(row, 'review', isDaily, period);
           const link = getTaskSummary(row, 'link', isDaily, period);
-          const _resolveReportsProgress = () => {
-            if (todayDetails?.listening == null) {
-              return '-';
-            }
-            if (todayDetails.listening) {
-              return 'نعم';
-            }
-            return 'لا';
-          };
           return (
             <article key={row.id} className="rounded-xl border border-primary/20 bg-card/50 p-3">
               <div className="flex items-start justify-between gap-3 border-b border-primary/10 pb-2">
@@ -230,7 +226,7 @@ const ReportsProgress = ({ rows = [], period = null }) => {
                 {isDaily && (
                   <>
                     <div><span className="text-muted-foreground">التكرار:</span> {todayDetails?.repeat == null ? '-' : `${formatNumber(todayDetails.repeat)} مرة`}</div>
-                    <div><span className="text-muted-foreground">السماع:</span> {_resolveReportsProgress()}</div>
+                    <div><span className="text-muted-foreground">السماع:</span> {formatListening(todayDetails?.listening)}</div>
                   </>
                 )}
                 {!row.nazemManaged && <div><span className="text-muted-foreground">النقص الحالي:</span> {formatNumber(row.planProgress?.shortageFaces)} وجه</div>}
@@ -269,15 +265,6 @@ const ReportsProgress = ({ rows = [], period = null }) => {
               const review = getTaskSummary(row, 'review', isDaily, period);
               const link = getTaskSummary(row, 'link', isDaily, period);
               const hasDetails = !isDaily && row.dailyDetails?.length > 0;
-              const _resolveReportsProgress2 = () => {
-                if (todayDetails?.listening == null) {
-                  return '-';
-                }
-                if (todayDetails.listening) {
-                  return 'نعم';
-                }
-                return 'لا';
-              };
               return (
                 <div key={row.id} className="border-t border-primary/10 bg-card/35">
                   <div className="grid grid-cols-[minmax(240px,1.7fr)_105px_minmax(170px,1.2fr)_minmax(170px,1.2fr)_110px] items-center">
@@ -289,7 +276,7 @@ const ReportsProgress = ({ rows = [], period = null }) => {
                         </div>
                         <div className="truncate text-[11px] font-bold text-muted-foreground">{row.committeeName || 'بدون حلقة'}</div>
                         {mastery.amount && <div className="text-[11px] font-bold"><TaskAmount summary={mastery} label="الإتقان" /></div>}
-                        {isDaily && <div className="text-[10px] font-bold text-muted-foreground">التكرار: {todayDetails?.repeat == null ? '-' : `${formatNumber(todayDetails.repeat)} مرة`}، السماع: {_resolveReportsProgress2()}</div>}
+                        {isDaily && <div className="text-[10px] font-bold text-muted-foreground">التكرار: {todayDetails?.repeat == null ? '-' : `${formatNumber(todayDetails.repeat)} مرة`}، السماع: {formatListening(todayDetails?.listening)}</div>}
                         {!row.nazemManaged && <div className="text-[10px] font-black text-amber-600">النقص: {formatNumber(row.planProgress?.shortageFaces)} وجه</div>}
                       </div>
                       {hasDetails && (

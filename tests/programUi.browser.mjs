@@ -18,7 +18,6 @@ try {
     const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block', reducedMotion: 'reduce' });
     const page = await context.newPage();
     const errors = [];
-    const writes = [];
     let savedFailure = true;
     page.on('pageerror', (error) => errors.push(error.message));
     await page.clock.install({ time: new Date(`${date}T12:00:00Z`) });
@@ -32,7 +31,6 @@ try {
     });
     await context.route('**/api/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
-      if (route.request().method() !== 'GET') writes.push(path);
       let body = [];
       if (path.endsWith('/quran-tasks/execution')) {
         const payload = route.request().postDataJSON();

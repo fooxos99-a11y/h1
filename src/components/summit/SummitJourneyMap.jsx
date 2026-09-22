@@ -24,8 +24,7 @@ const SummitJourneyMap = ({ journey, onStageClick, embedded = false, showViewTog
       )}
 
       {showViewToggle && (
-        <>
-          <Button
+        <Button
             type="button"
             variant="ghost"
             className="summit-view-toggle"
@@ -35,7 +34,6 @@ const SummitJourneyMap = ({ journey, onStageClick, embedded = false, showViewTog
             {isRoad ? <Map aria-hidden="true" /> : <Route aria-hidden="true" />}
             {isRoad ? 'الخريطة' : 'الطريق'}
           </Button>
-        </>
       )}
     </section>
   );

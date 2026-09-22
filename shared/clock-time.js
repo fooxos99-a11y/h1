@@ -5,5 +5,6 @@ export function formatClockTime(value) {
   const hour = Number(match[1]);
   const minute = Number(match[2]);
   if (hour > 23 || minute > 59) return '-';
-  return `${hour % 12 || 12}${minute ? `:${match[2]}` : ''}${hour < 12 ? 'ص' : 'م'}`;
+  const minutes = minute ? ':' + match[2] : '';
+  return `${hour % 12 || 12}${minutes}${hour < 12 ? 'ص' : 'م'}`;
 }

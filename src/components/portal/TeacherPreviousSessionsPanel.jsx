@@ -31,8 +31,8 @@ export default function TeacherPreviousSessionsPanel() {
       if (!active) return;
       if (studentId) setRows(Array.isArray(result?.rows) ? result.rows : []);
       else setStudents(Array.isArray(result) ? result : []);
-    }).catch((failure) => {
-      if (active) setError(failure.message || 'تعذر تحميل الجلسات السابقة.');
+    }).catch((error_) => {
+      if (active) setError(error_.message || 'تعذر تحميل الجلسات السابقة.');
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [accountId, studentId, retry]);

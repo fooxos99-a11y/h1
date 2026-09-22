@@ -2,7 +2,7 @@
 export async function notifyTeacherPointAdjustment(connection, {
   transactionId, studentId, type, points, reason, actor,
 }) {
-  if (!(Number(transactionId) > 0) || !(Number(points) > 0)) return null;
+  if (((Number(transactionId) || 0) <= 0) || ((Number(points) || 0) <= 0)) return null;
   const increase = type === 'increase';
   const [notification] = await connection.query(
     `INSERT INTO app_notifications

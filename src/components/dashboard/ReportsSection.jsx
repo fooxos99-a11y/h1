@@ -1,3 +1,4 @@
+import ReportsArchiveView from './ReportsArchiveView';
 import DashboardDateRange from '@/components/dashboard/DashboardDateRange';
 import DashboardHeaderFilters from '@/components/dashboard/DashboardHeaderFilters';
 import { formatClockTime } from '../../../shared/clock-time.js';
@@ -140,15 +141,21 @@ const ReportsSection = ({
 
   useEffect(() => {
     let active = true;
-    const loadReport = async () => {
-      setIsLoading(true);
-      try {
-        if (target === 'executionFollowup' || target === 'nazemReconciliation') {
+    // Each loader owns its response shape and ignores results after effect cleanup.
+    const reportLoaders = new Map([
+      ['executionFollowup', async () => {
           setArchive(null);
           setOverview(null);
           setRows([]);
           setReportPeriod(null);
-        } else if (target === 'archive') {
+        }],
+      ['nazemReconciliation', async () => {
+          setArchive(null);
+          setOverview(null);
+          setRows([]);
+          setReportPeriod(null);
+        }],
+      ['archive', async () => {
           setOverview(null);
           setRows([]);
           setReportPeriod(null);
@@ -159,7 +166,8 @@ const ReportsSection = ({
           const report = await cachedReport(`archive:${archiveId}`, () => studentsApi.getReportArchive(archiveId));
           if (!active) return;
           setArchive(report);
-        } else if (target === 'overview') {
+        }],
+      ['overview', async () => {
           setArchive(null);
           setReportPeriod(null);
           const report = await cachedReport(`overview:${fromDate}:${toDate}:${committeeId}`, () => studentsApi.getOverviewReport({ ...(fromDate ? { from: fromDate, to: toDate } : {}), committeeId }));
@@ -168,7 +176,8 @@ const ReportsSection = ({
           if (!fromDate && report?.period?.from) setFromDate(report.period.from);
           if (report?.period?.to && report.period.to !== toDate) setToDate(report.period.to);
           setRows([]);
-        } else if (target === 'students') {
+        }],
+      ['students', async () => {
           setArchive(null);
           setOverview(null);
           const report = await cachedReport(`students:${reportFromDate}:${reportToDate}:${committeeId}:${studentId}`, () => studentsApi.getProgressReport({
@@ -180,7 +189,8 @@ const ReportsSection = ({
           if (!active) return;
           setRows(report.rows || []);
           setReportPeriod(report.period || null);
-        } else if (target === 'studentPoints') {
+        }],
+      ['studentPoints', async () => {
           setArchive(null);
           setOverview(null);
           setStudentPointRows([]);
@@ -191,14 +201,16 @@ const ReportsSection = ({
           if (!active) return;
           setStudentPointRows(report.rows || []);
           setReportPeriod(report.period || null);
-        } else if (target === 'teacherPoints') {
+        }],
+      ['teacherPoints', async () => {
           setArchive(null);
           setOverview(null);
           const report = await cachedReport(`teacher-points:${reportFromDate}:${reportToDate}`, () => studentsApi.getTeacherPointsReport({ from: reportFromDate, to: reportToDate }));
           if (!active) return;
           setRows(report.rows || []);
           setReportPeriod(report.period || null);
-        } else if (target === 'recitationSessions') {
+        }],
+      ['recitationSessions', async () => {
           setArchive(null);
           setOverview(null);
           setReportPeriod(null);
@@ -206,7 +218,8 @@ const ReportsSection = ({
           if (!active) return;
           setRows(report.rows || []);
           if (!fromDate && report?.period?.from) setFromDate(report.period.from);
-        } else if (target === 'studentSaved') {
+        }],
+      ['studentSaved', async () => {
           setArchive(null);
           setOverview(null);
           const report = await cachedReport(`student-saved:all:${committeeId}:${studentId}`, () => studentsApi.getStudentSavedReport({
@@ -216,14 +229,20 @@ const ReportsSection = ({
           if (!active) return;
           setRows(report.rows || []);
           setReportPeriod(report.period || null);
-        } else if (target === 'supervisors') {
+        }],
+      ['supervisors', async () => {
           setArchive(null);
           setOverview(null);
           setReportPeriod(null);
           const report = await cachedReport(`supervisors:${date}`, () => studentsApi.getSupervisorReport({ date }));
           if (!active) return;
           setRows(report);
-        }
+        }]
+    ]);
+    const loadReport = async () => {
+      setIsLoading(true);
+      try {
+        await reportLoaders.get(target)?.();
       } finally {
         if (active) setIsLoading(false);
       }
@@ -317,25 +336,17 @@ const ReportsSection = ({
       let file;
       if (isOverviewReport) {
         file = await studentsApi.exportOverviewReport(exportPayload);
-      } else {
-        if (isSupervisorsReport) {
+      } else if (isSupervisorsReport) {
           file = await studentsApi.exportSupervisorReport(exportPayload);
-        } else {
-          if (isArchiveReport) {
+        } else if (isArchiveReport) {
             file = await studentsApi.exportArchiveReport(exportPayload);
-          } else {
-            if (isRecitationSessionsReport) {
+          } else if (isRecitationSessionsReport) {
               file = await studentsApi.exportRecitationSessionsReport(exportPayload);
-            } else {
-              if (isStudentSavedReport) {
+            } else if (isStudentSavedReport) {
                 file = await studentsApi.exportStudentSavedReport(exportPayload);
               } else {
                 file = await studentsApi.exportProgressReport(exportPayload);
               }
-            }
-          }
-        }
-      }
       downloadFile(file.blob, file.filename);
       toast({ title: 'تم التصدير', description: format === 'xlsx' ? 'تم تجهيز ملف Excel.' : 'تم تجهيز ملف PDF.' });
     } catch (error) {
@@ -397,7 +408,7 @@ const ReportsSection = ({
       });
       toast({
         title: 'تم الإرسال',
-        description: `تم إرسال ${result.sentCount || 0} تقرير${result.failedCount ? `، وتعذر ${result.failedCount}` : ''}.`,
+        description: `تم إرسال ${result.sentCount || 0} تقرير${result.failedCount ? '، وتعذر ' + result.failedCount : ''}.`,
       });
       setSendDialogOpen(false);
       setSelectedSupervisorIds([]);
@@ -443,69 +454,37 @@ const ReportsSection = ({
   ) : null;
 
   const _resolveReportsSection = () => {
+    // These reports share loading presentation; specialist reports manage their own requests.
+    if (isLoading && (isOverviewReport || isArchiveReport || isRecitationSessionsReport
+      || isStudentSavedReport || isStudentsReport || isStudentPointsReport || isTeacherPointsReport)) {
+      return <DashboardLoader className="p-8" />;
+    }
     if (isExecutionFollowup) {
       return <ExecutionFollowupSection teacherScoped={teacherScoped} />;
     }
     if (isOverviewReport) {
-      if (isLoading) {
-        return <DashboardLoader className="p-8" />;
-      }
       return <ReportsOverview data={overview} />;
     }
-    if (isArchiveReport) {
-      if (isLoading) {
-        return <DashboardLoader className="p-8" />;
-      }
-      if (archive) {
-        return <div className="space-y-6">
-                <div className="flex flex-col gap-3 rounded-lg border border-primary/15 bg-background/70 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-sm font-black text-muted-foreground">{archive.title} - من {archive.periodFrom} إلى {archive.periodTo}</div>
-                  <Button type="button" variant="outline" disabled={!isOnline || isDeletingArchive} onClick={deleteArchive} className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive">
-                    حذف الأرشيف
-                  </Button>
-                </div>
-                <ReportsOverview data={archive.overviewReport} />
-                <ReportsProgress rows={archiveRows} period={archive.progressReport?.period} />
-              </div>;
-      }
-      return <div className="rounded-lg border border-dashed border-primary/20 p-8 text-center text-muted-foreground">
-                {archives.length ? 'اختر أرشيفًا لعرضه.' : 'لا توجد أرشيفات حاليًا.'}
-              </div>;
-    }
+    if (isArchiveReport) return <ReportsArchiveView archive={archive} archiveRows={archiveRows} archives={archives} isOnline={isOnline} isDeletingArchive={isDeletingArchive} deleteArchive={deleteArchive} />;
     if (isRecitationSessionsReport) {
-      if (isLoading) {
-        return <DashboardLoader className="p-8" />;
-      }
       return <ReportsRecitationSessions rows={visibleRecitationRows} />;
     }
     if (isStudentSavedReport) {
-      if (isLoading) {
-        return <DashboardLoader className="p-8" />;
-      }
       return <ReportsStudentSaved rows={rows} />;
     }
     if (isStudentsReport) {
-      if (isLoading) {
-        return <DashboardLoader className="p-8" />;
-      }
       return <ReportsProgress rows={rows} period={reportPeriod} />;
     }
     if (isNazemReconciliationReport) {
       return <NazemReconciliationReport from={reportFromDate} to={reportToDate} committeeId={committeeId} />;
     }
     if (isStudentPointsReport) {
-      if (isLoading) {
-        return <DashboardLoader className="p-8" />;
-      }
       if (studentPointsError) {
         return <ErrorState message={studentPointsError} onRetry={() => setReportRetry((value) => value + 1)} />;
       }
       return <StudentPointsReport rows={studentPointRows} />;
     }
     if (isTeacherPointsReport) {
-      if (isLoading) {
-        return <DashboardLoader className="p-8" />;
-      }
       return <TeacherPointsReport rows={rows} showTeacher={!teacherScoped} />;
     }
     const _resolve_resolveReportsSection = () => {

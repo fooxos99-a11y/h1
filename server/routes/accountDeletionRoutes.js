@@ -122,7 +122,36 @@ router.put('/requests/:id', async (req, res, next) => {
       return res.status(404).json({ message: 'الطلب غير موجود أو تمت معالجته مسبقاً.' });
     }
 
-    if (status === 'completed') {
+    const processApprovedAccountDeletionResult = await processApprovedAccountDeletion({ status, deletionRequest, connection, res });
+    if (processApprovedAccountDeletionResult) { return processApprovedAccountDeletionResult; }
+        const [result] = await connection.query(
+      `
+      UPDATE account_deletion_requests
+      SET status = ?, manager_note = ?
+      WHERE id = ? AND status = 'pending'
+      `,
+      [status, managerNote, req.params.id],
+    );
+    if (!result.affectedRows) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'الطلب غير موجود أو تمت معالجته مسبقاً.' });
+    }
+    await connection.commit();
+    return res.json({ ok: true });
+  } catch (error) {
+    await connection.rollback();
+    return next(error);
+  } finally {
+    connection.release();
+  }
+});
+
+export default router;
+
+/** Delete only the approved account and related records within the existing manager-owned transaction. */
+async function processApprovedAccountDeletion({ status, deletionRequest, connection, res }) {
+if (status !== 'completed') { return null; }
+
       if (deletionRequest.userRole === 'manager') {
         await connection.rollback();
         return res.status(409).json({ message: 'طلب حذف حساب المدير يُعالج من إدارة المنصة.' });
@@ -172,28 +201,7 @@ router.put('/requests/:id', async (req, res, next) => {
         }
         await connection.query('DELETE FROM supervisors WHERE id = ?', [deletionRequest.userId]);
       }
-    }
 
-    const [result] = await connection.query(
-      `
-      UPDATE account_deletion_requests
-      SET status = ?, manager_note = ?
-      WHERE id = ? AND status = 'pending'
-      `,
-      [status, managerNote, req.params.id],
-    );
-    if (!result.affectedRows) {
-      await connection.rollback();
-      return res.status(404).json({ message: 'الطلب غير موجود أو تمت معالجته مسبقاً.' });
-    }
-    await connection.commit();
-    return res.json({ ok: true });
-  } catch (error) {
-    await connection.rollback();
-    return next(error);
-  } finally {
-    connection.release();
-  }
-});
 
-export default router;
+  return null;
+}

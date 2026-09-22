@@ -1,5 +1,6 @@
+import AudioCallControls from './AudioCallControls';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, CameraOff, LogOut, Mic, MicOff, MonitorPlay, MonitorUp, PhoneCall, PhoneOff, ScreenShareOff, User, X } from 'lucide-react';
+import { Camera, CameraOff, Mic, MicOff, MonitorPlay, PhoneCall, User, X } from 'lucide-react';
 import { Room, RoomEvent, Track } from 'livekit-client';
 import { Button } from '@/components/ui/button';
 import IconActionButton from '@/components/ui/icon-action-button';
@@ -355,21 +356,7 @@ const AudioCallRoom = ({ roomInfo, isOwner, minimized = false, onRestore, onLeav
       <CardHeader className="gap-4 border-b border-primary/20">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-xl font-black text-foreground sm:text-2xl">{roomInfo.name}</h2>
-          <div className="flex flex-wrap items-center gap-2">
-            <IconActionButton label={isMuted ? 'فتح الميكروفون' : 'كتم الميكروفون'} variant={isMuted ? 'destructive' : 'outline'} onClick={toggleMicrophone}>
-              {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-            </IconActionButton>
-            <IconActionButton label={isCameraEnabled ? 'إيقاف الكاميرا' : 'فتح الكاميرا'} variant={isCameraEnabled ? 'default' : 'outline'} onClick={toggleCamera} disabled={isTogglingCamera}>
-              {isCameraEnabled ? <Camera className="h-4 w-4" /> : <CameraOff className="h-4 w-4" />}
-            </IconActionButton>
-            <IconActionButton label={isSharingScreen ? 'إيقاف مشاركة الشاشة' : 'مشاركة الشاشة'} variant={isSharingScreen ? 'default' : 'outline'} onClick={toggleScreenShare}>
-              {isSharingScreen ? <ScreenShareOff className="h-4 w-4" /> : <MonitorUp className="h-4 w-4" />}
-            </IconActionButton>
-            <IconActionButton label="الخروج من المكالمة" variant="outline" onClick={leave}>
-              <LogOut className="h-4 w-4" />
-            </IconActionButton>
-            {isOwner && <Button variant="destructive" onClick={closeRoom} disabled={isClosing} className="gap-2"><PhoneOff className="h-4 w-4" /> إغلاق الغرفة</Button>}
-          </div>
+          <AudioCallControls isMuted={isMuted} isCameraEnabled={isCameraEnabled} isSharingScreen={isSharingScreen} isTogglingCamera={isTogglingCamera} isOwner={isOwner} isClosing={isClosing} toggleMicrophone={toggleMicrophone} toggleCamera={toggleCamera} toggleScreenShare={toggleScreenShare} leave={leave} closeRoom={closeRoom} />
         </div>
       </CardHeader>
       <CardContent className="space-y-5 pt-4 sm:pt-6">

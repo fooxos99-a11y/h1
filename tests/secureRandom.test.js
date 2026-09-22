@@ -47,9 +47,9 @@ test('remaining reported random sources and audit process lookup are hardened', 
     assert.doesNotMatch(await readFile(new URL(path, import.meta.url), 'utf8'), /Math\.random/);
   }
   const audit = await readFile(new URL('../scripts/isolated-launch-audit.mjs', import.meta.url), 'utf8');
-  assert.ok(audit.includes("spawn('C:\\\\Windows\\\\System32\\\\taskkill.exe'"));
+  assert.ok(audit.includes('spawn(String.raw`C:\\Windows\\System32\\taskkill.exe`'));
   assert.doesNotMatch(audit, /spawn\(['"]taskkill['"]/);
-  assert.match(audit, /taskkill\.exe'[\s\S]*?shell: false/);
+  assert.match(audit, /taskkill\.exe`[\s\S]*?shell: false/);
 });
 
 test('secure IDs retain their prefix and survive point-type normalization', () => {

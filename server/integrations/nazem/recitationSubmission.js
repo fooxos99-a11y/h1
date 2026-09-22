@@ -62,7 +62,7 @@ export function validateRecitationTarget(target, recitations, studentLink, planL
   return target.source;
 }
 
-export const hasLocalRecitation = recitations => recitations.some(item => !/^nazem:/.test(String(item.requestId || '')));
+export const hasLocalRecitation = recitations => recitations.some(item => !String(item.requestId || '').startsWith('nazem:'));
 
 export function recitationWriteJournal(connection, job) {
   const persist = async writes => {

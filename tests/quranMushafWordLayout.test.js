@@ -128,7 +128,7 @@ test('renders a stable fifteen-line Mushaf face with coordinated themes and comp
   assert.doesNotMatch(carousel, /data-mushaf-word-index/);
   assert.match(carousel, /React\.cloneElement\(children, \{ pageAction: pageControls \}\)/);
   assert.match(carousel, /MushafPageControls/);
-  assert.match(carousel, /mushaf-page-turn--\$\{turnDirection\}/);
+  assert.match(carousel, /'mushaf-page-turn--' \+ turnDirection/);
   assert.match(carouselStyles, /rotateY\(2\.5deg\)/);
   assert.match(carouselStyles, /rotateY\(-2\.5deg\)/);
   assert.match(carouselStyles, /animation: none/);

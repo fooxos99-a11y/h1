@@ -12,8 +12,7 @@ const RawasiPublicHero = ({
   onOpenPath,
   onOpenDailyChallenge,
 }) => (
-  <>
-    <section id="rawasi-home" className="relative grid min-h-[82svh] place-items-center overflow-hidden border-b border-border bg-background px-4 pb-16 pt-28 [font-family:var(--font-ui)] sm:min-h-[88svh] sm:px-6 sm:pb-20 sm:pt-32 lg:px-8" dir="rtl">
+  <section id="rawasi-home" className="relative grid min-h-[82svh] place-items-center overflow-hidden border-b border-border bg-background px-4 pb-16 pt-28 [font-family:var(--font-ui)] sm:min-h-[88svh] sm:px-6 sm:pb-20 sm:pt-32 lg:px-8" dir="rtl">
       <div className="pointer-events-none absolute inset-0 opacity-70 dark:opacity-45" aria-hidden="true">
         <div className="absolute -right-32 top-10 h-80 w-80 rounded-full bg-[radial-gradient(circle,hsl(var(--primary)/.14),transparent_70%)]" />
         <div className="absolute -left-24 bottom-0 h-72 w-72 rounded-full bg-[radial-gradient(circle,hsl(var(--accent)/.18),transparent_70%)]" />
@@ -67,7 +66,6 @@ const RawasiPublicHero = ({
         </div>
       </div>
     </section>
-  </>
 );
 
 export default RawasiPublicHero;

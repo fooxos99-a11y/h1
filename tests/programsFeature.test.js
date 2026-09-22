@@ -20,7 +20,7 @@ test('programs use optional text content, optional files, and latest-attempt poi
 
   assert.match(server, /learningPathsEnabled: settings\.learningPathsEnabled === 'true'/);
   assert.match(server, /learningPathsEnabled: Boolean\(settings\.learningPathsEnabled\)/);
-  assert.match(server, /if \(path\.startsWith\('\/programs'\)\) return \['programs'\]/);
+  assert.match(server, /\[path\.startsWith\('\/programs'\), \['programs'\]\]/);
   assert.match(database, /allow_multiple_attempts TINYINT\(1\) NOT NULL DEFAULT 0/);
   assert.match(database, /block_type ENUM\('text', 'link', 'pdf', 'image', 'file'\)/);
   assert.doesNotMatch(router, /نص المحتوى مطلوب/);

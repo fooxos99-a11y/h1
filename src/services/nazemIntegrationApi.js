@@ -47,7 +47,7 @@ export const nazemIntegrationApi = {
   unlinkAccount: (teacherId) => request(`/nazem/accounts/${teacherId}`, { method: 'DELETE' }),
   getStudentLinks: (teacherId) => request(`/nazem/accounts/${teacherId}/students`),
   getImportPreview: (teacherId, committeeId = '', options = {}) => request(
-    `/nazem/accounts/${teacherId}/import-preview${committeeId ? `?committeeId=${encodeURIComponent(committeeId)}` : ''}`,
+    `/nazem/accounts/${teacherId}/import-preview${committeeId ? '?committeeId=' + encodeURIComponent(committeeId) : ''}`,
     options,
   ),
   refreshImportData: (teacherId, options = {}) => request(`/nazem/accounts/${teacherId}/refresh-import`, {
@@ -120,18 +120,18 @@ export const nazemIntegrationApi = {
   ignoreDiscoveredPlan: (teacherId, candidateId) => request(`/nazem/accounts/${teacherId}/plans/${candidateId}/ignore`, {
     method: 'POST',
   }),
-  getJobs: (status = '') => request(`/nazem/jobs${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  getJobs: (status = '') => request(`/nazem/jobs${status ? '?status=' + encodeURIComponent(status) : ''}`),
   getLog: () => request('/nazem/log'),
   retryJob: (jobId) => request(`/nazem/jobs/${jobId}/retry`, { method: 'POST' }),
   dismissJob: (jobId) => request(`/nazem/jobs/${jobId}/dismiss`, { method: 'POST' }),
   getConflicts: (teacherId = '', options = {}) => request(
-    `/nazem/conflicts${teacherId ? `?teacherId=${encodeURIComponent(teacherId)}` : ''}`,
+    `/nazem/conflicts${teacherId ? '?teacherId=' + encodeURIComponent(teacherId) : ''}`,
     options,
   ),
   resolveConflict: (conflictId, resolution) => request(`/nazem/conflicts/${conflictId}/resolve`, {
     method: 'POST',
     body: JSON.stringify({ resolution }),
   }),
-  getPlanStatuses: (studentId = '') => request(`/nazem/plan-statuses${studentId ? `?studentId=${studentId}` : ''}`),
-  getDailyStatuses: (date = '') => request(`/nazem/daily-statuses${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+  getPlanStatuses: (studentId = '') => request(`/nazem/plan-statuses${studentId ? '?studentId=' + studentId : ''}`),
+  getDailyStatuses: (date = '') => request(`/nazem/daily-statuses${date ? '?date=' + encodeURIComponent(date) : ''}`),
 };

@@ -1,8 +1,9 @@
+import AuctionWinnerDialog from './AuctionWinnerDialog';
+import AuctionQuestionDialog from './AuctionQuestionDialog';
 import React, { useState } from 'react';
 import { Helmet } from 'react-helmet';
-import { Eye, Gavel, Minus, Plus, RefreshCw, RotateCcw, Trophy } from 'lucide-react';
+import { Gavel, Minus, Plus, RefreshCw, Trophy } from 'lucide-react';
 import GameThemeToggle from '@/components/games/shared/GameThemeToggle';
-import QuestionTimer from '@/components/games/shared/QuestionTimer';
 import AuctionDialog from './AuctionDialog';
 import useRewardUnits from '@/hooks/useRewardUnits';
 
@@ -135,57 +136,9 @@ const AuctionBoardView = ({
           </AuctionDialog>
         ) : null}
 
-        {!isScreenMode && phase === 'question' && question ? (
-          <AuctionDialog onClose={() => {}}>
-            <div className="auction-modal-title-row">
-              <h2>{question.category}</h2>
-              <button type="button" className="auction-change-question" disabled={isLoading} title="تغيير السؤال" onClick={onChangeQuestion}>
-                <RefreshCw size={20} />
-              </button>
-            </div>
-            <div className="auction-bid-chip">{bid.toLocaleString()}</div>
-            <QuestionTimer resetKey={question.id} />
-            <div className="auction-question">{question.question}</div>
-            {showAnswer ? <div className="auction-answer">الإجابة: {question.answer}</div> : null}
-            {!showAnswer ? (
-              <button type="button" className="auction-primary-button w-full" onClick={onShowAnswer}>
-                <Eye size={20} />
-                إظهار الإجابة
-              </button>
-            ) : (
-              <div className="auction-modal-actions">
-                <button type="button" className="auction-primary-button" onClick={() => onFinishBid(true)}>
-                  إجابة صحيحة (+{bid.toLocaleString()})
-                </button>
-                <button type="button" className="auction-danger-button" onClick={() => onFinishBid(false)}>
-                  إجابة خاطئة (-{bid.toLocaleString()})
-                </button>
-              </div>
-            )}
-          </AuctionDialog>
-        ) : null}
+        {<AuctionQuestionDialog isScreenMode={isScreenMode} phase={phase} question={question} isLoading={isLoading} onChangeQuestion={onChangeQuestion} bid={bid} showAnswer={showAnswer} onShowAnswer={onShowAnswer} onFinishBid={onFinishBid} />}
 
-        {isWinner ? (
-          <AuctionDialog onClose={() => {}} celebrate>
-            <h2 className="auction-winner-title">{winnerLabel?.startsWith('تعادل') ? winnerLabel : `مبروك الفوز للفريق: ${winnerLabel || winner?.name || '-'}`}</h2>
-            <div className="auction-rankings">
-              {rankings.map((team, index) => (
-                <div key={`${team.name}-${index}`}>
-                  <span>{index + 1}. {team.name}</span>
-                  <strong>{team.score.toLocaleString()}</strong>
-                </div>
-              ))}
-            </div>
-            {!isScreenMode ? <><button type="button" className="auction-primary-button w-full" onClick={onReset}>
-              <RotateCcw size={20} />
-              لعب مرة أخرى
-            </button>
-            <button type="button" className="auction-secondary-button w-full" onClick={onHome}>
-              العودة للرئيسية
-            </button>
-            </> : null}
-          </AuctionDialog>
-        ) : null}
+        {<AuctionWinnerDialog isWinner={isWinner} winnerLabel={winnerLabel} winner={winner} rankings={rankings} isScreenMode={isScreenMode} onReset={onReset} onHome={onHome} />}
       </section>
     </main>
   );

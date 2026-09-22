@@ -8,7 +8,7 @@ export default function QuranExecutionBreakdown({ bounds, scheduledEnd, actualEn
   const { start, expectedEnd: normalEnd, direction } = bounds;
   if (!start || !normalEnd || !actualEnd) return null;
   const position = (value) => ayahDisplay
-    ? `${value.surahName || ayahs.find((ayah) => Number(ayah.surah) === Number(value.surah))?.surahName || `سورة ${value.surah}`} آية ${value.ayah}`
+    ? `${value.surahName || ayahs.find((ayah) => Number(ayah.surah) === Number(value.surah))?.surahName || ('سورة ' + value.surah)} آية ${value.ayah}`
     : value.page;
   const range = (from, to) => `من ${position(from)} إلى ${position(to)}`;
   const segments = classifyPlanExecution({ actualStart: start, normalEnd, scheduledEnd, actualEnd, direction, allowCompensation: true, allowExtra: true });

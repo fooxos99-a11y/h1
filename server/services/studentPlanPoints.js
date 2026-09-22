@@ -21,6 +21,12 @@ export function buildStudentPlanPoints({ total, rows, transactions, attendance, 
     const day = dayFor(record.date);
     day.pending = false;
   }
+  addPointTransactions(transactions, today, dayFor);
+  calculateDailyMaximums(days, settings);
+  return { total: number(total), days: [...days.values()] };
+}
+
+function addPointTransactions(transactions, today, dayFor) {
   for (const row of transactions) {
     if (row.date > today) continue;
     const day = dayFor(row.date);
@@ -30,6 +36,9 @@ export function buildStudentPlanPoints({ total, rows, transactions, attendance, 
     day.details.push({ label: row.reason || labels[row.source] || 'أخرى', earned: value });
     if (!['attendance', 'quran_evaluation', 'quran_execution'].includes(row.source) && value > 0) day.maximum += value;
   }
+}
+
+function calculateDailyMaximums(days, settings) {
   for (const day of days.values()) {
     day.maximum += Math.max(0, number(settings.attendancePoints));
     for (const group of day.groups.values()) {
@@ -38,13 +47,14 @@ export function buildStudentPlanPoints({ total, rows, transactions, attendance, 
         const mastery = group[0].track === 'mastery';
         const repeats = number(mastery ? settings.masteryRepeatCount : settings.memorizationRepeatCount);
         const listening = number(mastery ? settings.masteryListeningCount : settings.memorizationListeningCount);
-        day.maximum += calculateStudentExecutionPoints({ taskType: 'memorization', track: group[0].track,
+        day.maximum += calculateStudentExecutionPoints({
+          taskType: 'memorization', track: group[0].track,
           completedRepeatCount: repeats, expectedRepeatCount: repeats,
-          completedListeningCount: listening, expectedListeningCount: listening, settings }).total;
+          completedListeningCount: listening, expectedListeningCount: listening, settings
+        }).total;
       }
     }
     day.maximum = Math.round(day.maximum);
     delete day.groups;
   }
-  return { total: number(total), days: [...days.values()] };
 }

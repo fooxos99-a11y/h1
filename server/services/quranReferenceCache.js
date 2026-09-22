@@ -1,5 +1,21 @@
 // Immutable reference data only; each database connection owns its own cache.
 const caches = new WeakMap();
+const chapterCaches = new WeakMap();
+
+/** Coalesce immutable chapter reads per database pool and return caller-owned rows. */
+export async function readQuranChapters(connection) {
+  let pending = chapterCaches.get(connection);
+  if (pending === undefined) {
+    // This fixed query has no external identifiers or values to interpolate.
+    pending = connection.query(`SELECT surah_number AS number, name_arabic AS name,
+      name_english AS englishName, ayah_count AS ayahCount,
+      start_page AS startPage, end_page AS endPage
+      FROM quran_surahs ORDER BY surah_number ASC`).then(([rows]) => rows);
+    chapterCaches.set(connection, pending);
+    pending.catch(() => chapterCaches.delete(connection));
+  }
+  return (await pending).map(row => ({ ...row }));
+}
 async function reference(connection) {
   let pending = caches.get(connection);
   if (!pending) {

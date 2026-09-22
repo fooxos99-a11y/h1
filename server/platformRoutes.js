@@ -86,7 +86,8 @@ router.post('/setup', async (req, res, next) => {
   try {
     const setupToken = String(req.body.setupToken || '');
     const expectedToken = String(process.env.PLATFORM_SETUP_TOKEN || '');
-    if (!expectedToken || setupToken.length !== expectedToken.length
+    // Empty configured tokens must never authenticate an empty supplied token.
+    if (expectedToken.length === 0 || setupToken.length !== expectedToken.length
       || !crypto.timingSafeEqual(Buffer.from(setupToken), Buffer.from(expectedToken))) {
       return res.status(403).json({ message: 'رمز إنشاء حساب المالك غير صحيح.' });
     }
@@ -410,7 +411,8 @@ router.get('/complexes/:id/overview', requirePlatformOwner, async (req, res, nex
     if (!complex) return res.status(404).json({ message: 'المجمع غير موجود.' });
     const period = resolveOverviewPeriod(req.query.days);
     const details = await readComplexDetails(complex, period);
-    const { databaseName: _databaseName, ...publicComplex } = complex;
+    const publicComplex = { ...complex };
+    delete publicComplex.databaseName;
     res.json({ period, updatedAt: new Date().toISOString(), complex: publicComplex, ...details });
   } catch (error) {
     next(error);

@@ -14,7 +14,7 @@ const NazemLinkCountSelector = ({ value, onChange, studentName = '' }) => (
   >
     <span>الربط:</span>
     <InlineRecitationSelect
-      ariaLabel={`عدد أوجه الربط${studentName ? ` لـ ${studentName}` : ''}`}
+      ariaLabel={`عدد أوجه الربط${studentName ? ' لـ ' + studentName : ''}`}
       value={normalizeNazemLinkCount(value)}
       options={options}
       onValueChange={(nextValue) => onChange?.(normalizeNazemLinkCount(nextValue))}

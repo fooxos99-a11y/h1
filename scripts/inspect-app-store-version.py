@@ -9,6 +9,7 @@ from app_store_http import request_json
 
 
 def ensure_release_notes(app_id, version_id, token, retry_state_transition=False):
+    """Ensure localized release notes exist, preserving notes when Apple keeps them locked."""
     arabic_notes = os.environ["APP_RELEASE_NOTES_AR"]
     english_notes = os.environ["APP_RELEASE_NOTES_EN"]
     localization_query = urllib.parse.urlencode(
@@ -49,44 +50,14 @@ def ensure_release_notes(app_id, version_id, token, retry_state_transition=False
         if localization.get("attributes", {}).get("whatsNew") == desired:
             continue
         localization_id = localization["id"]
-        attempts = 12 if retry_state_transition else 1
-        notes_updated = False
-        for attempt in range(attempts):
-            try:
-                request_json(
-                    f"/appStoreVersionLocalizations/{localization_id}",
-                    token,
-                    method="PATCH",
-                    payload={
-                        "data": {
-                            "type": "appStoreVersionLocalizations",
-                            "id": localization_id,
-                            "attributes": {"whatsNew": desired},
-                        }
-                    },
-                )
-                notes_updated = True
-                break
-            except RuntimeError as error:
-                state_is_transitioning = (
-                    "HTTP 409" in str(error)
-                    and "whatsNew" in str(error)
-                )
-                if not retry_state_transition or not state_is_transitioning:
-                    raise
-                if attempt == attempts - 1:
-                    print(
-                        "App Store release notes are still locked after the review "
-                        "transition; continuing with the existing notes."
-                    )
-                    break
-                print("App Store metadata is still transitioning; retrying in 10 seconds.")
-                time.sleep(10)
+        notes_updated = patch_release_notes(localization_id, desired, token, retry_state_transition)
+
         if notes_updated:
             print(f"Updated App Store release notes for {locale}.")
 
 
 def main():
+    """Apply only the release operations explicitly selected through environment flags."""
     key_id = os.environ["APPSTORE_API_KEY_ID"]
     issuer_id = os.environ["APPSTORE_ISSUER_ID"]
     private_key = os.environ["APPSTORE_API_PRIVATE_KEY"]
@@ -121,21 +92,7 @@ def main():
 
     print(f"App Store status for {bundle_id}:")
     versions = payload.get("data", [])
-    for version in payload.get("data", []):
-        attributes = version.get("attributes", {})
-        build_link = version.get("relationships", {}).get("build", {}).get("data")
-        build = builds.get(build_link.get("id"), {}) if build_link else {}
-        print(
-            json.dumps(
-                {
-                    "version": attributes.get("versionString"),
-                    "state": attributes.get("appStoreState"),
-                    "build": build.get("version"),
-                    "buildProcessingState": build.get("processingState"),
-                },
-                ensure_ascii=False,
-            )
-        )
+    print_version_status(versions, builds)
 
     if os.environ.get("REPLACE_READY_FOR_REVIEW_BUILD") != "true":
         return
@@ -219,6 +176,80 @@ def main():
         print(f"Version {version_string} already uses build {target_build_number}.")
         return
 
+    version_id = target_version["id"]
+    matching_items, matching_submissions, submission_states = find_version_review_items(app_id, version_id, token)
+
+    if not matching_items:
+        raise RuntimeError(
+            f"Version {version_string} is {current_state} but its review submission item "
+            f"was not found; submission states: {submission_states}"
+        )
+
+    reopen_review_submission(matching_submissions, matching_items, current_state, current_build, version_string, token)
+
+    wait_until_editable(app_id, version_id, version_string, current_version_string, rename_existing_version, token)
+
+
+
+def patch_release_notes(localization_id, desired, token, retry_state_transition):
+    """Retry only documented metadata-transition conflicts within a bounded budget."""
+    attempts = 12 if retry_state_transition else 1
+    notes_updated = False
+    for attempt in range(attempts):
+        try:
+            request_json(
+                f"/appStoreVersionLocalizations/{localization_id}",
+                token,
+                method="PATCH",
+                payload={
+                    "data": {
+                        "type": "appStoreVersionLocalizations",
+                        "id": localization_id,
+                        "attributes": {"whatsNew": desired},
+                    }
+                },
+            )
+            notes_updated = True
+            break
+        except RuntimeError as error:
+            state_is_transitioning = (
+                "HTTP 409" in str(error)
+                and "whatsNew" in str(error)
+            )
+            if not retry_state_transition or not state_is_transitioning:
+                raise
+            if attempt == attempts - 1:
+                print(
+                    "App Store release notes are still locked after the review "
+                    "transition; continuing with the existing notes."
+                )
+                break
+            print("App Store metadata is still transitioning; retrying in 10 seconds.")
+            time.sleep(10)
+    return notes_updated
+
+
+def print_version_status(versions, builds):
+    """Print version and build status without changing App Store state."""
+    for version in versions:
+        attributes = version.get("attributes", {})
+        build_link = version.get("relationships", {}).get("build", {}).get("data")
+        build = builds.get(build_link.get("id"), {}) if build_link else {}
+        print(
+            json.dumps(
+                {
+                    "version": attributes.get("versionString"),
+                    "state": attributes.get("appStoreState"),
+                    "build": build.get("version"),
+                    "buildProcessingState": build.get("processingState"),
+                },
+                ensure_ascii=False,
+            )
+        )
+
+
+def find_version_review_items(app_id, version_id, token):
+    """Find only review submission items that belong to the selected version."""
     submission_query = urllib.parse.urlencode(
         {
             "filter[platform]": "IOS",
@@ -229,7 +260,6 @@ def main():
     submissions = request_json(
         f"/apps/{app_id}/reviewSubmissions?{submission_query}", token
     )
-    version_id = target_version["id"]
     matching_items = []
     matching_submissions = []
     submission_states = []
@@ -259,12 +289,11 @@ def main():
         if submission_items:
             matching_items.extend(submission_items)
             matching_submissions.append(submission)
-    if not matching_items:
-        raise RuntimeError(
-            f"Version {version_string} is {current_state} but its review submission item "
-            f"was not found; submission states: {submission_states}"
-        )
+    return matching_items, matching_submissions, submission_states
 
+
+def reopen_review_submission(matching_submissions, matching_items, current_state, current_build, version_string, token):
+    """Cancel only matching active reviews, or detach their ready-for-review draft items."""
     if current_state in {"WAITING_FOR_REVIEW", "IN_REVIEW"}:
         canceled_submission_ids = []
         cancellable_submission_states = {
@@ -311,6 +340,9 @@ def main():
                 f"draft for version {version_string}."
             )
 
+
+def wait_until_editable(app_id, version_id, version_string, current_version_string, rename_existing_version, token):
+    """Wait for Apple to confirm editability before renaming or changing release notes."""
     for _ in range(18):
         time.sleep(10)
         refreshed = request_json(f"/appStoreVersions/{version_id}", token)
@@ -342,7 +374,6 @@ def main():
     raise RuntimeError(
         f"Version {version_string} did not become editable after review replacement"
     )
-
 
 if __name__ == "__main__":
     main()

@@ -48,8 +48,8 @@ test('server enforces Nazem count mode before teacher preferences', () => {
 });
 
 test('multiple local link ranges send the remote count exactly once, independent of faces and errors', async () => {
-  const start = server.indexOf("    if (Number(task.nazemManaged) && task.taskType === 'link') {", server.indexOf('const calculatedFaces ='));
-  const end = server.indexOf('    if (!notMemorized', start);
+  const start = server.indexOf('async function saveEvaluatedNazemLinkCount(');
+  const end = server.indexOf('async function restoreLateNazemTaskBounds(', start);
   const code = server.slice(start, end);
   for (const automaticCount of [5, 7, 40]) {
     const stored = [];
@@ -63,7 +63,8 @@ test('multiple local link ranges send the remote count exactly once, independent
           return [];
         } },
       });
-      await vm.runInContext(`(async () => {${code}})()`, context);
+      vm.runInContext(code, context);
+      await context.saveEvaluatedNazemLinkCount(context.task, context.connection, context.notMemorized, context.taskId);
     }
     assert.deepEqual(stored, [automaticCount, 0]);
   }

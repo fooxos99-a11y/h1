@@ -169,7 +169,7 @@ test('attendance points and repetition controls respect their execution actor an
   assert.doesNotMatch(server, /settings\.allowRepeatCountEditing = true/);
   assert.match(server, /allowRepeatCountEditing: !nazemManaged[\s\S]*settings\.allowRepeatCountEditing[\s\S]*canStudentExecuteQuranTask\(settings, 'memorization'\)/);
   assert.match(server, /allowListeningCountEditing: !nazemManaged[\s\S]*settings\.allowListeningCountEditing[\s\S]*canStudentExecuteQuranTask\(settings, 'memorization'\)/);
-  assert.match(server, /const actualRepeatCount = Number\.isFinite\(requestedRepeatCount\)/);
+  assert.match(server, /if \(Number\.isFinite\(requestedRepeatCount\)\)\s*\{\s*return Math\.min\(task\.nazemManaged \? 30 : expectedRepeatCount, Math\.max\(1, Math\.trunc\(requestedRepeatCount\)\)\)/);
   assert.match(server, /JSON_EXTRACT\(managedLink\.remote_snapshot, '\$\.primary\.repeatCount'\)/);
   assert.match(server, /row\.nazemManaged[\s\S]*\? 1/);
   assert.match(server, /task\.nazemManaged \|\| canTeacherExecuteQuranTask\(settings, 'repeat'\)/);
@@ -180,8 +180,9 @@ test('attendance points and repetition controls respect their execution actor an
   assert.match(nazemService, /JSON_EXTRACT\(planLink\.remote_snapshot, '\$\.primary\.repeatCount'\)/);
   assert.match(server, /expectedRepeatCount[\s\S]*actual_repeat_count = \?/);
   assert.match(server, /Math\.min\(task\.nazemManaged \? 30 : expectedRepeatCount/);
-  assert.match(server, /expectedRepeatCount: task\.nazemManaged[\s\S]*\? 30/);
-  assert.match(server, /expectedListeningCount: task\.nazemManaged[\s\S]*\? 1/);
+  assert.match(server, /if \(task\.nazemManaged\)\s*\{\s*return 30;[\s\S]*expectedRepeatCount: _resolveExpectedRepeatCount5\(\)/);
+  assert.match(server, /expectedListeningCount: getTeacherExpectedListeningCount\(task, settings\)/);
+  assert.match(server, /function getTeacherExpectedListeningCount\(task, settings\)[\s\S]*if \(task\.nazemManaged\) return 1;[\s\S]*normalizeRepeatCount\(task.track/);
   assert.match(server, /const completed = !notMemorized && task\.nazemManaged[\s\S]*task\.track === 'mastery'[\s\S]*\? true/);
   assert.doesNotMatch(server, /hasNazemMasteryResult|nazemCompleted/);
   assert.match(server, /expectedListeningCount[\s\S]*actual_listening_count = \?/);

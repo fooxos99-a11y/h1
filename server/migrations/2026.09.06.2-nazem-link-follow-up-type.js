@@ -17,7 +17,7 @@ async function replaceConstraint(connection, existing, allowLink) {
 
 export async function up(connection) {
   const existing = await readConstraint(connection);
-  if (existing && /'link'/i.test(existing.clause.replaceAll("\\'", "'"))) return;
+  if (existing && /'link'/i.test(existing.clause.replaceAll(String.raw`\'`, "'"))) return;
   // Replace the constraint atomically, without leaving a period of unchecked writes.
   await replaceConstraint(connection, existing, true);
 }

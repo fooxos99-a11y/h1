@@ -45,7 +45,7 @@ test('staff attendance covers teachers, reciters, and administrators with locati
   assert.match(clientPermissions, /key: 'staffAttendance', label: 'تحضير المعلمين والمقرئين والإدارة'/);
   assert.doesNotMatch(clientPermissions, /description:/);
   assert.match(serverPermissions, /'staffAttendance'/);
-  assert.match(server, /path\.startsWith\('\/staff-attendance'\)\) return \['staffAttendance'\]/);
+  assert.match(server, /\[path\.startsWith\('\/staff-attendance'\), \['staffAttendance'\]\]/);
   assert.match(dashboard, /isAdmin && dashboardPermissions\.includes\('staffAttendance'\)/);
   assert.doesNotMatch(server, /\['supervisor', 'reciter', 'admin'\]\.includes\(req\.auth\.role\) && path\.startsWith\('\/staff-attendance'\)/);
 });

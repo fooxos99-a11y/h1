@@ -137,7 +137,7 @@ export async function buildOverviewPdf(report, { fontPair = null } = {}) {
         doc.circle(x + cardWidth - 19, rowY + 6, 8).fill('#e0f2f8');
         write(number(rowIndex + 1), x + cardWidth - 25, rowY + 2, 12, { size: 7, bold: true, color: colors.primary, align: 'center', lineBreak: false });
         write(item.name || '-', x + 62, rowY, cardWidth - 92, { size: 8.5, bold: true, lineBreak: false });
-        write(`${number(item[valueKey])}${suffix === '%' ? '%' : ` ${suffix}`}`, x + 10, rowY, 54, { size: 8, bold: true, color, align: 'left', lineBreak: false });
+        write(`${number(item[valueKey])}${suffix === '%' ? '%' : ' ' + suffix}`, x + 10, rowY, 54, { size: 8, bold: true, color, align: 'left', lineBreak: false });
       });
     });
 

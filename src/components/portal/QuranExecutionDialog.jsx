@@ -239,7 +239,7 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
         return trackLabel;
       }
       if (type === 'repeat') {
-        return `التكرار ${repeatCount} مرة${data?.listeningEnabled ? ` والسماع ${Number(data?.listeningCount || 0)} مرة` : ''}`;
+        return `التكرار ${repeatCount} مرة${data?.listeningEnabled ? ' والسماع ' + Number(data?.listeningCount || 0) + ' مرة' : ''}`;
       }
       return typeLabels[type];
     };

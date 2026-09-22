@@ -60,7 +60,7 @@ if (!user) {
     const losingId = winningId === 1 ? 2 : 1;
     await run((connection) => connection.query('UPDATE student_quran_tasks SET points = 20 WHERE id = ?', [losingId]));
     await assert.rejects(reward(losingId, 20), { statusCode: 409 });
-    await assert.rejects(run(async (connection) => {
+    await assert.rejects(() => run(async (connection) => {
       await connection.query('UPDATE students SET points = 0 WHERE id = 1');
       throw new Error('injected rollback');
     }), /injected rollback/);

@@ -16,7 +16,7 @@ class AppStoreHttpTests(unittest.TestCase):
     def test_rejects_traversal_and_foreign_destinations_before_network_access(self):
         paths = ["https://evil.test/apps", "//evil.test/apps", "/../apps", "/apps/../users",
                  "/apps/./users", "/apps/%2e%2e/users", "/apps/%252e%252e/users",
-                 "/apps/a%2fb", "/apps\\users", "/apps#fragment", "/apps\n", "/apps//users", ""]
+                 "/apps/a%2fb", "/apps\\users", "/apps#fragment", "/apps\n", "/apps//users", "/unknownResource", ""]
         with patch("app_store_http.urllib.request.build_opener") as opener:
             for path in paths:
                 with self.subTest(path=path), self.assertRaises(ValueError):

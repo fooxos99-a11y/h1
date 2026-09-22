@@ -2,39 +2,15 @@ import json
 import os
 import time
 import urllib.parse
-import urllib.request
-from urllib.error import HTTPError
 
 import jwt
 
 
-API_ROOT = "https://api.appstoreconnect.apple.com/v1"
-
-
-def request_json(path, token, method="GET", payload=None):
-    body = json.dumps(payload).encode("utf-8") if payload is not None else None
-    headers = {"Authorization": f"Bearer {token}"}
-    if body is not None:
-        headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(
-        f"{API_ROOT}{path}",
-        data=body,
-        headers=headers,
-        method=method,
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            if response.status == 204:
-                return None
-            return json.load(response)
-    except HTTPError as error:
-        details = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(
-            f"App Store Connect returned HTTP {error.code}: {details}"
-        ) from error
+from app_store_http import request_json
 
 
 def main():
+    """Apply only the release operations explicitly selected through environment flags."""
     key_id = os.environ["APPSTORE_API_KEY_ID"]
     issuer_id = os.environ["APPSTORE_ISSUER_ID"]
     private_key = os.environ["APPSTORE_API_PRIVATE_KEY"]
@@ -66,6 +42,18 @@ def main():
     if not app_infos:
         raise RuntimeError(f"No App Store app info found for bundle ID {bundle_id}")
 
+    update_localized_names(app_infos, token, app_name)
+
+    copyright_text = os.environ.get("APP_COPYRIGHT", "").strip()
+    if not version_string or not (arabic_description or english_description or copyright_text):
+        return
+
+    update_version_metadata(app_id, token, version_string, arabic_description, english_description, copyright_text)
+
+
+
+def update_localized_names(app_infos, token, app_name):
+    """Update editable localized names and report any upstream rejection."""
     updated = 0
     update_errors = []
     for app_info in app_infos:
@@ -107,10 +95,9 @@ def main():
     if updated == 0:
         print("All App Store localizations already use the requested name.")
 
-    copyright_text = os.environ.get("APP_COPYRIGHT", "").strip()
-    if not version_string or not (arabic_description or english_description or copyright_text):
-        return
 
+def update_version_metadata(app_id, token, version_string, arabic_description, english_description, copyright_text):
+    """Update copyright and descriptions for the explicitly selected version."""
     version_query = urllib.parse.urlencode(
         {"filter[platform]": "IOS", "limit": 50}
     )
@@ -163,7 +150,6 @@ def main():
             },
         )
         print(f"{locale}: updated App Store description for {version_string}")
-
 
 if __name__ == "__main__":
     main()

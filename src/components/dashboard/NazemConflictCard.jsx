@@ -34,7 +34,7 @@ const recitationSnapshotText = (snapshot) => {
   const result = _resolveResult();
   const mistakes = Number(value.mistakeCount ?? value.remoteMistakeCount ?? value.mistake ?? 0)
     + Number(value.tune ?? 0);
-  return `${start} — ${end}${result ? ` · ${result}` : ''} · ${mistakes} خطأ`;
+  return `${start} — ${end}${result ? ' · ' + result : ''} · ${mistakes} خطأ`;
 };
 
 const snapshotText = (row, snapshot) => (

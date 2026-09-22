@@ -74,9 +74,9 @@ test('the actual repair removes only untouched stale reviews and never changes h
       if (sql.startsWith('DELETE')) { deletes.push(values); return [{}]; }
       return [[{ ...base, ...changes }]];
     } };
-    const result = await repair(connection, 28, '2026-09-07', [], [...desired, ...Array.from({ length: 10 }, (_, i) => 561 + i)], [], null, 10, desired);
+    const result = await repair(connection, { planId: 28, date: '2026-09-07', desiredLinkPages: [], allowedReviewPages: [...desired, ...Array.from({ length: 10 }, (_, i) => 561 + i)], desiredReviewPageCount: 10, desiredReviewPages: desired });
     assert.equal(result.removedReview, removable, JSON.stringify(changes));
     assert.equal(deletes.length, removable ? 1 : 0);
   }
-  await repair({ query: () => assert.fail('Historical tasks must remain unchanged') }, 28, '2026-09-06', [], [], [], null, 10, desired);
+  await repair({ query: () => assert.fail('Historical tasks must remain unchanged') }, { planId: 28, date: '2026-09-06', desiredLinkPages: [], allowedReviewPages: [], desiredReviewPageCount: 10, desiredReviewPages: desired });
 });

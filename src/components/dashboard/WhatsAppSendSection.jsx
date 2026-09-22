@@ -45,7 +45,6 @@ const WhatsAppSendSection = () => {
   const [isSending, setIsSending] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [whatsAppStatus, setWhatsAppStatus] = useState(null);
-  const [, setIsStatusLoading] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const statusRequestRef = useRef(false);
 
@@ -71,7 +70,8 @@ const WhatsAppSendSection = () => {
         const data = await studentsApi.getStudents({ committeeId: familyId });
         if (!cancelled) {
           setStudents(data);
-          setSelectedIds((current) => current.filter((id) => data.some((student) => Number(student.id) === Number(id))));
+          const studentIds = new Set(data.map((student) => Number(student.id)));
+          setSelectedIds((current) => current.filter((id) => studentIds.has(Number(id))));
         }
       } catch (error) {
         if (!cancelled) {
@@ -180,7 +180,6 @@ const WhatsAppSendSection = () => {
   const loadWhatsAppStatus = useCallback(async () => {
     if (statusRequestRef.current) return;
     statusRequestRef.current = true;
-    setIsStatusLoading(true);
     try {
       const status = await studentsApi.getWhatsAppStatus();
       setWhatsAppStatus((current) => {
@@ -199,7 +198,6 @@ const WhatsAppSendSection = () => {
       toast({ title: 'تعذر تحميل باركود واتساب', description: error.message, variant: 'destructive' });
     } finally {
       statusRequestRef.current = false;
-      setIsStatusLoading(false);
     }
   }, [toast]);
 

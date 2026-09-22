@@ -176,13 +176,7 @@ export const describeNazemPlanDifference = (localSnapshot, remoteSnapshot) => {
       continue;
     }
     if (!local || !remote) continue;
-    for (const [field, label] of PLAN_DIFFERENCE_FIELDS) {
-      const localValue = String(local[field] ?? '—');
-      const remoteValue = String(remote[field] ?? '—');
-      if (localValue !== remoteValue) {
-        differences.push(`${section} — ${label}: ${localValue} ← ${remoteValue}`);
-      }
-    }
+    appendNazemFieldDifferences(local, remote, differences, section);
   }
   return differences.join('، ').slice(0, 420);
 };
@@ -193,6 +187,17 @@ export const requiresNazemIdentityReview = ({
   identityWasConfirmed = false,
 }) => !identityWasConfirmed
   && calculateNameMatchConfidence(localTeacherName, externalTeacherName) < 0.8;
+
+/** Describe changed plan fields using the existing localized labels. */
+function appendNazemFieldDifferences(local, remote, differences, section) {
+  for (const [field, label] of PLAN_DIFFERENCE_FIELDS) {
+    const localValue = String(local[field] ?? '—');
+    const remoteValue = String(remote[field] ?? '—');
+    if (localValue !== remoteValue) {
+      differences.push(`${section} — ${label}: ${localValue} ← ${remoteValue}`);
+    }
+  }
+}
 
 async function loadAccount(connection, teacherId, { forVerification = false } = {}) {
   const [[account]] = await connection.query(
@@ -437,86 +442,7 @@ async function saveDiscoveredPlans(connection, teacherId, remotePlans, issues = 
   let linked = 0;
   let review = 0;
   for (const candidate of candidates) {
-    if (!candidate.studentId) {
-      review += 1;
-      continue;
-    }
-    if (Number(candidate.candidateCount || 0) > 1) {
-      await connection.query(
-        `UPDATE nazem_plan_candidates SET discovery_status = 'requires_review',
-          last_error_code = 'NAZEM_MULTIPLE_ACTIVE_PLANS',
-          last_error = 'وجدنا أكثر من خطة ناظم للطالب؛ اختر الخطة التي تريد اعتمادها.' WHERE id = ?`,
-        [candidate.id],
-      );
-      review += 1;
-      continue;
-    }
-    if (!candidate.localPlanId) {
-      await connection.query(
-        `UPDATE nazem_plan_candidates SET discovery_status = 'discovered',
-          last_error_code = NULL, last_error = NULL WHERE id = ?`,
-        [candidate.id],
-      );
-      continue;
-    }
-    const [[existingLink]] = await connection.query(
-      `SELECT id, remote_snapshot AS remoteSnapshot, last_synced_snapshot AS lastSyncedSnapshot
-       FROM nazem_plan_links
-       WHERE ruwasi_plan_id = ? AND teacher_id = ? AND nazem_plan_id = ? LIMIT 1`,
-      [candidate.localPlanId, teacherId, candidate.nazemPlanId],
-    );
-    if (existingLink) {
-      const remoteSnapshot = safeJson(candidate.remoteSnapshot, {});
-      const synced = safeJson(existingLink.lastSyncedSnapshot, {});
-      const baseline = synced.remote || safeJson(existingLink.remoteSnapshot, {});
-      const changed = !nazemPlanBundleMatches(remoteSnapshot, baseline);
-      await connection.query(
-        `UPDATE nazem_plan_candidates SET discovery_status = ?, last_error_code = NULL,
-          last_error = NULL WHERE id = ?`,
-        [changed ? 'discovered' : 'linked', candidate.id],
-      );
-      if (changed) review += 1;
-      else linked += 1;
-      continue;
-    }
-    const localPlan = await loadPlan(connection, candidate.localPlanId);
-    const reviewRange = await loadPlanReviewRange(connection, localPlan);
-    const mappedLocal = mapRuwasiPlanBundleToNazem(localPlan, reviewRange);
-    const remoteSnapshot = safeJson(candidate.remoteSnapshot, {});
-    if (!nazemPlanBundleMatches(remoteSnapshot, mappedLocal)) {
-      await connection.query(
-        `UPDATE nazem_plan_candidates SET discovery_status = 'discovered',
-          last_error_code = NULL, last_error = NULL WHERE id = ?`,
-        [candidate.id],
-      );
-      continue;
-    }
-    await connection.query(
-      `INSERT INTO nazem_plan_links
-        (ruwasi_plan_id, ruwasi_student_id, teacher_id, nazem_student_id,
-         nazem_plan_id, external_fingerprint, sync_status, last_synced_at,
-         last_remote_checked_at, local_snapshot, remote_snapshot, last_synced_snapshot)
-       VALUES (?, ?, ?, ?, ?, ?, 'synced', NOW(3), NOW(3), ?, ?, ?)
-       ON DUPLICATE KEY UPDATE nazem_plan_id = VALUES(nazem_plan_id),
-         sync_status = 'synced', last_error_code = NULL, last_error = NULL,
-         last_remote_checked_at = NOW(3), remote_snapshot = VALUES(remote_snapshot)`,
-      [
-        localPlan.id,
-        candidate.studentId,
-        teacherId,
-        candidate.nazemStudentId,
-        candidate.nazemPlanId,
-        snapshotHash(remoteSnapshot),
-        JSON.stringify(mappedLocal),
-        JSON.stringify(remoteSnapshot),
-        JSON.stringify({ local: mappedLocal, remote: remoteSnapshot }),
-      ],
-    );
-    await connection.query(
-      "UPDATE nazem_plan_candidates SET discovery_status = 'linked', last_error_code = NULL, last_error = NULL WHERE id = ?",
-      [candidate.id],
-    );
-    linked += 1;
+    ({ linked, review } = await reconcileDiscoveredPlan({ connection, teacherId, candidate, linked, review }));
   }
   return {
     remotePlanCount: remotePlans.length,
@@ -1076,11 +1002,7 @@ async function syncRecitation(connection, job) {
   const mapped = grouped
     ? mapRuwasiRecitationGroupToNazem(frozenRecitations)
     : mapRuwasiRecitationToNazem(frozenRecitations[0]);
-  if (remoteSource) {
-    mapped.nazemLateId = remoteSource.nazemLate ? remoteSource.id : null;
-    mapped.nazemSourceDayId = remoteSource.source_day_id || (!remoteSource.nazemLate ? remoteSource.id : null);
-    mapped.nazemSavedTarget = remoteSource;
-  }
+  attachRecitationSourceIdentity(remoteSource, mapped);
   if (dailyFollowUpId) {
     await connection.query(
       `UPDATE nazem_daily_follow_up_links SET local_snapshot = ?, last_error_code = NULL, last_error = NULL
@@ -1207,6 +1129,15 @@ async function syncRecitation(connection, job) {
     throw translateAdapterFailure(cause, 'إرسال التسميع');
   } finally {
     await adapter.close();
+  }
+}
+
+/** Keep the saved remote day and late-record identity attached to the outgoing snapshot. */
+function attachRecitationSourceIdentity(remoteSource, mapped) {
+  if (remoteSource) {
+    mapped.nazemLateId = remoteSource.nazemLate ? remoteSource.id : null;
+    mapped.nazemSourceDayId = remoteSource.source_day_id || (!remoteSource.nazemLate ? remoteSource.id : null);
+    mapped.nazemSavedTarget = remoteSource;
   }
 }
 
@@ -1511,48 +1442,9 @@ async function saveRemoteFollowUp(connection, link, day) {
   } catch (error) {
     if (error?.code !== 'RUWASI_DAILY_ATTEMPTS_NOT_FOUND') throw error;
   }
-  if (existingGrouped?.recitations?.length) {
-    local = recitationIdentityFromReceipt(day, existingGrouped.recitations, local);
-    const existingLocal = { ...mapRuwasiRecitationGroupToNazem(existingGrouped.recitations),
-      ...(local?.nazemSourceDayId ? { nazemSourceDayId: local.nazemSourceDayId } : {}),
-      ...(local?.nazemLateId ? { nazemLateId: local.nazemLateId } : {}),
-      ...(local?.nazemSavedTarget ? { nazemSavedTarget: local.nazemSavedTarget } : {}),
-    };
-    await connection.query(
-      'UPDATE nazem_daily_follow_up_links SET local_snapshot = ? WHERE id = ?',
-      [JSON.stringify(existingLocal), dailyFollowUpId],
-    );
-    if (remoteFollowUpMatchesLocal(day, existingLocal)) {
-      await connection.query(
-        `UPDATE nazem_daily_follow_up_links SET sync_status = 'synced', nazem_record_id = ?,
-          remote_snapshot = ?, last_synced_at = NOW(3), last_remote_checked_at = NOW(3),
-          last_error_code = NULL, last_error = NULL WHERE id = ?`,
-        [String(day.id), JSON.stringify(day), dailyFollowUpId],
-      );
-      await connection.query(
-        `UPDATE nazem_recitation_links SET sync_status = 'synced', remote_snapshot = ?,
-          last_synced_at = NOW(3), last_error_code = NULL, last_error = NULL
-         WHERE daily_follow_up_id = ? AND teacher_id = ? AND ruwasi_recitation_id IN (?)`,
-        [JSON.stringify(day), dailyFollowUpId, link.teacherId, existingGrouped.recitations.map(attempt => attempt.id)],
-      );
-      await resolveOpenNazemConflicts(connection, 'recitation_day', dailyFollowUpId, 'matched_automatically');
-      await importNazemLinkResult(connection, link, day, dailyFollowUpId);
-      await enqueueNazemPointReconciliation(connection, dailyFollowUpId, day);
-      await reconcileConfirmedRecitationJobs(connection, link.teacherId);
-      return { synced: 1, conflicts: 0, imported: 0 };
-    }
-    if (hasLocalRecitation(existingGrouped.recitations)) {
-      await connection.query(
-        `UPDATE nazem_daily_follow_up_links SET sync_status = 'conflict',
-          last_error_code = 'NAZEM_LOCAL_RESULT_CONFLICT',
-          last_error = 'تختلف نتيجة ناظم عن التقييم المحلي المحفوظ؛ لم تتغير النتيجة أو العلامات وتحتاج مطابقة.'
-         WHERE id = ?`, [dailyFollowUpId],
-      );
-      return { synced: 0, conflicts: 1, imported: 0, review: 1, issueCode: 'NAZEM_LOCAL_RESULT_CONFLICT' };
-    }
-  }
-
-  const [tasks] = await connection.query(
+  const reconcileExistingRemoteFollowUpResult = await reconcileExistingRemoteFollowUp({ existingGrouped, local, day, connection, dailyFollowUpId, link });
+    if (reconcileExistingRemoteFollowUpResult) { return reconcileExistingRemoteFollowUpResult; }
+      const [tasks] = await connection.query(
     `SELECT task.id, task.track, task.target_pages AS targetPages, task.from_page AS fromPage, task.to_page AS toPage,
       task.from_surah AS fromSurah, task.from_ayah AS fromAyah,
       task.to_surah AS toSurah, task.to_ayah AS toAyah,
@@ -1625,7 +1517,103 @@ async function saveRemoteFollowUp(connection, link, day) {
     [dailyFollowUpId],
   );
   const attemptIds = [];
-  for (let index = 0; index < tasks.length; index += 1) {
+  await persistRemoteTaskAttempts({ tasks, completed, authoritativeEnd, direction, totalErrors, rewardSettings, day, track, connection, link, attemptIds, dailyFollowUpId });
+  let importedRepeatCount = 0;
+  let importedListeningCount = 0;
+  let importedLinkCount = 0;
+  ({ importedRepeatCount, importedListeningCount, importedLinkCount } = await saveRemoteMemorizationCounts({ day, importedRepeatCount, completed, importedListeningCount, importedLinkCount, connection, link, track, first }));
+  if (completed && day.taskType === 'memorization' && track === first.planTrack) {
+    await advanceNazemMemorizationCursor(connection, {
+      planId: link.planId,
+      planEnd: { page: first.planEndPage, surah: first.planEndSurah, ayah: first.planEndAyah },
+      actualEnd: authoritativeEnd,
+      direction,
+    });
+  }
+  const importedSnapshot = {
+    taskType: day.taskType,
+    remoteType: day.remoteType,
+    completed,
+    mistakeCount: totalErrors,
+    warningCount: 0,
+    date: day.date,
+    attendanceStatus: Number(day.attendanceStatus),
+    fromSurahId: Number(day.surah_from),
+    fromAyah: Number(day.verse_from),
+    scheduledToSurahId: Number(day.surah_to),
+    scheduledToAyah: Number(day.verse_to),
+    toSurahId: Number(day.actual_surah_to || day.surah_to),
+    toAyah: Number(day.actual_verse_to || day.verse_to),
+    taskIds: tasks.map((task) => Number(task.id)),
+    attemptIds,
+    repeatCount: importedRepeatCount,
+    listeningCount: importedListeningCount,
+    linkCount: importedLinkCount,
+    importedFromNazem: true,
+  };
+  await connection.query(
+    `UPDATE nazem_daily_follow_up_links SET sync_status = 'synced', local_snapshot = ?,
+      remote_snapshot = ?, last_synced_at = NOW(3), last_remote_checked_at = NOW(3),
+      last_error_code = NULL, last_error = NULL WHERE id = ?`,
+    [JSON.stringify(importedSnapshot), JSON.stringify(day), dailyFollowUpId],
+  );
+  await resolveOpenNazemConflicts(connection, 'recitation_day', dailyFollowUpId, 'nazem_applied_automatically');
+  await importNazemLinkResult(connection, link, day, dailyFollowUpId);
+  await enqueueNazemPointReconciliation(connection, dailyFollowUpId, day);
+  await reconcileConfirmedRecitationJobs(connection, link.teacherId);
+  return { synced: 1, conflicts: 0, imported: 1 };
+}
+
+
+
+/** Import repetition, listening and link counts without replacing an independently recorded link count. */
+async function saveRemoteMemorizationCounts({ day, importedRepeatCount, completed, importedListeningCount, importedLinkCount, connection, link, track, first }) {
+  if (day.taskType !== 'memorization') { return { importedRepeatCount, importedListeningCount, importedLinkCount }; }
+
+    importedRepeatCount = completed
+      ? Math.min(30, Math.max(0, Math.trunc(Number(day.repetition || 0))))
+      : 0;
+    importedListeningCount = completed && Number(day.hearing) === 1 ? 1 : 0;
+    importedLinkCount = completed ? normalizeNazemLinkCount(day.link) : 0;
+    await connection.query(
+      `UPDATE student_quran_tasks
+       SET student_status = ?,
+           actual_to_page = CASE WHEN ? = 1 THEN to_page ELSE NULL END,
+           actual_to_surah = CASE WHEN ? = 1 THEN to_surah ELSE NULL END,
+           actual_to_ayah = CASE WHEN ? = 1 THEN to_ayah ELSE NULL END,
+           actual_repeat_count = ?, actual_listening_count = ?,
+           execution_state = CASE WHEN ? = 1 THEN 'complete' ELSE NULL END,
+           execution_actor_role = 'teacher', execution_actor_id = ?, executed_at = NOW(3)
+       WHERE plan_id = ? AND student_id = ? AND task_date = ? AND task_type = 'repeat' AND track = ?
+         AND from_surah = ? AND from_ayah = ? AND to_surah = ? AND to_ayah = ?`,
+      [
+        completed ? 'done' : 'not_done', completed ? 1 : 0, completed ? 1 : 0, completed ? 1 : 0,
+        importedRepeatCount, importedListeningCount, completed ? 1 : 0, link.teacherId,
+        link.planId, link.studentId, day.date, track,
+        Number(day.surah_from), Number(day.verse_from), Number(day.surah_to), Number(day.verse_to),
+      ]
+    );
+    await connection.query(
+      `UPDATE student_quran_tasks SET actual_link_count = NULL
+       WHERE plan_id = ? AND student_id = ? AND task_date = ? AND task_type = 'memorization' AND track = ?`,
+      [link.planId, link.studentId, day.date, track]
+    );
+    const [[standaloneLink]] = await connection.query(
+      `SELECT id FROM student_quran_tasks WHERE plan_id = ? AND student_id = ? AND task_date = ?
+       AND task_type = 'link' AND actual_link_count IS NOT NULL LIMIT 1`,
+      [link.planId, link.studentId, day.date]
+    );
+    if (!standaloneLink) await connection.query(
+      'UPDATE student_quran_tasks SET actual_link_count = ? WHERE id = ?',
+      [importedLinkCount, Number(first.id)]
+    );
+  return { importedRepeatCount, importedListeningCount, importedLinkCount };
+}
+
+
+/** Persist authoritative remote outcomes and idempotent attempt identities within the caller transaction. */
+async function persistRemoteTaskAttempts({ tasks, completed, authoritativeEnd, direction, totalErrors, rewardSettings, day, track, connection, link, attemptIds, dailyFollowUpId }) {
+  for (let index = 0;index < tasks.length;index += 1) {
     const task = tasks[index];
     const taskStart = { page: task.fromPage, surah: task.fromSurah, ayah: task.fromAyah };
     const taskEnd = { page: task.toPage, surah: task.toSurah, ayah: task.toAyah };
@@ -1670,26 +1658,26 @@ async function saveRemoteFollowUp(connection, link, day) {
         evaluated_by = ?, evaluated_at = NOW(3)
        WHERE id = ?`,
       [taskCompleted ? 'متقن' : 'يحتاج إعادة', mistakes, score, maxScore,
-        policy.warningDeduction, policy.mistakeDeduction, passingScore,
-        taskCompleted ? 1 : 0,
-        taskCompleted ? 'done' : 'not_done',
-        taskActual?.page || null,
-        taskActual?.surah || null,
-        taskActual?.ayah || null,
+      policy.warningDeduction, policy.mistakeDeduction, passingScore,
+      taskCompleted ? 1 : 0,
+      taskCompleted ? 'done' : 'not_done',
+      taskActual?.page || null,
+      taskActual?.surah || null,
+      taskActual?.ayah || null,
         executionState,
-        link.teacherId,
-        link.teacherId,
-        task.id],
+      link.teacherId,
+      link.teacherId,
+      task.id]
     );
     const requestId = `nazem:${day.id}:${task.id}`;
     await connection.query(
       `UPDATE student_quran_recitation_attempts SET is_official = 0
        WHERE task_id = ? AND is_official = 1 AND COALESCE(request_id, '') <> ?`,
-      [task.id, requestId],
+      [task.id, requestId]
     );
     const [[sequence]] = await connection.query(
       'SELECT COALESCE(MAX(attempt_number), 0) + 1 AS attemptNumber FROM student_quran_recitation_attempts WHERE task_id = ?',
-      [task.id],
+      [task.id]
     );
     const [attempt] = await connection.query(
       `INSERT INTO student_quran_recitation_attempts
@@ -1709,7 +1697,7 @@ async function saveRemoteFollowUp(connection, link, day) {
          evaluated_at = NOW(3)`,
       [task.id, link.studentId, link.teacherId, day.date, Number(sequence.attemptNumber || 1),
         requestId, mistakes, score, maxScore,
-        policy.warningDeduction, policy.mistakeDeduction, passingScore, taskCompleted ? 1 : 0],
+      policy.warningDeduction, policy.mistakeDeduction, passingScore, taskCompleted ? 1 : 0]
     );
     attemptIds.push(Number(attempt.insertId));
     const fingerprint = crypto.createHash('sha256')
@@ -1723,93 +1711,58 @@ async function saveRemoteFollowUp(connection, link, day) {
        ON DUPLICATE KEY UPDATE daily_follow_up_id = VALUES(daily_follow_up_id),
          sync_status = 'synced', last_synced_at = NOW(3), remote_snapshot = VALUES(remote_snapshot),
          last_error_code = NULL, last_error = NULL`,
-      [attempt.insertId, task.id, link.planId, link.teacherId, dailyFollowUpId, fingerprint, JSON.stringify(day)],
+      [attempt.insertId, task.id, link.planId, link.teacherId, dailyFollowUpId, fingerprint, JSON.stringify(day)]
     );
   }
-  let importedRepeatCount = 0;
-  let importedListeningCount = 0;
-  let importedLinkCount = 0;
-  if (day.taskType === 'memorization') {
-    importedRepeatCount = completed
-      ? Math.min(30, Math.max(0, Math.trunc(Number(day.repetition || 0))))
-      : 0;
-    importedListeningCount = completed && Number(day.hearing) === 1 ? 1 : 0;
-    importedLinkCount = completed ? normalizeNazemLinkCount(day.link) : 0;
-    await connection.query(
-      `UPDATE student_quran_tasks
-       SET student_status = ?,
-           actual_to_page = CASE WHEN ? = 1 THEN to_page ELSE NULL END,
-           actual_to_surah = CASE WHEN ? = 1 THEN to_surah ELSE NULL END,
-           actual_to_ayah = CASE WHEN ? = 1 THEN to_ayah ELSE NULL END,
-           actual_repeat_count = ?, actual_listening_count = ?,
-           execution_state = CASE WHEN ? = 1 THEN 'complete' ELSE NULL END,
-           execution_actor_role = 'teacher', execution_actor_id = ?, executed_at = NOW(3)
-       WHERE plan_id = ? AND student_id = ? AND task_date = ? AND task_type = 'repeat' AND track = ?
-         AND from_surah = ? AND from_ayah = ? AND to_surah = ? AND to_ayah = ?`,
-      [
-        completed ? 'done' : 'not_done', completed ? 1 : 0, completed ? 1 : 0, completed ? 1 : 0,
-        importedRepeatCount, importedListeningCount, completed ? 1 : 0, link.teacherId,
-        link.planId, link.studentId, day.date, track,
-        Number(day.surah_from), Number(day.verse_from), Number(day.surah_to), Number(day.verse_to),
-      ],
-    );
-    await connection.query(
-      `UPDATE student_quran_tasks SET actual_link_count = NULL
-       WHERE plan_id = ? AND student_id = ? AND task_date = ? AND task_type = 'memorization' AND track = ?`,
-      [link.planId, link.studentId, day.date, track],
-    );
-    const [[standaloneLink]] = await connection.query(
-      `SELECT id FROM student_quran_tasks WHERE plan_id = ? AND student_id = ? AND task_date = ?
-       AND task_type = 'link' AND actual_link_count IS NOT NULL LIMIT 1`,
-      [link.planId, link.studentId, day.date],
-    );
-    if (!standaloneLink) await connection.query(
-      'UPDATE student_quran_tasks SET actual_link_count = ? WHERE id = ?',
-      [importedLinkCount, Number(first.id)],
-    );
-  }
-  if (completed && day.taskType === 'memorization' && track === first.planTrack) {
-    await advanceNazemMemorizationCursor(connection, {
-      planId: link.planId,
-      planEnd: { page: first.planEndPage, surah: first.planEndSurah, ayah: first.planEndAyah },
-      actualEnd: authoritativeEnd,
-      direction,
-    });
-  }
-  const importedSnapshot = {
-    taskType: day.taskType,
-    remoteType: day.remoteType,
-    completed,
-    mistakeCount: totalErrors,
-    warningCount: 0,
-    date: day.date,
-    attendanceStatus: Number(day.attendanceStatus),
-    fromSurahId: Number(day.surah_from),
-    fromAyah: Number(day.verse_from),
-    scheduledToSurahId: Number(day.surah_to),
-    scheduledToAyah: Number(day.verse_to),
-    toSurahId: Number(day.actual_surah_to || day.surah_to),
-    toAyah: Number(day.actual_verse_to || day.verse_to),
-    taskIds: tasks.map((task) => Number(task.id)),
-    attemptIds,
-    repeatCount: importedRepeatCount,
-    listeningCount: importedListeningCount,
-    linkCount: importedLinkCount,
-    importedFromNazem: true,
-  };
-  await connection.query(
-    `UPDATE nazem_daily_follow_up_links SET sync_status = 'synced', local_snapshot = ?,
-      remote_snapshot = ?, last_synced_at = NOW(3), last_remote_checked_at = NOW(3),
-      last_error_code = NULL, last_error = NULL WHERE id = ?`,
-    [JSON.stringify(importedSnapshot), JSON.stringify(day), dailyFollowUpId],
-  );
-  await resolveOpenNazemConflicts(connection, 'recitation_day', dailyFollowUpId, 'nazem_applied_automatically');
-  await importNazemLinkResult(connection, link, day, dailyFollowUpId);
-  await enqueueNazemPointReconciliation(connection, dailyFollowUpId, day);
-  await reconcileConfirmedRecitationJobs(connection, link.teacherId);
-  return { synced: 1, conflicts: 0, imported: 1 };
 }
 
+
+/** Match existing receipt-bound recitations before importing remote data or recording a local conflict. */
+async function reconcileExistingRemoteFollowUp({ existingGrouped, local, day, connection, dailyFollowUpId, link }) {
+if (existingGrouped?.recitations?.length) {
+    local = recitationIdentityFromReceipt(day, existingGrouped.recitations, local);
+    const existingLocal = { ...mapRuwasiRecitationGroupToNazem(existingGrouped.recitations),
+      ...(local?.nazemSourceDayId ? { nazemSourceDayId: local.nazemSourceDayId } : {}),
+      ...(local?.nazemLateId ? { nazemLateId: local.nazemLateId } : {}),
+      ...(local?.nazemSavedTarget ? { nazemSavedTarget: local.nazemSavedTarget } : {}),
+    };
+    await connection.query(
+      'UPDATE nazem_daily_follow_up_links SET local_snapshot = ? WHERE id = ?',
+      [JSON.stringify(existingLocal), dailyFollowUpId],
+    );
+    if (remoteFollowUpMatchesLocal(day, existingLocal)) {
+      await connection.query(
+        `UPDATE nazem_daily_follow_up_links SET sync_status = 'synced', nazem_record_id = ?,
+          remote_snapshot = ?, last_synced_at = NOW(3), last_remote_checked_at = NOW(3),
+          last_error_code = NULL, last_error = NULL WHERE id = ?`,
+        [String(day.id), JSON.stringify(day), dailyFollowUpId],
+      );
+      await connection.query(
+        `UPDATE nazem_recitation_links SET sync_status = 'synced', remote_snapshot = ?,
+          last_synced_at = NOW(3), last_error_code = NULL, last_error = NULL
+         WHERE daily_follow_up_id = ? AND teacher_id = ? AND ruwasi_recitation_id IN (?)`,
+        [JSON.stringify(day), dailyFollowUpId, link.teacherId, existingGrouped.recitations.map(attempt => attempt.id)],
+      );
+      await resolveOpenNazemConflicts(connection, 'recitation_day', dailyFollowUpId, 'matched_automatically');
+      await importNazemLinkResult(connection, link, day, dailyFollowUpId);
+      await enqueueNazemPointReconciliation(connection, dailyFollowUpId, day);
+      await reconcileConfirmedRecitationJobs(connection, link.teacherId);
+      return { synced: 1, conflicts: 0, imported: 0 };
+    }
+    if (hasLocalRecitation(existingGrouped.recitations)) {
+      await connection.query(
+        `UPDATE nazem_daily_follow_up_links SET sync_status = 'conflict',
+          last_error_code = 'NAZEM_LOCAL_RESULT_CONFLICT',
+          last_error = 'تختلف نتيجة ناظم عن التقييم المحلي المحفوظ؛ لم تتغير النتيجة أو العلامات وتحتاج مطابقة.'
+         WHERE id = ?`, [dailyFollowUpId],
+      );
+      return { synced: 0, conflicts: 1, imported: 0, review: 1, issueCode: 'NAZEM_LOCAL_RESULT_CONFLICT' };
+    }
+  }
+
+
+  return null;
+}
 const NAZEM_ATTENDANCE_TO_RUWASI = Object.freeze({
   2: 'present',
   3: 'absent',
@@ -2028,28 +1981,7 @@ async function refreshTeacherFollowUps(connection, job) {
     const issues = [];
     let imported = 0;
     const checkedStudentIds = [];
-    for (const [index, link] of links.entries()) {
-      await updateNazemJobProgress(connection, job, 10 + (index / Math.max(1, links.length)) * 85, 'followups_loading');
-      try {
-        let phaseStarted = Date.now();
-        const history = await adapter.readStudentFollowUpHistory(link.nazemPlanId, {
-          nazemStudentId: link.nazemStudentId, nazemStudentName: link.nazemStudentName,
-        }, 1, { endDate: job.operationType === 'account.daily_reconcile' ? job.payload.workDate : null,
-          confirmedRecordIds: await loadConfirmedNazemRecordIds(connection, { ...link, teacherId: job.teacherId }) });
-        timing.fetchMs += Date.now() - phaseStarted;
-        phaseStarted = Date.now();
-        const result = await importTeacherFollowUps(connection, { ...link, teacherId: job.teacherId }, history);
-        imported += result.imported;
-        if (result.review) issues.push(...(result.issues?.length ? result.issues : [{ studentId: link.studentId, code: 'NAZEM_FOLLOW_UP_REVIEW' }]));
-        await revalidatePendingNazemIdentity(connection, adapter, { ...link, teacherId: job.teacherId });
-        timing.importMs += Date.now() - phaseStarted;
-        if (!links.slice(index + 1).some(next => Number(next.studentId) === Number(link.studentId))) checkedStudentIds.push(Number(link.studentId));
-        await recordNazemStudentRefresh(connection, job, checkedStudentIds);
-      } catch (error) {
-        if (error.retryable || /LOGIN|AUTH|SESSION/.test(error.code || '')) throw error;
-        issues.push({ studentId: link.studentId, code: error.code || 'NAZEM_FOLLOW_UP_FAILED' });
-      }
-    }
+    imported = await refreshLinkedStudentFollowUps({ links, connection, job, adapter, timing, imported, issues, checkedStudentIds });
     if (issues.length) {
       const error = reviewNazemError(describeNazemFollowUpIssues(issues), 'NAZEM_FOLLOW_UP_PARTIAL');
       error.details = { issues, timing: { ...timing, totalMs: Date.now() - started } };
@@ -2058,6 +1990,35 @@ async function refreshTeacherFollowUps(connection, job) {
     await markNazemFollowUpRefreshSucceeded(connection, job.teacherId, encryptNazemJson(await adapter.getSessionState()));
     return { checkedLinks: links.length, imported, timing: { ...timing, totalMs: Date.now() - started } };
   } finally { await adapter.close(); }
+}
+
+/** Refresh linked students in order and retain partial failures for review without discarding successful imports. */
+async function refreshLinkedStudentFollowUps({ links, connection, job, adapter, timing, imported, issues, checkedStudentIds }) {
+  for (const [index, link] of links.entries()) {
+    await updateNazemJobProgress(connection, job, 10 + (index / Math.max(1, links.length)) * 85, 'followups_loading');
+    try {
+      let phaseStarted = Date.now();
+      const history = await adapter.readStudentFollowUpHistory(link.nazemPlanId, {
+        nazemStudentId: link.nazemStudentId, nazemStudentName: link.nazemStudentName,
+      }, 1, {
+        endDate: job.operationType === 'account.daily_reconcile' ? job.payload.workDate : null,
+        confirmedRecordIds: await loadConfirmedNazemRecordIds(connection, { ...link, teacherId: job.teacherId })
+      });
+      timing.fetchMs += Date.now() - phaseStarted;
+      phaseStarted = Date.now();
+      const result = await importTeacherFollowUps(connection, { ...link, teacherId: job.teacherId }, history);
+      imported += result.imported;
+      if (result.review) issues.push(...(result.issues?.length ? result.issues : [{ studentId: link.studentId, code: 'NAZEM_FOLLOW_UP_REVIEW' }]));
+      await revalidatePendingNazemIdentity(connection, adapter, { ...link, teacherId: job.teacherId });
+      timing.importMs += Date.now() - phaseStarted;
+      if (!links.slice(index + 1).some(next => Number(next.studentId) === Number(link.studentId))) checkedStudentIds.push(Number(link.studentId));
+      await recordNazemStudentRefresh(connection, job, checkedStudentIds);
+    } catch (error) {
+      if (error.retryable || /LOGIN|AUTH|SESSION/.test(error.code || '')) throw error;
+      issues.push({ studentId: link.studentId, code: error.code || 'NAZEM_FOLLOW_UP_FAILED' });
+    }
+  }
+  return imported;
 }
 
 async function reconcileTeacher(connection, job) {
@@ -2363,52 +2324,149 @@ export async function applyNazemEntityFailure(connection, job, error, status) {
        WHERE daily_follow_up_id = ? AND teacher_id = ?`,
       [status, errorCode, message, job.entityId, job.teacherId],
     );
-    if (status === 'conflict') {
-      const [[link]] = await connection.query(
-        `SELECT local_snapshot AS localSnapshot, remote_snapshot AS remoteSnapshot
-         FROM nazem_daily_follow_up_links WHERE id = ? AND teacher_id = ? LIMIT 1`,
-        [job.entityId, job.teacherId],
-      );
-      await saveOpenNazemConflict(connection, {
-        entityType: 'recitation_day',
-        entityId: job.entityId,
-        teacherId: job.teacherId,
-        localSnapshot: safeJson(link?.localSnapshot, {}),
-        remoteSnapshot: error?.details?.remote || safeJson(link?.remoteSnapshot, { errorCode, message }),
-      });
-    }
+    await recordDailyFollowUpConflict({ status, connection, job, error, errorCode, message });
   } else if (job.entityType === 'recitation' && job.entityId) {
     await connection.query(
       `UPDATE nazem_recitation_links SET sync_status = ?, last_error_code = ?, last_error = ?
        WHERE ruwasi_recitation_id = ? AND teacher_id = ?`,
       [status, errorCode, message, job.entityId, job.teacherId],
     );
-    if (status === 'conflict') {
-      const [[link]] = await connection.query(
-        `SELECT local_snapshot AS localSnapshot, remote_snapshot AS remoteSnapshot
-         FROM nazem_recitation_links WHERE ruwasi_recitation_id = ? AND teacher_id = ? LIMIT 1`,
-        [job.entityId, job.teacherId],
-      );
-      const [[existing]] = await connection.query(
-        `SELECT id FROM nazem_sync_conflicts
-         WHERE entity_type = 'recitation' AND entity_id = ? AND status = 'open' LIMIT 1`,
-        [job.entityId],
-      );
-      if (!existing) {
-        await connection.query(
-          `INSERT INTO nazem_sync_conflicts
-            (entity_type, entity_id, teacher_id, local_snapshot, remote_snapshot, base_snapshot)
-           VALUES ('recitation', ?, ?, ?, ?, NULL)`,
-          [
-            job.entityId,
-            job.teacherId,
-            JSON.stringify(safeJson(link?.localSnapshot, {})),
-            JSON.stringify(error?.details?.remote || safeJson(link?.remoteSnapshot, { errorCode, message })),
-          ],
-        );
-      }
-    }
+    await recordRecitationConflict({ status, connection, job, error, errorCode, message });
   }
 }
 
 export const parseNazemSnapshot = (value) => safeJson(value, {});
+
+/** Preserve existing open conflicts and create a snapshot only when none exists. */
+async function recordRecitationConflict({ status, connection, job, error, errorCode, message }) {
+  if (status === 'conflict') {
+    const [[link]] = await connection.query(
+      `SELECT local_snapshot AS localSnapshot, remote_snapshot AS remoteSnapshot
+         FROM nazem_recitation_links WHERE ruwasi_recitation_id = ? AND teacher_id = ? LIMIT 1`,
+      [job.entityId, job.teacherId]
+    );
+    const [[existing]] = await connection.query(
+      `SELECT id FROM nazem_sync_conflicts
+         WHERE entity_type = 'recitation' AND entity_id = ? AND status = 'open' LIMIT 1`,
+      [job.entityId]
+    );
+    if (!existing) {
+      await connection.query(
+        `INSERT INTO nazem_sync_conflicts
+            (entity_type, entity_id, teacher_id, local_snapshot, remote_snapshot, base_snapshot)
+           VALUES ('recitation', ?, ?, ?, ?, NULL)`,
+        [
+          job.entityId,
+          job.teacherId,
+          JSON.stringify(safeJson(link?.localSnapshot, {})),
+          JSON.stringify(error?.details?.remote || safeJson(link?.remoteSnapshot, { errorCode, message })),
+        ]
+      );
+    }
+  }
+}
+
+/** Record the current daily follow-up snapshots when synchronization conflicts. */
+async function recordDailyFollowUpConflict({ status, connection, job, error, errorCode, message }) {
+  if (status === 'conflict') {
+    const [[link]] = await connection.query(
+      `SELECT local_snapshot AS localSnapshot, remote_snapshot AS remoteSnapshot
+         FROM nazem_daily_follow_up_links WHERE id = ? AND teacher_id = ? LIMIT 1`,
+      [job.entityId, job.teacherId]
+    );
+    await saveOpenNazemConflict(connection, {
+      entityType: 'recitation_day',
+      entityId: job.entityId,
+      teacherId: job.teacherId,
+      localSnapshot: safeJson(link?.localSnapshot, {}),
+      remoteSnapshot: error?.details?.remote || safeJson(link?.remoteSnapshot, { errorCode, message }),
+    });
+  }
+}
+
+/** Reconcile one discovered plan against its saved baseline without accepting ambiguous student matches. */
+async function reconcileDiscoveredPlan({ connection, teacherId, candidate, linked, review }) {
+
+    if (!candidate.studentId) {
+      review += 1;
+      return { linked, review };
+    }
+    if (Number(candidate.candidateCount || 0) > 1) {
+      await connection.query(
+        `UPDATE nazem_plan_candidates SET discovery_status = 'requires_review',
+          last_error_code = 'NAZEM_MULTIPLE_ACTIVE_PLANS',
+          last_error = 'وجدنا أكثر من خطة ناظم للطالب؛ اختر الخطة التي تريد اعتمادها.' WHERE id = ?`,
+        [candidate.id],
+      );
+      review += 1;
+      return { linked, review };
+    }
+    if (!candidate.localPlanId) {
+      await connection.query(
+        `UPDATE nazem_plan_candidates SET discovery_status = 'discovered',
+          last_error_code = NULL, last_error = NULL WHERE id = ?`,
+        [candidate.id],
+      );
+      return { linked, review };
+    }
+    const [[existingLink]] = await connection.query(
+      `SELECT id, remote_snapshot AS remoteSnapshot, last_synced_snapshot AS lastSyncedSnapshot
+       FROM nazem_plan_links
+       WHERE ruwasi_plan_id = ? AND teacher_id = ? AND nazem_plan_id = ? LIMIT 1`,
+      [candidate.localPlanId, teacherId, candidate.nazemPlanId],
+    );
+    if (existingLink) {
+      const remoteSnapshot = safeJson(candidate.remoteSnapshot, {});
+      const synced = safeJson(existingLink.lastSyncedSnapshot, {});
+      const baseline = synced.remote || safeJson(existingLink.remoteSnapshot, {});
+      const changed = !nazemPlanBundleMatches(remoteSnapshot, baseline);
+      await connection.query(
+        `UPDATE nazem_plan_candidates SET discovery_status = ?, last_error_code = NULL,
+          last_error = NULL WHERE id = ?`,
+        [changed ? 'discovered' : 'linked', candidate.id],
+      );
+      if (changed) review += 1;
+      else linked += 1;
+      return { linked, review };
+    }
+    const localPlan = await loadPlan(connection, candidate.localPlanId);
+    const reviewRange = await loadPlanReviewRange(connection, localPlan);
+    const mappedLocal = mapRuwasiPlanBundleToNazem(localPlan, reviewRange);
+    const remoteSnapshot = safeJson(candidate.remoteSnapshot, {});
+    if (!nazemPlanBundleMatches(remoteSnapshot, mappedLocal)) {
+      await connection.query(
+        `UPDATE nazem_plan_candidates SET discovery_status = 'discovered',
+          last_error_code = NULL, last_error = NULL WHERE id = ?`,
+        [candidate.id],
+      );
+      return { linked, review };
+    }
+    await connection.query(
+      `INSERT INTO nazem_plan_links
+        (ruwasi_plan_id, ruwasi_student_id, teacher_id, nazem_student_id,
+         nazem_plan_id, external_fingerprint, sync_status, last_synced_at,
+         last_remote_checked_at, local_snapshot, remote_snapshot, last_synced_snapshot)
+       VALUES (?, ?, ?, ?, ?, ?, 'synced', NOW(3), NOW(3), ?, ?, ?)
+       ON DUPLICATE KEY UPDATE nazem_plan_id = VALUES(nazem_plan_id),
+         sync_status = 'synced', last_error_code = NULL, last_error = NULL,
+         last_remote_checked_at = NOW(3), remote_snapshot = VALUES(remote_snapshot)`,
+      [
+        localPlan.id,
+        candidate.studentId,
+        teacherId,
+        candidate.nazemStudentId,
+        candidate.nazemPlanId,
+        snapshotHash(remoteSnapshot),
+        JSON.stringify(mappedLocal),
+        JSON.stringify(remoteSnapshot),
+        JSON.stringify({ local: mappedLocal, remote: remoteSnapshot }),
+      ],
+    );
+    await connection.query(
+      "UPDATE nazem_plan_candidates SET discovery_status = 'linked', last_error_code = NULL, last_error = NULL WHERE id = ?",
+      [candidate.id],
+    );
+    linked += 1;
+  
+ return { linked, review };
+}

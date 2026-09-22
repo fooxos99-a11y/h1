@@ -42,7 +42,7 @@ test('per-student refresh progress is lease protected and deduplicated', async (
 test('interactive refresh reads today including late items without rereading seven days', () => {
   const source = readFileSync(new URL('../server/integrations/nazem/service.js', import.meta.url), 'utf8');
   const refresh = source.slice(source.indexOf('async function refreshTeacherFollowUps'), source.indexOf('async function reconcileTeacher'));
-  assert.match(refresh, /readStudentFollowUpHistory\([\s\S]*?\}, 1, \{ endDate: job\.operationType === 'account\.daily_reconcile' \? job\.payload\.workDate : null,\s*confirmedRecordIds: await loadConfirmedNazemRecordIds\(connection, \{ \.\.\.link, teacherId: job\.teacherId \}\) \}\)/);
+  assert.match(refresh, /readStudentFollowUpHistory\([\s\S]*?\}, 1, \{\s*endDate: job\.operationType === 'account\.daily_reconcile' \? job\.payload\.workDate : null,\s*confirmedRecordIds: await loadConfirmedNazemRecordIds\(connection, \{ \.\.\.link, teacherId: job\.teacherId \}\)\s*\}\)/);
   assert.match(refresh, /timing\.fetchMs/);
   assert.match(refresh, /timing\.importMs/);
   assert.match(refresh, /queueWaitMs/);

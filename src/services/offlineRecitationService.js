@@ -195,6 +195,19 @@ export async function getCachedTeacherEvaluation(supervisorId) {
   const nazemManagedKeys = new Set(cachedTasks
     .filter((task) => task.nazemManaged)
     .map((task) => `${task.studentId}:${sessionType(task)}`));
+  collectCurrentOfflineTasks({ keys, nazemManagedKeys, studentById, cachedTasks, date, base, trustedEnough, usableSessions, currentTasks });
+  return {
+    ...base,
+    date,
+    students,
+    tasks: currentTasks,
+    offline: true,
+    offlineTimeUntrusted: !trustedEnough,
+  };
+}
+
+/** Resolve cached task groups without skipping unconfirmed prior recitations. */
+function collectCurrentOfflineTasks({ keys, nazemManagedKeys, studentById, cachedTasks, date, base, trustedEnough, usableSessions, currentTasks }) {
   for (const key of keys) {
     const [rawStudentId, type] = key.split(':');
     const studentId = Number(rawStudentId);
@@ -215,42 +228,40 @@ export async function getCachedTeacherEvaluation(supervisorId) {
       .map((task) => task.taskDate))].sort((a, b) => a.localeCompare(b));
     let carry = null;
     let blocked = !trustedEnough;
-    for (const taskDate of unresolvedDates) {
-      const group = history.filter((task) => task.taskDate === taskDate);
-      const groupIds = new Set(group.map((task) => Number(task.id)));
-      const latest = usableSessions
-        .filter((session) => (
-          Number(session.studentId) === studentId
-          && session.sessionType === type
-          && session.tasks?.some((item) => groupIds.has(Number(item.taskId)))
-        ))
-        .sort(compareRecitationSessions)
-        .at(-1);
-      if (!latest) {
-        blocked = true;
-        break;
-      }
-      const outcomes = latest.tasks
-        .filter((item) => groupIds.has(Number(item.taskId)))
-        .map((item) => item.payload?.offlineOutcome);
-      if (outcomes.length !== group.length || outcomes.some((outcome) => !outcome)) {
-        blocked = true;
-        break;
-      }
-      carry = outcomes.every((outcome) => outcome.completed) ? null : group;
-    }
+    ({ blocked, carry } = resolveOfflineCarry({ unresolvedDates, history, usableSessions, studentId, type, blocked, carry }));
     const student = studentById.get(studentId);
     if (blocked && student) student.offlineSequenceBlocked = true;
     if (!blocked) currentTasks.push(...(carry || due));
   }
-  return {
-    ...base,
-    date,
-    students,
-    tasks: currentTasks,
-    offline: true,
-    offlineTimeUntrusted: !trustedEnough,
-  };
+}
+
+/** Require complete recorded outcomes for every earlier group before carrying work forward. */
+function resolveOfflineCarry({ unresolvedDates, history, usableSessions, studentId, type, blocked, carry }) {
+  for (const taskDate of unresolvedDates) {
+    const group = history.filter((task) => task.taskDate === taskDate);
+    const groupIds = new Set(group.map((task) => Number(task.id)));
+    const latest = usableSessions
+      .filter((session) => (
+        Number(session.studentId) === studentId
+        && session.sessionType === type
+        && session.tasks?.some((item) => groupIds.has(Number(item.taskId)))
+      ))
+      .sort(compareRecitationSessions)
+      .at(-1);
+    if (!latest) {
+      blocked = true;
+      break;
+    }
+    const outcomes = latest.tasks
+      .filter((item) => groupIds.has(Number(item.taskId)))
+      .map((item) => item.payload?.offlineOutcome);
+    if (outcomes.length !== group.length || outcomes.some((outcome) => !outcome)) {
+      blocked = true;
+      break;
+    }
+    carry = outcomes.every((outcome) => outcome.completed) ? null : group;
+  }
+  return { blocked, carry };
 }
 
 export async function loadCachedTaskData(supervisorId, task, { preferCache = false } = {}) {
@@ -451,79 +462,94 @@ export function syncOfflineRecitations(supervisorId, { force = false } = {}) {
         const response = await studentsApi.syncOfflineRecitationBatch(batch);
         const outcomeById = new Map((response.results || []).map((item) => [item.sessionId, item]));
         if (batch.some((session) => !outcomeById.has(session.sessionId))) throw new Error('لم يرجع السيرفر نتيجة الجلسة.');
-        for (const session of batch) {
-          const outcome = outcomeById.get(session.sessionId);
-          if (!outcome) throw new Error('لم يرجع السيرفر نتيجة الجلسة.');
-          const tasks = mergeRecitationTaskResults(session.tasks, outcome.tasks);
-          if (['accepted', 'already_synced'].includes(outcome.result)
-            && tasks.length && tasks.every((item) => item.synced && item.result?.ok === true)) {
-            const completed = await offlineRecitationStore.updateSession(actorKey, session.sessionId, {
-              status: 'synced', tasks, nextRetryAt: null, lastError: '',
-            });
-            results.push(completed);
-            resolvedSessionIds.add(session.sessionId);
-            continue;
-          }
-          const _resolveStatus = () => {
-            if (outcome.result === 'rejected_duplicate') {
-              return 'rejected_duplicate';
-            }
-            if (outcome.result === 'rejected_permission') {
-              return 'rejected_permission';
-            }
-            if (outcome.result === 'invalid_sequence') {
-              return 'invalid_sequence';
-            }
-            if (outcome.result === 'conflict') {
-              return 'conflict';
-            }
-            return 'failed';
-          };
-          const status = _resolveStatus();
-          const retryCount = Number(session.retryCount || 0) + 1;
-          const resolved = await offlineRecitationStore.updateSession(actorKey, session.sessionId, {
-            status,
-            tasks,
-            retryCount,
-            nextRetryAt: status.startsWith('rejected_') || status === 'conflict'
-              ? null
-              : nextRetryAt(retryCount),
-            lastError: outcome.tasks?.find((item) => item.message)?.message || 'تعذرت مزامنة الجلسة.',
-          });
-          results.push(resolved);
-          resolvedSessionIds.add(session.sessionId);
-          if (['failed', 'invalid_sequence', 'conflict', 'rejected_permission'].includes(status)) blockedStudentIds.add(Number(session.studentId));
-        }
+        await applyOfflineBatchOutcomes({ batch, outcomeById, actorKey, results, resolvedSessionIds, blockedStudentIds });
         await offlineRecitationStore.setMeta(`last_sync:${actorKey}`, new Date().toISOString());
       } catch (error) {
         if (!supportsIndividualSyncFallback(error)) {
-          for (const session of batch) {
-            if (resolvedSessionIds.has(session.sessionId)) continue;
-            const retryCount = Number(session.retryCount || 0) + 1;
-            results.push(await offlineRecitationStore.updateSession(actorKey, session.sessionId, {
-              status: 'failed', retryCount,
-              nextRetryAt: new Date(Math.max(Date.parse(nextRetryAt(retryCount)), Date.now() + (Number(error.retryAfterMs) || 0))).toISOString(),
-              lastError: error.message || 'تعذرت مزامنة الجلسة.',
-            }));
-          }
+          await recordOfflineBatchFailure(batch, resolvedSessionIds, results, actorKey, error);
           break;
         }
         // Compatibility fallback also preserves per-student ordering on servers without batch sync.
-        const blockedStudents = new Set();
-        for (const session of batch) {
-          if (blockedStudents.has(Number(session.studentId))) continue;
-          try {
-            results.push(await syncSession(supervisorId, actorKey, force ? { ...session, nextRetryAt: null } : session));
-          } catch {
-            blockedStudents.add(Number(session.studentId));
-          }
-        }
+        await syncOfflineBatchIndividually(batch, results, supervisorId, actorKey, force);
       }
     }
     return results;
   })().finally(() => activeSyncs.delete(actorKey));
   activeSyncs.set(actorKey, promise);
   return promise;
+}
+
+/** Use the legacy endpoint in order and stop later sessions for a student after a failure. */
+async function syncOfflineBatchIndividually(batch, results, supervisorId, actorKey, force) {
+  const blockedStudents = new Set();
+  for (const session of batch) {
+    if (blockedStudents.has(Number(session.studentId))) continue;
+    try {
+      results.push(await syncSession(supervisorId, actorKey, force ? { ...session, nextRetryAt: null } : session));
+    } catch {
+      blockedStudents.add(Number(session.studentId));
+    }
+  }
+}
+
+/** Record unresolved sessions for retry without overwriting outcomes already persisted. */
+async function recordOfflineBatchFailure(batch, resolvedSessionIds, results, actorKey, error) {
+  for (const session of batch) {
+    if (resolvedSessionIds.has(session.sessionId)) continue;
+    const retryCount = Number(session.retryCount || 0) + 1;
+    results.push(await offlineRecitationStore.updateSession(actorKey, session.sessionId, {
+      status: 'failed', retryCount,
+      nextRetryAt: new Date(Math.max(Date.parse(nextRetryAt(retryCount)), Date.now() + (Number(error.retryAfterMs) || 0))).toISOString(),
+      lastError: error.message || 'تعذرت مزامنة الجلسة.',
+    }));
+  }
+}
+
+/** Persist each batch outcome and block later sessions when student ordering cannot be guaranteed. */
+async function applyOfflineBatchOutcomes({ batch, outcomeById, actorKey, results, resolvedSessionIds, blockedStudentIds }) {
+  for (const session of batch) {
+    const outcome = outcomeById.get(session.sessionId);
+    if (!outcome) throw new Error('لم يرجع السيرفر نتيجة الجلسة.');
+    const tasks = mergeRecitationTaskResults(session.tasks, outcome.tasks);
+    if (['accepted', 'already_synced'].includes(outcome.result)
+      && tasks.length && tasks.every((item) => item.synced && item.result?.ok === true)) {
+      const completed = await offlineRecitationStore.updateSession(actorKey, session.sessionId, {
+        status: 'synced', tasks, nextRetryAt: null, lastError: '',
+      });
+      results.push(completed);
+      resolvedSessionIds.add(session.sessionId);
+      continue;
+    }
+    const _resolveStatus = () => {
+      if (outcome.result === 'rejected_duplicate') {
+        return 'rejected_duplicate';
+      }
+      if (outcome.result === 'rejected_permission') {
+        return 'rejected_permission';
+      }
+      if (outcome.result === 'invalid_sequence') {
+        return 'invalid_sequence';
+      }
+      if (outcome.result === 'conflict') {
+        return 'conflict';
+      }
+      return 'failed';
+    };
+    const status = _resolveStatus();
+    const retryCount = Number(session.retryCount || 0) + 1;
+    const resolved = await offlineRecitationStore.updateSession(actorKey, session.sessionId, {
+      status,
+      tasks,
+      retryCount,
+      nextRetryAt: status.startsWith('rejected_') || status === 'conflict'
+        ? null
+        : nextRetryAt(retryCount),
+      lastError: outcome.tasks?.find((item) => item.message)?.message || 'تعذرت مزامنة الجلسة.',
+    });
+    results.push(resolved);
+    resolvedSessionIds.add(session.sessionId);
+    if (['failed', 'invalid_sequence', 'conflict', 'rejected_permission'].includes(status)) blockedStudentIds.add(Number(session.studentId));
+  }
 }
 
 export async function getOfflineRecitationSummary(supervisorId) {

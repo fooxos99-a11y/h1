@@ -11,7 +11,7 @@ const protectsAcceptedTask = (session, item, task) => hasAcceptedRecitationTask(
   && Number(item.planId) === Number(task.planId)
   && item.taskType === task.taskType
   && (!task.planVersion || Number(item.planVersion) === Number(task.planVersion))
-  && !task.evaluatedAt && !(Number(task.attemptCount) > 0)
+  && !task.evaluatedAt && ((Number(task.attemptCount) || 0) <= 0)
   && (task.nazemManaged || item.result.teacherCompleted === true);
 
 export function mergeCommittedOfflineEvaluation(evaluation, sessions = [], actions = []) {

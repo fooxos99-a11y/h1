@@ -90,21 +90,7 @@ export async function claimRecitationSession(connection, {
   requestId,
 }) {
   const sessionId = normalizeServerSessionId(req.body.sessionId, requestId);
-  const deviceId = isUuid(req.body.deviceId) ? String(req.body.deviceId).toLowerCase() : derivedUuid(`${req.auth.role}:${req.auth.id}`);
-  await connection.query(
-    `INSERT IGNORE INTO recitation_devices (device_id, actor_role, actor_id, last_seen_at)
-     VALUES (?, ?, ?, NOW(3))`,
-    [deviceId, req.auth.role, req.auth.id],
-  );
-  const [[deviceOwner]] = await connection.query(
-    'SELECT actor_role AS actorRole, actor_id AS actorId FROM recitation_devices WHERE device_id = ? FOR UPDATE',
-    [deviceId],
-  );
-  if (deviceOwner?.actorRole !== req.auth.role || Number(deviceOwner?.actorId) !== Number(req.auth.id)) {
-    const error = new Error('معرّف الجهاز مرتبط بحساب آخر.');
-    error.statusCode = 403;
-    throw error;
-  }
+  const deviceId = await ensureRecitationDeviceOwner(req, connection);
   const event = await resolveTrustedDeviceEventTime(connection, {
     deviceId,
     bootId: String(req.body.bootId || '').toLowerCase(),
@@ -143,27 +129,7 @@ export async function claimRecitationSession(connection, {
      WHERE slot.student_id = ? AND slot.session_date = ? AND slot.session_type = ? FOR UPDATE`,
     [task.studentId, sessionDate, sessionType],
   );
-  if (!slot) {
-    try {
-      await connection.query(
-        `INSERT INTO student_quran_recitation_daily_slots
-          (student_id, session_date, session_type, session_id, evaluator_id, accepted_event_at, event_time_trusted)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [task.studentId, sessionDate, sessionType, sessionId, req.auth.id, event.eventAt, event.trusted ? 1 : 0],
-      );
-      slot = { sessionId };
-    } catch (error) {
-      if (error.code !== 'ER_DUP_ENTRY') throw error;
-      [[slot]] = await connection.query(
-        `SELECT session_id AS sessionId,
-          DATE_FORMAT(accepted_event_at, '%Y-%m-%d %H:%i:%s.%f') AS eventAt,
-          event_time_trusted AS eventTimeTrusted
-         FROM student_quran_recitation_daily_slots
-         WHERE student_id = ? AND session_date = ? AND session_type = ? FOR UPDATE`,
-        [task.studentId, sessionDate, sessionType],
-      );
-    }
-  }
+  slot = await createOrReadRecitationSlot({ slot, connection, task, sessionDate, sessionType, sessionId, req, event });
   if (slot.sessionId !== sessionId) {
     const wins = recitationCandidateWins(
       { sessionId, eventAt: event.eventAt, trusted: event.trusted },
@@ -234,6 +200,51 @@ export async function claimRecitationSession(connection, {
     submittedPlanVersion,
     currentPlanVersion,
   };
+}
+
+/** Claim a daily slot atomically, recovering the winner after a concurrent duplicate-key insert. */
+async function createOrReadRecitationSlot({ slot, connection, task, sessionDate, sessionType, sessionId, req, event }) {
+  if (!slot) {
+    try {
+      await connection.query(
+        `INSERT INTO student_quran_recitation_daily_slots
+          (student_id, session_date, session_type, session_id, evaluator_id, accepted_event_at, event_time_trusted)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [task.studentId, sessionDate, sessionType, sessionId, req.auth.id, event.eventAt, event.trusted ? 1 : 0]
+      );
+      slot = { sessionId };
+    } catch (error) {
+      if (error.code !== 'ER_DUP_ENTRY') throw error;
+      [[slot]] = await connection.query(
+        `SELECT session_id AS sessionId,
+          DATE_FORMAT(accepted_event_at, '%Y-%m-%d %H:%i:%s.%f') AS eventAt,
+          event_time_trusted AS eventTimeTrusted
+         FROM student_quran_recitation_daily_slots
+         WHERE student_id = ? AND session_date = ? AND session_type = ? FOR UPDATE`,
+        [task.studentId, sessionDate, sessionType]
+      );
+    }
+  }
+  return slot;
+}
+
+async function ensureRecitationDeviceOwner(req, connection) {
+  const deviceId = isUuid(req.body.deviceId) ? String(req.body.deviceId).toLowerCase() : derivedUuid(`${req.auth.role}:${req.auth.id}`);
+  await connection.query(
+    `INSERT IGNORE INTO recitation_devices (device_id, actor_role, actor_id, last_seen_at)
+     VALUES (?, ?, ?, NOW(3))`,
+    [deviceId, req.auth.role, req.auth.id]
+  );
+  const [[deviceOwner]] = await connection.query(
+    'SELECT actor_role AS actorRole, actor_id AS actorId FROM recitation_devices WHERE device_id = ? FOR UPDATE',
+    [deviceId]
+  );
+  if (deviceOwner?.actorRole !== req.auth.role || Number(deviceOwner?.actorId) !== Number(req.auth.id)) {
+    const error = new Error('معرّف الجهاز مرتبط بحساب آخر.');
+    error.statusCode = 403;
+    throw error;
+  }
+  return deviceId;
 }
 
 export async function finalizeRecitationTask(connection, { claim, req, task, result }) {

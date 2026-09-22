@@ -41,9 +41,7 @@ export function normalizeSummitStageChallenges(value) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   return Object.fromEntries(SUMMIT_STAGES.slice(0, -1).map(({ points }) => {
     const selected = normalizeSummitChallengeType(source[points]);
-    return [String(points), selected
-      ? selected
-      : SUMMIT_DEFAULT_STAGE_CHALLENGES[points]];
+    return [String(points), selected || SUMMIT_DEFAULT_STAGE_CHALLENGES[points]];
   }));
 }
 

@@ -100,7 +100,7 @@ test('every cultural game celebrates winners with fullscreen fireworks and white
     read('src/components/games/shared/winEffects.css'),
     read('src/components/games/letter-hive/LetterHiveFinishOverlay.jsx'),
     read('src/components/games/categories/CategoriesWinnerModal.jsx'),
-    read('src/components/games/auction/AuctionBoardView.jsx'),
+    read('src/components/games/auction/AuctionWinnerDialog.jsx'),
     read('src/components/games/guess-image/GuessImageBoardView.jsx'),
   ]);
 

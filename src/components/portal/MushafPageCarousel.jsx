@@ -108,7 +108,7 @@ const MushafPageCarousel = ({ index, total, pageNumber, pageNumbers = [], isSavi
       <div className="relative min-h-0 w-full flex-1 sm:px-14">
         <div
           key={currentPageNumber}
-          className={`mushaf-page-turn absolute inset-0 h-full min-h-0 w-full ${turnDirection ? `mushaf-page-turn--${turnDirection}` : ''}`}
+          className={`mushaf-page-turn absolute inset-0 h-full min-h-0 w-full ${turnDirection ? 'mushaf-page-turn--' + turnDirection : ''}`}
           data-page-turn-direction={turnDirection || undefined}
         >
           {page}

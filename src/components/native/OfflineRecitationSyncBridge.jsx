@@ -42,13 +42,7 @@ const OfflineRecitationSyncBridge = () => {
       const studentId = getStudentId();
       const management = getManagementAccount();
       if ((!supervisorId && !studentId && !management.id) || !active || navigator.onLine === false) return;
-      if (supervisorId) {
-        await syncOfflineRecitations(supervisorId, { force }).catch(() => undefined);
-        if (!isCurrent()) return;
-        if (bootstrap) await prepareOfflineRecitationWorkspace(supervisorId, { automatic: true }).catch(() => undefined);
-        if (!isCurrent()) return;
-        if (bootstrap) await syncOfflineRecitations(supervisorId, { force }).catch(() => undefined);
-      }
+      if (supervisorId) await syncSupervisorOfflineWorkspace(supervisorId, force, bootstrap, isCurrent);
       if (!isCurrent()) return;
       if (studentId && (bootstrap || force || document.visibilityState === 'visible')) {
         await syncOfflineStudent(studentId, { force }).catch(() => undefined);
@@ -115,3 +109,13 @@ const OfflineRecitationSyncBridge = () => {
 };
 
 export default OfflineRecitationSyncBridge;
+
+
+/** Synchronize teacher data only while the original authenticated session remains active. */
+async function syncSupervisorOfflineWorkspace(supervisorId, force, bootstrap, isCurrent) {
+        await syncOfflineRecitations(supervisorId, { force }).catch(() => undefined);
+        if (!isCurrent()) return;
+        if (bootstrap) await prepareOfflineRecitationWorkspace(supervisorId, { automatic: true }).catch(() => undefined);
+        if (!isCurrent()) return;
+        if (bootstrap) await syncOfflineRecitations(supervisorId, { force }).catch(() => undefined);
+      }

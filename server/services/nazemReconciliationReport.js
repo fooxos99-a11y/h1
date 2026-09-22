@@ -55,7 +55,7 @@ export async function loadNazemReconciliationReport(connection, auth, query = {}
     JOIN nazem_accounts account ON account.teacher_id = teacher.id AND account.status = 'connected'
     WHERE NOT EXISTS (SELECT 1 FROM nazem_plan_links link WHERE link.ruwasi_student_id = student.id
       AND link.teacher_id = teacher.id AND link.sync_status NOT IN ('deleted','detached'))
-    ${missingScope.length ? `AND ${missingScope.join(' AND ')}` : ''} ORDER BY student.name LIMIT 2001`, missingParams);
+    ${missingScope.length ? 'AND ' + missingScope.join(' AND ') : ''} ORDER BY student.name LIMIT 2001`, missingParams);
   const combined = [...rows.slice(0, 2000), ...unlinked.slice(0, 2000).map((row) => ({ ...row, date: to, error: 'لا توجد خطة ناظم مرتبطة؛ لا يمكن إثبات المطابقة.' }))];
   return { from, to, truncated: rows.length > 2000 || unlinked.length > 2000, rows: combined.map((row) => ({
     ...row, status: reconciliationStatus(row), difference: row.expectedPoints == null || row.recordedPoints == null

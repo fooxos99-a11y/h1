@@ -72,6 +72,11 @@ export async function calculateNazemRewardGroups(connection, daily, tasks, setti
       completedListeningCount: Math.min(...repeats.map((task) => Number(task.actualListeningCount || 0))), expectedListeningCount: 1, settings });
     groups.push({ taskType: 'repeat', tasks: repeats, points: primary.every((task) => Number(task.teacherCompleted) === 1) ? repeatReward.total : 0 });
   }
+  appendVerifiedLinkReward(daily, tasks, groups);
+  return groups;
+}
+
+function appendVerifiedLinkReward(daily, tasks, groups) {
   if (daily.taskType === 'memorization' && daily.track === 'memorization') {
     const links = tasks.filter((task) => task.taskType === 'link');
     if (links.length) {
@@ -83,7 +88,6 @@ export async function calculateNazemRewardGroups(connection, daily, tasks, setti
       groups.push({ taskType: 'link', tasks: links, points: calculateEvaluatedGroupReward(links) });
     }
   }
-  return groups;
 }
 
 // Caller supplies a dedicated connection. Each settlement locks the student and is atomic.

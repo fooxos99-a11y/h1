@@ -22,7 +22,8 @@ export default defineConfig(({ mode }) => {
           if (site.showPublicHeroLogo === false) {
             return '';
           }
-          return `<link data-brand-hero-preload rel="preload" href="${base}${site.logo}" as="image"${site.logoSmall ? ` imagesrcset="${base}${site.logoSmall} 320w, ${base}${site.logo} 640w" imagesizes="min(72vw, 320px)"` : ''} fetchpriority="high" />`;
+          const responsiveImages = site.logoSmall ? ` imagesrcset="${base}${site.logoSmall} 320w, ${base}${site.logo} 640w" imagesizes="min(72vw, 320px)"` : '';
+          return `<link data-brand-hero-preload rel="preload" href="${base}${site.logo}" as="image"${responsiveImages} fetchpriority="high" />`;
         };
         const heroPreload = _resolveHeroPreload();
         return html

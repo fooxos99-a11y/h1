@@ -137,41 +137,10 @@ const AccountPortal = () => {
 
   const sections = useMemo(() => {
     const list = [];
-    if (session.role === 'student') {
-      if (!isOnline) {
-        list.push({ key: 'quranSessions', label: 'خطتي', icon: CalendarDays });
-        if (dailyChallengeAvailable) list.push({ key: 'dailyChallenge', label: 'التحدي اليومي', icon: Trophy });
-        if (site.features?.store !== false && settings.pointsSystemEnabled && settings.storeEnabled) {
-          list.push({ key: 'store', label: 'المتجر', icon: ShoppingBag });
-        }
-        return list;
-      }
-      list.push({ key: 'quranSessions', label: 'خطتي', icon: CalendarDays });
-      if (!studentExecutionLivesOnPublicHome && settings.hasStudentQuranExecution !== false) {
-        list.push({ key: 'quranExecution', label: 'التنفيذ', icon: BookOpen });
-      }
-      if (settings.learningPathsEnabled) list.push({ key: 'programs', label: 'البرامج', icon: BookOpen });
-      if (site.features?.store !== false && settings.pointsSystemEnabled && settings.storeEnabled) {
-        list.push({ key: 'store', label: 'المتجر', icon: ShoppingBag });
-      }
-      list.push({ key: 'calls', label: 'المكالمات', icon: PhoneCall });
-    }
-    if (session.role === 'supervisor') {
-      if (settings.staffAttendanceSource === 'teacher' && !alreadyPresentToday) {
-        list.push({ key: 'staffAttendance', label: 'التحضير', icon: ClipboardCheck });
-      }
-      list.push({ key: 'quranEvaluation', label: 'جلسات التسميع', icon: ClipboardCheck });
-      list.push({ key: 'previousRecitationSessions', label: 'جلسات التسميع السابقة', icon: History });
-      if (settings.teacherManualPointsEnabled) list.push({ key: 'teacherPoints', label: 'الإضافة والخصم', icon: PlusCircle });
-      list.push({ key: 'teacherReports', label: 'تقارير الحلقة', icon: BarChart3 });
-      if (settings.culturalCompetitionSectionEnabled !== false) {
-        list.push({ key: 'culturalCompetition', label: 'المسابقات الثقافية', icon: Trophy });
-      }
-      list.push({ key: 'calls', label: 'المكالمات', icon: PhoneCall });
-      list.push({ key: 'studentPlans', label: 'خطط الطلاب', icon: ListChecks });
-    }
+    if (session.role === 'student') return studentPortalSections({ isOnline, dailyChallengeAvailable, site, settings, studentExecutionLivesOnPublicHome });
+    if (session.role === 'supervisor') return supervisorPortalSections({ settings, alreadyPresentToday });
     return list;
-  }, [alreadyPresentToday, isOnline, session.role, settings.culturalCompetitionSectionEnabled, settings.hasStudentQuranExecution, settings.learningPathsEnabled, settings.pointsSystemEnabled, settings.staffAttendanceSource, settings.storeEnabled, settings.teacherManualPointsEnabled, site.features, studentExecutionLivesOnPublicHome]);
+  }, [alreadyPresentToday, dailyChallengeAvailable, isOnline, session.role, settings.culturalCompetitionSectionEnabled, settings.hasStudentQuranExecution, settings.learningPathsEnabled, settings.pointsSystemEnabled, settings.staffAttendanceSource, settings.storeEnabled, settings.teacherManualPointsEnabled, site.features, studentExecutionLivesOnPublicHome]);
 
   const requestedSection = ['quran-sessions', 'quran-saved'].includes(sectionSlug) && session.role === 'student'
     ? 'quranSessions' : portalSectionRoutes.getKey(sectionSlug);
@@ -254,23 +223,24 @@ const AccountPortal = () => {
       return <OfflineConnectionRequired />;
     }
     if (activeSection === 'quranExecution' && !studentExecutionLivesOnPublicHome) return <QuranExecutionDialog studentId={session.studentId} inline />;
-    if (activeSection === 'mushaf') return <StudentMushafSection studentId={session.studentId} />;
-    if (activeSection === 'quranSessions') return <StudentPlanPanel onPointsChange={setPlanPoints} studentId={session.studentId} onOpenAmount={(target) => {
+    // Select the requested view without evaluating unrelated page branches.
+    switch (activeSection) {
+      case 'mushaf': return <StudentMushafSection studentId={session.studentId} />;
+      case 'quranSessions': return <StudentPlanPanel onPointsChange={setPlanPoints} studentId={session.studentId} onOpenAmount={(target) => {
       setReaderTarget(target);
       changeSection('mushaf');
     }} />;
-    if (activeSection === 'store') return <StudentStoreSection onBalanceChange={updateStoreBalance} />;
-    if (activeSection === 'programs') return <StudentProgramsSection />;
-    if (activeSection === 'dailyChallenge') return <StudentDailyChallengeSection onBack={leaveDailyChallenge} />;
-    if (activeSection === 'summit') return <SummitJourneySection onBack={leaveSummit} />;
-    if (activeSection === 'staffAttendance') return <StaffAttendanceSection attendanceState={staffAttendanceState} />;
-    if (activeSection === 'quranEvaluation') return <TeacherEvaluationDialog supervisorId={session.supervisorId} inline />;
-    if (activeSection === 'previousRecitationSessions') return <TeacherPreviousSessionsPanel />;
-    if (activeSection === 'studentPlans') return <StudentPlansSection hideCommitteeFilter />;
-    if (activeSection === 'teacherPoints') return <TeacherPointsAdjustmentSection />;
-    if (activeSection === 'culturalCompetition') return <CulturalCompetitionSection />;
-    if (activeSection === 'teacherReports') {
-      return (
+      case 'store': return <StudentStoreSection onBalanceChange={updateStoreBalance} />;
+      case 'programs': return <StudentProgramsSection />;
+      case 'dailyChallenge': return <StudentDailyChallengeSection onBack={leaveDailyChallenge} />;
+      case 'summit': return <SummitJourneySection onBack={leaveSummit} />;
+      case 'staffAttendance': return <StaffAttendanceSection attendanceState={staffAttendanceState} />;
+      case 'quranEvaluation': return <TeacherEvaluationDialog supervisorId={session.supervisorId} inline />;
+      case 'previousRecitationSessions': return <TeacherPreviousSessionsPanel />;
+      case 'studentPlans': return <StudentPlansSection hideCommitteeFilter />;
+      case 'teacherPoints': return <TeacherPointsAdjustmentSection />;
+      case 'culturalCompetition': return <CulturalCompetitionSection />;
+      case 'teacherReports': return (
           <ReportsSection
             teacherScoped
             canViewStandardReports
@@ -278,8 +248,8 @@ const AccountPortal = () => {
             canViewTeacherPoints={settings.teacherManualPointsEnabled}
           />
       );
+      case 'calls': return <LazyCallsSection />;
     }
-    if (activeSection === 'calls') return <LazyCallsSection />;
     return (
       <Card className="border-primary/30 bg-card">
         <CardContent className="p-8 text-muted-foreground">لا توجد أزرار متاحة حالياً.</CardContent>
@@ -360,3 +330,48 @@ const AccountPortal = () => {
 };
 
 export default AccountPortal;
+
+/** Build the available student destinations, including the offline challenge entry. */
+function studentPortalSections({ isOnline, dailyChallengeAvailable, site, settings, studentExecutionLivesOnPublicHome }) {
+  const list = [];
+
+      if (!isOnline) {
+        list.push({ key: 'quranSessions', label: 'خطتي', icon: CalendarDays });
+        if (dailyChallengeAvailable) list.push({ key: 'dailyChallenge', label: 'التحدي اليومي', icon: Trophy });
+        if (site.features?.store !== false && settings.pointsSystemEnabled && settings.storeEnabled) {
+          list.push({ key: 'store', label: 'المتجر', icon: ShoppingBag });
+        }
+        return list;
+      }
+      list.push({ key: 'quranSessions', label: 'خطتي', icon: CalendarDays });
+      if (!studentExecutionLivesOnPublicHome && settings.hasStudentQuranExecution !== false) {
+        list.push({ key: 'quranExecution', label: 'التنفيذ', icon: BookOpen });
+      }
+      if (settings.learningPathsEnabled) list.push({ key: 'programs', label: 'البرامج', icon: BookOpen });
+      if (site.features?.store !== false && settings.pointsSystemEnabled && settings.storeEnabled) {
+        list.push({ key: 'store', label: 'المتجر', icon: ShoppingBag });
+      }
+      list.push({ key: 'calls', label: 'المكالمات', icon: PhoneCall });
+    
+  return list;
+}
+
+/** Build supervisor destinations using current attendance and feature settings. */
+function supervisorPortalSections({ settings, alreadyPresentToday }) {
+  const list = [];
+
+      if (settings.staffAttendanceSource === 'teacher' && !alreadyPresentToday) {
+        list.push({ key: 'staffAttendance', label: 'التحضير', icon: ClipboardCheck });
+      }
+      list.push({ key: 'quranEvaluation', label: 'جلسات التسميع', icon: ClipboardCheck },
+        { key: 'previousRecitationSessions', label: 'جلسات التسميع السابقة', icon: History });
+      if (settings.teacherManualPointsEnabled) list.push({ key: 'teacherPoints', label: 'الإضافة والخصم', icon: PlusCircle });
+      list.push({ key: 'teacherReports', label: 'تقارير الحلقة', icon: BarChart3 });
+      if (settings.culturalCompetitionSectionEnabled !== false) {
+        list.push({ key: 'culturalCompetition', label: 'المسابقات الثقافية', icon: Trophy });
+      }
+      list.push({ key: 'calls', label: 'المكالمات', icon: PhoneCall },
+        { key: 'studentPlans', label: 'خطط الطلاب', icon: ListChecks });
+    
+  return list;
+}

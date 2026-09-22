@@ -30,6 +30,12 @@ export async function importNazemLinkResult(connection, link, day, dailyId) {
   const completed = expected > 0 && count === expected;
   if (tasks.every((task) => task.evaluatedAt && Number(task.teacherCompleted) === Number(completed))
     && tasks.reduce((sum, task) => sum + Number(task.actualLinkCount || 0), 0) === count) return;
+  await saveNazemLinkTasks(connection, completed, tasks, count, link, day, dailyId);
+  await connection.query(`UPDATE student_quran_tasks SET actual_link_count = NULL
+    WHERE plan_id = ? AND student_id = ? AND task_date = ? AND task_type = 'memorization'`, [link.planId, link.studentId, day.date]);
+}
+
+async function saveNazemLinkTasks(connection, completed, tasks, count, link, day, dailyId) {
   const policy = getRecitationEvaluationPolicy(await loadRecitationRewardSettings(connection), { taskType: 'link' });
   const score = completed ? Math.round(policy.maxScore) : 0;
   for (const [index, task] of tasks.entries()) {
@@ -38,7 +44,7 @@ export async function importNazemLinkResult(connection, link, day, dailyId) {
       evaluation_warning_deduction = ?, evaluation_mistake_deduction = ?, evaluation_passing_score = ?,
       teacher_completed = ?, student_status = ?, actual_link_count = ?, evaluated_by = ?, evaluated_at = NOW(3)
       WHERE id = ?`, [completed ? 'متقن' : 'لم يتم الربط', score, policy.maxScore, policy.warningDeduction,
-      policy.mistakeDeduction, policy.passingScore, completed ? 1 : 0, completed ? 'done' : 'not_done', index === 0 ? count : 0, link.teacherId, task.id]);
+    policy.mistakeDeduction, policy.passingScore, completed ? 1 : 0, completed ? 'done' : 'not_done', index === 0 ? count : 0, link.teacherId, task.id]);
     const requestId = `nazem-link:${day.id}:${task.id}`;
     await connection.query(`UPDATE student_quran_recitation_attempts SET is_official = 0
       WHERE task_id = ? AND is_official = 1 AND COALESCE(request_id, '') <> ?`, [task.id, requestId]);
@@ -51,14 +57,12 @@ export async function importNazemLinkResult(connection, link, day, dailyId) {
       ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), is_official = 1, evaluation_score = VALUES(evaluation_score),
         evaluation_max_score = VALUES(evaluation_max_score), evaluation_passing_score = VALUES(evaluation_passing_score),
         teacher_completed = VALUES(teacher_completed), evaluated_at = NOW(3)`, [task.id, link.studentId, link.teacherId,
-      day.date, sequence.number, requestId, score, policy.maxScore, policy.warningDeduction, policy.mistakeDeduction, policy.passingScore, completed ? 1 : 0]);
+    day.date, sequence.number, requestId, score, policy.maxScore, policy.warningDeduction, policy.mistakeDeduction, policy.passingScore, completed ? 1 : 0]);
     const fingerprint = crypto.createHash('sha256').update(`${link.teacherId}:${requestId}`).digest('hex');
     await connection.query(`INSERT INTO nazem_recitation_links (ruwasi_recitation_id, ruwasi_task_id, ruwasi_plan_id,
       teacher_id, daily_follow_up_id, external_fingerprint, sync_status, last_synced_at, remote_snapshot)
       VALUES (?, ?, ?, ?, ?, ?, 'synced', NOW(3), ?) ON DUPLICATE KEY UPDATE sync_status = 'synced',
         last_synced_at = NOW(3), remote_snapshot = VALUES(remote_snapshot), last_error = NULL, last_error_code = NULL`,
-    [attempt.insertId, task.id, link.planId, link.teacherId, dailyId, fingerprint, JSON.stringify(day)]);
+      [attempt.insertId, task.id, link.planId, link.teacherId, dailyId, fingerprint, JSON.stringify(day)]);
   }
-  await connection.query(`UPDATE student_quran_tasks SET actual_link_count = NULL
-    WHERE plan_id = ? AND student_id = ? AND task_date = ? AND task_type = 'memorization'`, [link.planId, link.studentId, day.date]);
 }

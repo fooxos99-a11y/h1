@@ -20,13 +20,7 @@ export async function buildForwardQuranFaceRange({
   let cursor = start;
   const segments = [];
 
-  for (let face = 0; face < wholeFaces && cursor; face += 1) {
-    const segmentEnd = await getPageEnd(cursor);
-    segments.push({ start: cursor, end: segmentEnd, faces: 1 });
-    end = segmentEnd;
-    if (compareForwardPosition(end, endLimit) >= 0) break;
-    cursor = await getNextPosition(end);
-  }
+  ({ cursor, end } = await collectWholeQuranFaces(wholeFaces, cursor, getPageEnd, segments, end, endLimit, getNextPosition));
 
   if (fractionalFace > 0 && compareForwardPosition(end, endLimit) < 0) {
     const fractionalStart = wholeFaces > 0 ? cursor : start;
@@ -41,4 +35,15 @@ export async function buildForwardQuranFaceRange({
   }
 
   return { start, end, faces: requestedFaces, segments };
+}
+
+async function collectWholeQuranFaces(wholeFaces, cursor, getPageEnd, segments, end, endLimit, getNextPosition) {
+  for (let face = 0;face < wholeFaces && cursor;face += 1) {
+    const segmentEnd = await getPageEnd(cursor);
+    segments.push({ start: cursor, end: segmentEnd, faces: 1 });
+    end = segmentEnd;
+    if (compareForwardPosition(end, endLimit) >= 0) break;
+    cursor = await getNextPosition(end);
+  }
+  return { cursor, end };
 }

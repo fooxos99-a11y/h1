@@ -46,7 +46,10 @@ test('narration supports exclusive all-committees or multiple selected committee
   assert.match(section, /committeeIds: \['all'\]/);
   assert.match(section, /جاري تحميل يوم السرد/);
   assert.match(selector, /onChange\?\.\(\['all'\]\)/);
-  assert.match(selector, /role="checkbox"/);
+  assert.match(selector, /<CheckboxOption/);
+  const checkbox = await read('../src/components/ui/checkbox-option.jsx');
+  assert.match(checkbox, /type="checkbox"/);
+  assert.match(checkbox, /checked=\{checked\}/);
   assert.match(server, /s\.committee_id IN \(\$\{committeeIds\.map/);
   assert.match(server, /req\.auth\?\.role !== 'supervisor'\s*\|\| scope === 'all'/);
 });
