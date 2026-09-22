@@ -86,20 +86,22 @@ test('daily challenge rotates only through the manager-selected games', () => {
 });
 
 test('daily challenge uses the Rawasi game arena across entry, gameplay, and results', async () => {
-  const [section, classicGames, styles] = await Promise.all([
+  const [section, classicGames, styles, ordering] = await Promise.all([
     readFile(new URL('../src/components/portal/StudentDailyChallengeSection.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/portal/ClassicDailyChallengeGame.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/portal/studentDailyChallenge.css', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/portal/DailyChallengeOrdering.jsx', import.meta.url), 'utf8'),
   ]);
 
   assert.match(section, /daily-challenge-app/);
   assert.match(section, /لعبة جديدة كل يوم/);
   assert.doesNotMatch(section, /لعبة عشوائية/);
   assert.match(section, /ClassicDailyChallengeGame/);
-  assert.match(classicGames, /ScatterArena/);
+  assert.match(classicGames, /<DailyChallengeOrdering/);
+  assert.match(ordering, /ScatterArena/);
   assert.match(classicGames, /MEMORY_SECONDS = 10/);
   assert.match(classicGames, /daily-challenge-memory-row/);
-  assert.match(classicGames, /تأكيد الترتيب/);
+  assert.match(ordering, /تأكيد الترتيب/);
   assert.doesNotMatch(section, /يتجدد التحدي تلقائيًا/);
   assert.doesNotMatch(section, /العودة للحساب/);
   assert.match(section, />العودة</);

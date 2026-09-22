@@ -42,7 +42,7 @@ const NazemPlanRefreshSummary = ({ result }) => {
                   <span className="truncate">{change.studentName || 'طالب'}</span>
                 </div>
                 <div className="mt-1 text-xs font-bold leading-5 text-foreground">
-                  {change.message || (applied ? 'تم تحديث الخطة في رواسي من ناظم.' : 'تحتاج الخطة إلى مراجعة.')}
+                  {change.message || (applied ? 'تم تحديث الخطة في الحبيب ماب من ناظم.' : 'تحتاج الخطة إلى مراجعة.')}
                 </div>
                 {change.differences && (
                   <div className="mt-1 text-xs font-bold leading-5 text-muted-foreground">{change.differences}</div>

@@ -1267,7 +1267,8 @@ test('Nazem browser access remains server-side and isolated in one adapter', () 
   assert.doesNotMatch(serverIndex, /NAZEM_RECITATION_IMMEDIATE_WAIT_MS/);
   assert.match(dailyEvaluationRoute, /syncStatus: _resolveSyncStatus\(\)/);
   assert.match(dailyEvaluationRoute, /if \(task\.nazemManaged\) \{\s*if \(nazemJobId\) \{\s*return 'pending';\s*\}\s*return 'awaiting_related_tasks';\s*\}\s*return 'synced';/);
-  assert.match(dailyEvaluationRoute, /if \(notMemorized\) \{\s*return nazemNotCompletedLabel\(task\);/);
+  assert.match(dailyEvaluationRoute, /calculateTaskEvaluationOutcome/);
+  assert.match(serverIndex, /if \(notMemorized\) \{\s*return nazemNotCompletedLabel\(task\);/);
   assert.doesNotMatch(dailyEvaluationRoute, /nazemSyncStatus/);
   assert.match(migrations, /rollbackLastDatabaseMigration/);
   assert.match(conflictDialog, /NazemConflictCard/);
@@ -1441,7 +1442,7 @@ test('Nazem discovers student plans and treats Nazem as the authoritative import
   assert.match(service, /student\.name AS studentName/);
   assert.match(service, /const planChanges = \[\]/);
   assert.match(service, /describeNazemPlanDifference\(localSnapshot, remoteSnapshot\)/);
-  assert.match(service, /status: 'applied'[\s\S]*تم تحديث الخطة في رواسي من ناظم/);
+  assert.match(service, /status: 'applied'[\s\S]*تم تحديث الخطة في الحبيب ماب من ناظم/);
   assert.match(service, /status: 'requires_review'/);
   assert.match(service, /discoveryIssues\.slice\(0, 20\)/);
   assert.match(service, /if \(!issues\.length && !preserveUndiscovered\)/);
@@ -1470,7 +1471,7 @@ test('Nazem discovers student plans and treats Nazem as the authoritative import
   assert.match(conflictDialog, /resolveRecitationsFromNazem/);
   assert.match(conflictDialog, /اعتماد نتائج ناظم لكل تعارضات التسميع/);
   assert.match(settings, /استيراد/);
-  assert.equal((settings.match(/^\s*استيراد\s*$/gm) || []).length, 1);
+  assert.equal(settings.split('\n').filter((line) => line.trim() === 'استيراد').length, 1);
   assert.doesNotMatch(settings, /آخر مزامنة ناجحة/);
   assert.doesNotMatch(settings, /account\.discoveredPlans/);
   assert.doesNotMatch(settings, /account\.planIssues/);

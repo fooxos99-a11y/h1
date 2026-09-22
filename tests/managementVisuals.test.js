@@ -39,9 +39,10 @@ test('selected recitation policy text is white and the sidebar selection is a bo
     readFile(new URL('../src/components/dashboard/DashboardSidebarContent.jsx', import.meta.url), 'utf8'),
   ]);
 
-  assert.match(settings, /evaluationUnit === 'face' \? 'text-white hover:text-white'/);
-  assert.match(settings, /evaluationUnit === 'quarterFace' \? 'text-white hover:text-white'/);
-  assert.match(settings, /evaluationUnit === 'halfFace' \? 'text-white hover:text-white'/);
+  assert.match(settings, /<EvaluationUnitSelector/);
+  const selector = await readFile(new URL('../src/components/dashboard/EvaluationUnitSelector.jsx', import.meta.url), 'utf8');
+  for (const value of ['face', 'quarterFace', 'halfFace']) assert.ok(selector.includes(`value: '${value}'`));
+  assert.match(selector, /selected \? 'text-white hover:text-white'/);
   assert.match(sidebar, /\? 'bg-white\/15 text-white'/);
   assert.match(sidebar, /var\(--brand-navigation-accent\)/);
   assert.doesNotMatch(sidebar, /border-\[#f0bd55\]|shadow-\[0_8px_22px/);

@@ -42,7 +42,9 @@ test('Nazem stays authoritative in live reports while historical source remains 
   const execution = sliceBetween(server, "app.get('/api/execution-followup'", "app.get('/api/families'");
   const progress = sliceBetween(server, 'async function buildProgressReport', 'function resolvePdfFontPair');
 
-  assert.match(execution, /isStudentPlanManagedByNazem\(connection, student\.id\)\) continue/);
+  assert.match(execution, /ensureFollowUpCurrentTasks/);
+  const generation = server.slice(server.indexOf("async function ensureFollowUpCurrentTasks("));
+  assert.match(generation, /isStudentPlanManagedByNazem\(connection, student\.id\)\) continue/);
   assert.match(execution, /managedSetting\.setting_key = 'nazemIntegrationEnabled'/);
   assert.match(execution, /actual_repeat_count AS actualRepeatCount/);
   assert.match(execution, /actual_listening_count AS actualListeningCount/);

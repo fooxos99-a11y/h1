@@ -119,7 +119,7 @@ test('linking an old completed amount uses current attendance and preserves its 
 test('late completion posts attendance only for the current execution day', async () => {
   const adapter = new NazemAdapter();
   const posts = [];
-  adapter.resolveRecitationFollowUp = async () => ({ item: {}, late: { id: 72 }, followUpDate: getBusinessDate() });
+  adapter.resolveRecitationFollowUp = async () => ({ item: { late_items: [{ id: 72, source_date: '2026-09-03', status: 'pending' }] }, late: { id: 72 }, followUpDate: getBusinessDate() });
   adapter.postFollowUpApi = async (path, payload) => posts.push({ path, payload });
   adapter.openFollowUp = async (_plan, date) => {
     assert.equal(date, getBusinessDate());

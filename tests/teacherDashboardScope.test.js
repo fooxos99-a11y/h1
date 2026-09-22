@@ -70,7 +70,7 @@ test('teacher reports expose execution only for student execution mode and keep 
   ]);
 
   assert.doesNotMatch(dashboard, /key: 'executionFollowup'.*label: 'متابعة التنفيذ'/);
-  assert.match(dashboard, /isSupervisor && section\.key === 'reports'\) return true/);
+  assert.match(dashboard, /isSupervisor && \['teacherPoints', 'culturalCompetition', 'calls', 'reports'\]\.includes\(section\.key\)\) return true/);
   assert.match(dashboard, /canViewStandardReports=\{isSupervisor \|\|/);
   assert.match(dashboard, /canViewExecutionFollowup=\{[\s\S]*settings\.hasStudentQuranExecution !== false[\s\S]*isSupervisor \|\| isManager/);
   assert.match(accountPortal, /teacherScoped[\s\S]*canViewStandardReports[\s\S]*canViewExecutionFollowup=\{settings\.hasStudentQuranExecution !== false\}/);

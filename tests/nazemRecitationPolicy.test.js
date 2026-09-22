@@ -83,7 +83,7 @@ test('teacher lands on recitation before and after attendance loads without chan
 
 test('Nazem review range API accepts partial and scheduled ends but rejects extension', async () => {
   const route = server.slice(server.indexOf("app.post('/api/supervisors/:id/quran-evaluation/:taskId/range'"));
-  const code = route.slice(route.indexOf('      const fixedRange ='), route.indexOf('      for (let index = 0; index < tasks.length;'));
+  const code = route.slice(route.indexOf('      const fixedRange ='), route.indexOf('      await persistNazemRecitationRange('));
   for (const end of [4, 5, 6]) {
     let status = null;
     const context = vm.createContext({
@@ -95,6 +95,11 @@ test('Nazem review range API accepts partial and scheduled ends but rejects exte
       connection: { rollback: async () => {} },
       res: { status: (value) => { status = value; return { json: () => {} }; } },
     });
+    for (const name of ['rejectOutOfRangeNazemRecitation', 'rejectChangedFixedNazemRange']) {
+      const start = server.indexOf(`async function ${name}(`);
+      const end = server.indexOf('\n}', start) + 2;
+      vm.runInContext(server.slice(start, end), context);
+    }
     await vm.runInContext(`(async () => {${code}})()`, context);
     assert.equal(status, end <= 5 ? null : 422);
   }

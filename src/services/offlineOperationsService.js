@@ -41,7 +41,7 @@ export const offlineActorKey = (accountId, actorRole = 'supervisor') => (
 );
 
 const refreshManagementWorkspace = createRefreshGate(5 * 60_000);
-const fetchSnapshot = singleFlight(async (key, session, loader) => {
+const fetchSnapshot = singleFlight(async (key, _session, loader) => {
   const value = await loader();
   await offlineRecitationStore.cacheSnapshot(key, value);
   return value;

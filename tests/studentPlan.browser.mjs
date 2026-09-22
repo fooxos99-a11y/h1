@@ -35,7 +35,7 @@ try {
       let body = [];
       if (path.endsWith('/site-config')) body = {};
       if (path.endsWith('/public-settings')) body = { hasStudentQuranExecution: true, dailyChallengeEnabled: false, summitEnabled: false };
-      if (path.endsWith('/quran-today')) body = { date, nextDay: complete ? { date: previewDate, tasks: [makeTask('preview', previewDate, 'memorization', 4)] } : null, plan: empty ? null : { id: 1, progressPercent: 44 }, todayAmounts: empty ? [] : rows.filter((row) => row.taskDate === date), repeatCount: 10, listeningCount: 3 };
+      body = mockStudentTodayResponse({ path, body, date, complete, previewDate, empty });
       if (path.endsWith('/quran-sessions')) body = { rows: empty ? [] : rows, points: { total: 1234, days: empty ? [] : [{ date, earned: 43, maximum: 45, pending: false, details: [{ label: 'الحضور', earned: 25 }, { label: 'تقييم الحفظ', earned: 18 }] }] } };
       if (path.includes('notifications')) body = { notifications: [], unreadCount: 0 };
       await route.fulfill({ json: body });
@@ -187,3 +187,9 @@ try {
   await writeFile('outputs/student-plan-browser.json', JSON.stringify(results, null, 2));
   process.stdout.write(JSON.stringify(results) + '\n');
 } finally { await browser.close(); }
+
+/** Build the selected complete or empty student-plan response for browser scenarios. */
+function mockStudentTodayResponse({ path, body, date, complete, previewDate, empty }) {
+  if (path.endsWith('/quran-today')) body = { date, nextDay: complete ? { date: previewDate, tasks: [makeTask('preview', previewDate, 'memorization', 4)] } : null, plan: empty ? null : { id: 1, progressPercent: 44 }, todayAmounts: empty ? [] : rows.filter((row) => row.taskDate === date), repeatCount: 10, listeningCount: 3 };
+  return body;
+}

@@ -18,7 +18,7 @@ test('staff attendance covers teachers, reciters, and administrators with locati
     readFile(new URL('../server/routes/staffAttendanceRoutes.js', import.meta.url), 'utf8'),
     readFile(new URL('../server/migrations/2026.08.17.5-staff-attendance.js', import.meta.url), 'utf8'),
     readFile(new URL('../server/index.js', import.meta.url), 'utf8'),
-    readFile(new URL('../src/components/dashboard/SettingsSection.jsx', import.meta.url), 'utf8'),
+    Promise.all(['SettingsSection.jsx', 'StaffAttendanceSettings.jsx'].map((name) => readFile(new URL(`../src/components/dashboard/${name}`, import.meta.url), 'utf8'))).then((parts) => parts.join('\n')),
     readFile(new URL('../src/pages/WajehDashboard.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/pages/AccountPortal.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/dashboard/ReportsSection.jsx', import.meta.url), 'utf8'),

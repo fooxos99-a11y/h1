@@ -17,6 +17,7 @@ import TeacherRecitationPractice from '@/components/portal/TeacherRecitationPrac
 import { getRecitationStatusLabel } from '@/lib/recitationEvaluation';
 import { hasNazemFixedRange, isNazemLinkTask, readNazemLinkCount } from '../../../shared/nazem-recitation-policy.js';
 import { Button } from '@/components/ui/button';
+import { nazemLateOptions, selectNazemLatePrefix } from '../../../shared/nazem-late-selection.js';
 
 const evaluationTypeForTask = (task) => (
   task.taskType === 'memorization' && task.track === 'mastery'
@@ -135,8 +136,13 @@ const TeacherRecitationTaskList = ({
           return ['teacher', 'both'].includes(executionSources[action.sourceKey]);
         });
         const hasRecitationTasks = recitationActions.some((action) => action.empty || action.tasks.length > 0);
-        const actionViews = recitationActions.map((action) => {
-          const actionKey = `${student.studentId}:${action.key}`;
+        const actionViews = recitationActions.map((sourceAction) => {
+          const actionKey = `${student.studentId}:${sourceAction.key}:${sourceAction.tasks[0]?.id}`;
+          const lateOptions = nazemLateOptions(sourceAction.tasks[0], taskQueue, quranChapters);
+          const action = lateOptions.length ? {
+            ...sourceAction,
+            tasks: selectNazemLatePrefix(lateOptions, selectedEnds[actionKey]),
+          } : sourceAction;
           const nazemManaged = Boolean(action.tasks[0]?.nazemManaged);
           const nazemLate = action.tasks.some((task) => Boolean(task.nazemLate));
           const actionTeacherExecutionMode = nazemManaged || ['teacher', 'both'].includes(
@@ -162,7 +168,14 @@ const TeacherRecitationTaskList = ({
           };
           const defaultListeningCount = _resolveDefaultListeningCount();
           const actionAmount = action.empty ? 'لا يوجد محفوظ للربط' : formatContinuousRecitationRange(action.tasks);
-          const amountControl = teacherExecutionMode
+          const amountControl = lateOptions.length > 1 ? (
+            <RecitationEndSelector
+              start={{ surah: action.tasks[0].fromSurah, ayah: action.tasks[0].fromAyah, surahName: action.tasks[0].fromSurahName }}
+              options={lateOptions}
+              value={lateOptions.find(option => Number(option.task.id) === Number(action.tasks.at(-1).id))}
+              onChange={(value) => updateSelectedEnd(actionKey, value)}
+            />
+          ) : teacherExecutionMode
             && !hasNazemFixedRange(action.tasks[0])
             && actionTeacherExecutionMode
             && ['saved', 'review', 'mastery'].includes(action.key)

@@ -37,7 +37,9 @@ export async function buildForwardQuranFaceRange({
   return { start, end, faces: requestedFaces, segments };
 }
 
-async function collectWholeQuranFaces(wholeFaces, cursor, getPageEnd, segments, end, endLimit, getNextPosition) {
+/** Keep the starting boundary when no whole face can be traversed. */
+async function collectWholeQuranFaces(wholeFaces, cursor, getPageEnd, segments, initialEnd, endLimit, getNextPosition) {
+  let end = initialEnd;
   for (let face = 0;face < wholeFaces && cursor;face += 1) {
     const segmentEnd = await getPageEnd(cursor);
     segments.push({ start: cursor, end: segmentEnd, faces: 1 });

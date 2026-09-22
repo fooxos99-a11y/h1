@@ -1001,23 +1001,9 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
       const importMode = String(req.body.importMode || 'with_plans');
       const selections = Array.isArray(req.body.selections) ? req.body.selections : [];
       if (importMode !== 'with_plans') throw invalid('يسمح باستيراد الطلاب ذوي الخطط فقط؛ حدّث الصفحة.');
-      if ((!requestedCommitteeId && !newCommitteeName) || (requestedCommitteeId && newCommitteeName)) {
-        throw invalid('اختر حلقة موجودة أو اكتب اسم حلقة جديدة.');
-      }
+      assertImportCommitteeChoice(requestedCommitteeId, newCommitteeName);
       if (!selections.length || selections.length > 200) throw invalid('اختر طالبًا واحدًا على الأقل للاستيراد.');
-      const normalizedSelections = selections.map((selection) => ({
-        candidateId: Number(selection.candidateId || 0),
-        action: String(selection.action || ''),
-        studentId: Number(selection.studentId || 0) || null,
-        importPlan: selection.importPlan === true,
-        planCandidateId: Number(selection.planCandidateId || 0) || null,
-      }));
-      if (normalizedSelections.some((selection) => (
-        !selection.candidateId || !['create', 'match', 'keep'].includes(selection.action)
-          || (selection.action === 'match' && !selection.studentId)
-      ))) throw invalid('اختيارات استيراد الطلاب غير صحيحة.');
-      const candidateIds = normalizedSelections.map((selection) => selection.candidateId);
-      if (new Set(candidateIds).size !== candidateIds.length) throw invalid('لا يمكن تكرار الطالب نفسه في عملية الاستيراد.');
+      const { candidateIds, normalizedSelections } = normalizeImportSelections(selections);
 
       await connection.beginTransaction();
       const [[account]] = await connection.query(
@@ -1032,24 +1018,7 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
 
       let committee;
       let committeeCreated = false;
-      if (requestedCommitteeId) {
-        [[committee]] = await connection.query(
-          'SELECT id, name FROM committees WHERE id = ? LIMIT 1 FOR UPDATE',
-          [requestedCommitteeId],
-        );
-        if (!committee) throw invalid('الحلقة المختارة غير موجودة.');
-      } else {
-        if (newCommitteeName.length < 2) throw invalid('اسم الحلقة الجديدة قصير جدًا.');
-        [[committee]] = await connection.query(
-          'SELECT id, name FROM committees WHERE name = ? LIMIT 1 FOR UPDATE',
-          [newCommitteeName],
-        );
-        if (!committee) {
-          const [createdCommittee] = await connection.query('INSERT INTO committees (name) VALUES (?)', [newCommitteeName]);
-          committee = { id: Number(createdCommittee.insertId), name: newCommitteeName };
-          committeeCreated = true;
-        }
-      }
+      ({ committee, committeeCreated } = await resolveImportCommittee(requestedCommitteeId, committee, connection, newCommitteeName, committeeCreated));
       committee.id = Number(committee.id);
       await connection.query(
         'INSERT IGNORE INTO supervisor_committees (supervisor_id, committee_id) VALUES (?, ?)',
@@ -1074,25 +1043,7 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
       );
       if (candidateRows.length !== candidateIds.length) throw invalid('بعض طلاب ناظم لم تعد متاحة؛ حدّث المعاينة.');
       const candidates = new Map(candidateRows.map((candidate) => [Number(candidate.id), candidate]));
-      if (importMode === 'with_plans') {
-        const [plannedCandidates] = await connection.query(
-          `SELECT DISTINCT studentCandidate.id AS candidateId
-           FROM nazem_student_candidates studentCandidate
-           JOIN nazem_plan_candidates planCandidate
-             ON planCandidate.teacher_id = studentCandidate.teacher_id
-            AND planCandidate.nazem_student_id = studentCandidate.nazem_student_id
-            AND planCandidate.discovery_status IN ('discovered', 'requires_review')
-           WHERE studentCandidate.teacher_id = ?
-             AND studentCandidate.id IN (${candidateIds.map(() => '?').join(', ')})`,
-          [teacherId, ...candidateIds],
-        );
-        const plannedCandidateIds = new Set(plannedCandidates.map((row) => Number(row.candidateId)));
-        if (normalizedSelections.some((selection) => (
-          !plannedCandidateIds.has(selection.candidateId) || !selection.importPlan
-        ))) {
-          throw invalid('استيراد الطلاب ذوي الخطط يقبل فقط طالبًا لديه خطة ناظم قابلة للاستيراد.');
-        }
-      }
+      await assertSelectedNazemPlans(importMode, connection, candidateIds, teacherId, normalizedSelections);
       const externalIds = candidateRows.map((candidate) => String(candidate.nazemStudentId || ''));
       if (externalIds.some((externalId) => !isNazemExternalStudentId(externalId))
         || new Set(externalIds).size !== externalIds.length) {
@@ -1158,7 +1109,7 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
             `UPDATE nazem_plan_candidates SET discovery_status = 'requires_review',
               last_error_code = ?, last_error = ? WHERE id = ?`,
             [String(error.code || 'NAZEM_BULK_IMPORT_REVIEW').slice(0, 80),
-              String(error.message || 'تعذر استيراد الخطة.').slice(0, 500), planCandidate.id],
+            String(error.message || 'تعذر استيراد الخطة.').slice(0, 500), planCandidate.id],
           );
           await connection.query(`RELEASE SAVEPOINT ${savepoint}`);
           summary.plansReview += 1;
@@ -1664,60 +1615,7 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
         throw error;
       }
       let importedPlan = null;
-      if (resolution === 'use_ruwasi' && conflict.entityType === 'plan') {
-        await queueLocalPlanConflict(connection, conflict);
-      } else if (resolution === 'use_ruwasi' && conflict.entityType === 'recitation') {
-        await queueLocalRecitationConflict(connection, conflict);
-      } else if (resolution === 'use_ruwasi' && conflict.entityType === 'recitation_day') {
-        await queueLocalDailyConflict(connection, conflict);
-      } else if (resolution === 'use_nazem' && conflict.entityType === 'plan') {
-        importedPlan = await acceptNazemPlanConflict(importPlanCandidate, connection, conflict, importedPlan, req);
-      } else if (resolution === 'use_nazem' && conflict.entityType === 'recitation_day') {
-        await acceptNazemDailyConflict(conflict, connection);
-      } else if (resolution === 'use_nazem') {
-        throw invalid('اعتماد نسخة ناظم متاح لتعارضات الخطط فقط.');
-      } else if (conflict.entityType === 'plan') {
-        await connection.query(
-          `UPDATE nazem_plan_links SET sync_status = 'synced',
-            last_synced_snapshot = ?, remote_snapshot = ?, last_synced_at = NOW(3),
-            last_remote_checked_at = NOW(3),
-            last_error_code = NULL, last_error = NULL
-           WHERE ruwasi_plan_id = ? AND teacher_id = ?`,
-          [
-            JSON.stringify({
-              local: typeof conflict.localSnapshot === 'string'
-                ? JSON.parse(conflict.localSnapshot) : conflict.localSnapshot,
-              remote: typeof conflict.remoteSnapshot === 'string'
-                ? JSON.parse(conflict.remoteSnapshot) : conflict.remoteSnapshot,
-            }),
-            typeof conflict.remoteSnapshot === 'string'
-              ? conflict.remoteSnapshot : JSON.stringify(conflict.remoteSnapshot || {}),
-            conflict.entityId,
-            conflict.teacherId,
-          ],
-        );
-      } else if (conflict.entityType === 'recitation') {
-        await connection.query(
-          `UPDATE nazem_recitation_links SET sync_status = 'synced', remote_snapshot = ?,
-            last_synced_at = NOW(3),
-            last_error_code = NULL, last_error = NULL
-           WHERE ruwasi_recitation_id = ? AND teacher_id = ?`,
-          [
-            typeof conflict.remoteSnapshot === 'string'
-              ? conflict.remoteSnapshot : JSON.stringify(conflict.remoteSnapshot || {}),
-            conflict.entityId,
-            conflict.teacherId,
-          ],
-        );
-      } else if (conflict.entityType === 'recitation_day') {
-        await connection.query(
-          `UPDATE nazem_daily_follow_up_links SET sync_status = 'conflict', remote_snapshot = ?,
-            last_remote_checked_at = NOW(3), last_error_code = 'NAZEM_DIFFERENCE_ACCEPTED',
-            last_error = 'اعتمد المسؤول استمرار الاختلاف بين المنصة وناظم.'
-           WHERE id = ? AND teacher_id = ?`,
-          [JSON.stringify(parseSnapshot(conflict.remoteSnapshot) || {}), conflict.entityId, conflict.teacherId],
-        );
-      }
+      importedPlan = await applySelectedConflictResolution({ resolution, conflict, connection, importedPlan, importPlanCandidate, req });
       await connection.query(
         `UPDATE nazem_sync_conflicts SET status = 'resolved', resolution = ?,
           resolved_by_role = ?, resolved_by_id = ?, resolved_at = NOW(3) WHERE id = ?`,
@@ -1844,39 +1742,158 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
   return router;
 }
 
+/** Require exactly one existing committee or new committee name before beginning an import. */
+function assertImportCommitteeChoice(requestedCommitteeId, newCommitteeName) {
+  if ((!requestedCommitteeId && !newCommitteeName) || (requestedCommitteeId && newCommitteeName)) {
+    throw invalid('اختر حلقة موجودة أو اكتب اسم حلقة جديدة.');
+  }
+}
+
+/** Normalize selected candidates and reject unsupported actions, missing matches and duplicate candidate IDs. */
+function normalizeImportSelections(selections) {
+  const normalizedSelections = selections.map((selection) => ({
+    candidateId: Number(selection.candidateId || 0),
+    action: String(selection.action || ''),
+    studentId: Number(selection.studentId || 0) || null,
+    importPlan: selection.importPlan === true,
+    planCandidateId: Number(selection.planCandidateId || 0) || null,
+  }));
+  if (normalizedSelections.some((selection) => (
+    !selection.candidateId || !['create', 'match', 'keep'].includes(selection.action)
+    || (selection.action === 'match' && !selection.studentId)
+  ))) throw invalid('اختيارات استيراد الطلاب غير صحيحة.');
+  const candidateIds = normalizedSelections.map((selection) => selection.candidateId);
+  if (new Set(candidateIds).size !== candidateIds.length) throw invalid('لا يمكن تكرار الطالب نفسه في عملية الاستيراد.');
+  return { candidateIds, normalizedSelections };
+}
+
+/** Dispatch only the explicitly selected local, remote or ignored conflict resolution in the current transaction. */
+async function applySelectedConflictResolution({ resolution, conflict, connection, importedPlan, importPlanCandidate, req }) {
+  if (resolution === 'use_ruwasi' && conflict.entityType === 'plan') {
+    await queueLocalPlanConflict(connection, conflict);
+  } else if (resolution === 'use_ruwasi' && conflict.entityType === 'recitation') {
+    await queueLocalRecitationConflict(connection, conflict);
+  } else if (resolution === 'use_ruwasi' && conflict.entityType === 'recitation_day') {
+    await queueLocalDailyConflict(connection, conflict);
+  } else if (resolution === 'use_nazem' && conflict.entityType === 'plan') {
+    importedPlan = await acceptNazemPlanConflict(importPlanCandidate, connection, conflict, req);
+  } else if (resolution === 'use_nazem' && conflict.entityType === 'recitation_day') {
+    await acceptNazemDailyConflict(conflict, connection);
+  } else if (resolution === 'use_nazem') {
+    throw invalid('اعتماد نسخة ناظم متاح لتعارضات الخطط فقط.');
+  } else if (conflict.entityType === 'plan') {
+    await ignoreRemotePlanConflict(connection, conflict);
+  } else if (conflict.entityType === 'recitation') {
+    await ignoreRemoteRecitationConflict(connection, conflict);
+  } else if (conflict.entityType === 'recitation_day') {
+    await ignoreRemoteDailyConflict(connection, conflict);
+  }
+  return importedPlan;
+}
+
+/** Preserve the chosen local conflict snapshot without submitting a remote update. */
+async function ignoreRemoteDailyConflict(connection, conflict) {
+  await connection.query(
+    `UPDATE nazem_daily_follow_up_links SET sync_status = 'conflict', remote_snapshot = ?,
+            last_remote_checked_at = NOW(3), last_error_code = 'NAZEM_DIFFERENCE_ACCEPTED',
+            last_error = 'اعتمد المسؤول استمرار الاختلاف بين المنصة وناظم.'
+           WHERE id = ? AND teacher_id = ?`,
+    [JSON.stringify(parseSnapshot(conflict.remoteSnapshot) || {}), conflict.entityId, conflict.teacherId]
+  );
+}
+
+/** Preserve the chosen local conflict snapshot without submitting a remote update. */
+async function ignoreRemoteRecitationConflict(connection, conflict) {
+  await connection.query(
+    `UPDATE nazem_recitation_links SET sync_status = 'synced', remote_snapshot = ?,
+            last_synced_at = NOW(3),
+            last_error_code = NULL, last_error = NULL
+           WHERE ruwasi_recitation_id = ? AND teacher_id = ?`,
+    [
+      typeof conflict.remoteSnapshot === 'string'
+        ? conflict.remoteSnapshot : JSON.stringify(conflict.remoteSnapshot || {}),
+      conflict.entityId,
+      conflict.teacherId,
+    ]
+  );
+}
+
+/** Preserve the chosen local conflict snapshot without submitting a remote update. */
+async function ignoreRemotePlanConflict(connection, conflict) {
+  await connection.query(
+    `UPDATE nazem_plan_links SET sync_status = 'synced',
+            last_synced_snapshot = ?, remote_snapshot = ?, last_synced_at = NOW(3),
+            last_remote_checked_at = NOW(3),
+            last_error_code = NULL, last_error = NULL
+           WHERE ruwasi_plan_id = ? AND teacher_id = ?`,
+    [
+      JSON.stringify({
+        local: typeof conflict.localSnapshot === 'string'
+          ? JSON.parse(conflict.localSnapshot) : conflict.localSnapshot,
+        remote: typeof conflict.remoteSnapshot === 'string'
+          ? JSON.parse(conflict.remoteSnapshot) : conflict.remoteSnapshot,
+      }),
+      typeof conflict.remoteSnapshot === 'string'
+        ? conflict.remoteSnapshot : JSON.stringify(conflict.remoteSnapshot || {}),
+      conflict.entityId,
+      conflict.teacherId,
+    ]
+  );
+}
+
+/** Require an importable remote plan for every selected candidate. */
+async function assertSelectedNazemPlans(importMode, connection, candidateIds, teacherId, normalizedSelections) {
+  if (importMode === 'with_plans') {
+    const [plannedCandidates] = await connection.query(
+      `SELECT DISTINCT studentCandidate.id AS candidateId
+           FROM nazem_student_candidates studentCandidate
+           JOIN nazem_plan_candidates planCandidate
+             ON planCandidate.teacher_id = studentCandidate.teacher_id
+            AND planCandidate.nazem_student_id = studentCandidate.nazem_student_id
+            AND planCandidate.discovery_status IN ('discovered', 'requires_review')
+           WHERE studentCandidate.teacher_id = ?
+             AND studentCandidate.id IN (${candidateIds.map(() => '?').join(', ')})`,
+      [teacherId, ...candidateIds]
+    );
+    const plannedCandidateIds = new Set(plannedCandidates.map((row) => Number(row.candidateId)));
+    if (normalizedSelections.some((selection) => (
+      !plannedCandidateIds.has(selection.candidateId) || !selection.importPlan
+    ))) {
+      throw invalid('استيراد الطلاب ذوي الخطط يقبل فقط طالبًا لديه خطة ناظم قابلة للاستيراد.');
+    }
+  }
+}
+
+/** Resolve or create the explicitly selected committee under row locks. */
+async function resolveImportCommittee(requestedCommitteeId, committee, connection, newCommitteeName, committeeCreated) {
+  if (requestedCommitteeId) {
+    [[committee]] = await connection.query(
+      'SELECT id, name FROM committees WHERE id = ? LIMIT 1 FOR UPDATE',
+      [requestedCommitteeId]
+    );
+    if (!committee) throw invalid('الحلقة المختارة غير موجودة.');
+  } else {
+    if (newCommitteeName.length < 2) throw invalid('اسم الحلقة الجديدة قصير جدًا.');
+    [[committee]] = await connection.query(
+      'SELECT id, name FROM committees WHERE name = ? LIMIT 1 FOR UPDATE',
+      [newCommitteeName]
+    );
+    if (!committee) {
+      const [createdCommittee] = await connection.query('INSERT INTO committees (name) VALUES (?)', [newCommitteeName]);
+      committee = { id: Number(createdCommittee.insertId), name: newCommitteeName };
+      committeeCreated = true;
+    }
+  }
+  return { committee, committeeCreated };
+}
+
 /** Create or match each explicitly selected student and preserve link identity within the import transaction. */
 async function importSelectedNazemStudents({ normalizedSelections, candidates, connection, summary, committee, usedLoginNumbers, teacherId, studentByExternalId }) {
   for (const selection of normalizedSelections) {
     const candidate = candidates.get(selection.candidateId);
     const profile = candidateContactProfile(candidate);
     let student;
-    if (selection.action === 'keep') {
-      if (!candidate.linkedStudentId) throw invalid(`الطالب ${candidate.nazemStudentName} غير مرتبط بعد.`);
-      [[student]] = await connection.query(
-        'SELECT id, name, committee_id AS committeeId FROM students WHERE id = ? LIMIT 1 FOR UPDATE',
-        [candidate.linkedStudentId]
-      );
-      summary.kept += 1;
-    } else if (selection.action === 'match') {
-      [[student]] = await connection.query(
-        `SELECT id, name, committee_id AS committeeId FROM students
-             WHERE id = ? AND committee_id = ? LIMIT 1 FOR UPDATE`,
-        [selection.studentId, committee.id]
-      );
-      if (!student) throw invalid(`طالب مدارج المختار لـ ${candidate.nazemStudentName} غير موجود في الحلقة.`);
-      summary.matched += 1;
-    } else {
-      const loginNumber = generateThreeDigitLoginNumber(usedLoginNumbers);
-      if (!loginNumber) throw invalid('لا توجد أرقام دخول ثلاثية متاحة لإنشاء الطلاب.');
-      const [created] = await connection.query(
-        `INSERT INTO students (name, login_number, national_id, guardian_phone, committee_id)
-             VALUES (?, ?, ?, ?, ?)`,
-        [candidate.nazemStudentName, loginNumber, profile.nationalId, profile.phone, committee.id]
-      );
-      student = { id: Number(created.insertId), name: candidate.nazemStudentName, committeeId: committee.id };
-      summary.created += 1;
-      summary.createdStudents.push({ id: student.id, name: student.name, loginNumber });
-    }
+    student = await resolveImportedStudent({ selection, candidate, student, connection, summary, committee, usedLoginNumbers, profile });
     if (!student) throw invalid(`تعذر تجهيز الطالب ${candidate.nazemStudentName}.`);
     await connection.query(
       `UPDATE students SET
@@ -1932,6 +1949,38 @@ async function importSelectedNazemStudents({ normalizedSelections, candidates, c
     );
     studentByExternalId.set(candidate.nazemStudentId, Number(student.id));
   }
+}
+
+/** Keep, match or create only the requested student, retaining committee and login uniqueness checks. */
+async function resolveImportedStudent({ selection, candidate, student, connection, summary, committee, usedLoginNumbers, profile }) {
+  if (selection.action === 'keep') {
+    if (!candidate.linkedStudentId) throw invalid(`الطالب ${candidate.nazemStudentName} غير مرتبط بعد.`);
+    [[student]] = await connection.query(
+      'SELECT id, name, committee_id AS committeeId FROM students WHERE id = ? LIMIT 1 FOR UPDATE',
+      [candidate.linkedStudentId]
+    );
+    summary.kept += 1;
+  } else if (selection.action === 'match') {
+    [[student]] = await connection.query(
+      `SELECT id, name, committee_id AS committeeId FROM students
+             WHERE id = ? AND committee_id = ? LIMIT 1 FOR UPDATE`,
+      [selection.studentId, committee.id]
+    );
+    if (!student) throw invalid(`طالب مدارج المختار لـ ${candidate.nazemStudentName} غير موجود في الحلقة.`);
+    summary.matched += 1;
+  } else {
+    const loginNumber = generateThreeDigitLoginNumber(usedLoginNumbers);
+    if (!loginNumber) throw invalid('لا توجد أرقام دخول ثلاثية متاحة لإنشاء الطلاب.');
+    const [created] = await connection.query(
+      `INSERT INTO students (name, login_number, national_id, guardian_phone, committee_id)
+             VALUES (?, ?, ?, ?, ?)`,
+      [candidate.nazemStudentName, loginNumber, profile.nationalId, profile.phone, committee.id]
+    );
+    student = { id: Number(created.insertId), name: candidate.nazemStudentName, committeeId: committee.id };
+    summary.created += 1;
+    summary.createdStudents.push({ id: student.id, name: student.name, loginNumber });
+  }
+  return student;
 }
 
 /** Queue one local daily update and mark all related recitation links pending. */
@@ -1992,7 +2041,7 @@ async function queueLocalPlanConflict(connection, conflict) {
 }
 
 /** Import the selected remote plan and attribute the resolution to the authenticated actor. */
-async function acceptNazemPlanConflict(importPlanCandidate, connection, conflict, importedPlan, req) {
+async function acceptNazemPlanConflict(importPlanCandidate, connection, conflict, req) {
   if (typeof importPlanCandidate !== 'function') throw invalid('استيراد خطط ناظم غير متاح.');
   const [[candidate]] = await connection.query(
     `SELECT id, progress_snapshot AS progressSnapshot
@@ -2002,7 +2051,7 @@ async function acceptNazemPlanConflict(importPlanCandidate, connection, conflict
     [conflict.teacherId, conflict.studentId, conflict.nazemPlanId]
   );
   if (!candidate) throw invalid('أعد التحقق من حساب ناظم قبل اعتماد خطته.');
-  importedPlan = await importPlanCandidate(connection, {
+  const importedPlan = await importPlanCandidate(connection, {
     teacherId: conflict.teacherId,
     studentId: conflict.studentId,
     nazemStudentId: conflict.nazemStudentId,

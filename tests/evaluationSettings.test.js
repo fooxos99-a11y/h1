@@ -114,7 +114,10 @@ test('quarter-face policies are persisted and exposed in recitation settings', a
     for (const source of [server, database, settings]) assert.match(source, new RegExp(`${prefix}MaxScore`));
     assert.match(catalog, new RegExp(`evaluationFields\\('${prefix}'`));
   }
-  assert.match(settings, /onClick=\{\(\) => setEvaluationUnit\('quarterFace'\)\}/);
+  assert.match(settings, /EvaluationUnitSelector value=\{evaluationUnit\} onChange=\{setEvaluationUnit\}/);
+  const unitSelector = await readFile(new URL('../src/components/dashboard/EvaluationUnitSelector.jsx', import.meta.url), 'utf8');
+  assert.match(unitSelector, /value: 'quarterFace'/);
+  assert.match(unitSelector, /onClick=\{\(\) => onChange\(unit.value\)\}/);
   assert.match(server, /return getRecitationEvaluationPolicy\(settings, task\)/);
   const policySource = await readFile(new URL('../shared/evaluation-settings.js', import.meta.url), 'utf8');
   assert.match(policySource, /unit === 'quarterFace'[\s\S]*QuarterFaceEvaluation/);

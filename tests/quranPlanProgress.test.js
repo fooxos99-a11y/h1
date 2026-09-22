@@ -282,7 +282,9 @@ test('schema, settings, plan UI, and teacher range endpoint persist the new mode
   assert.match(server, /saveQuranExecutionSegments/);
   const rangeEndpoint = server.slice(server.indexOf("app.post('/api/supervisors/:id/quran-evaluation/:taskId/range'"), server.indexOf("app.get('/api/supervisors/:id/quran-evaluation/:taskId/ayahs'"));
   assert.match(rangeEndpoint, /newer\.task_date <= \?/);
-  assert.match(rangeEndpoint, /SET to_page = \?, to_surah = \?, to_ayah = \?/);
+  assert.match(rangeEndpoint, /extendRecitationTaskRange/);
+  const extension = server.slice(server.indexOf("async function extendRecitationTaskRange("));
+  assert.match(extension, /SET to_page = \?, to_surah = \?, to_ayah = \?/);
   assert.match(server, /status = 'paused'/);
   assert.match(server, /schedule_days_json/);
   assert.doesNotMatch(plans, /تطبيق التعديل من تاريخ/);
@@ -308,7 +310,9 @@ test('schema, settings, plan UI, and teacher range endpoint persist the new mode
   assert.match(settings, /settings\.pointsSystemEnabled && <SettingsGroup>[\s\S]*كيلومترات التحضير/);
   assert.match(teacherList, /RecitationEndSelector/);
   assert.match(teacherEvaluation, /taskIds: \(student\.tasks \|\| \[\]\)\.map/);
-  assert.match(rangeEndpoint, /req\.body\.taskIds/);
+  assert.match(rangeEndpoint, /buildRequestedRecitationTaskScope\(req, taskId, anchor\)/);
+  const requestedScope = server.slice(server.indexOf("function buildRequestedRecitationTaskScope("), server.indexOf("function buildRequestedRecitationTaskScope(") + 900);
+  assert.match(requestedScope, /req\.body\.taskIds/);
   assert.match(server, /const startDate = existingPlan\?\.startDate \|\| requestedStartDate/);
   assert.match(server, /const effectiveFrom = existingPlan \? minimumPlanStartDate : startDate/);
   assert.match(server, /getRecitationAmountDayOffset\(settings\?\.recitationAmountDay\)/);

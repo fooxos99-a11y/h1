@@ -1,5 +1,6 @@
 import express from 'express';
 import { db } from '../db.js';
+import { optimizeStoreProducts } from '../services/storeImages.js';
 import { getDailyChallengeWeekDay, pickRandomDailyChallengeGame } from '../../shared/daily-challenge.js';
 import {
   createDailyChallenge,
@@ -30,6 +31,7 @@ export function createOfflineStudentRouter({ loadSettings, getToday }) {
 
   router.post('/bootstrap', async (req, res, next) => {
     const connection = await db().getConnection();
+    let payload;
     try {
       const settings = await loadSettings();
       const date = getToday();
@@ -103,7 +105,7 @@ export function createOfflineStudentRouter({ loadSettings, getToday }) {
       }
 
       await connection.commit();
-      return res.json({
+      payload = {
         date,
         serverTime: new Date().toISOString(),
         cacheDays: 14,
@@ -111,13 +113,16 @@ export function createOfflineStudentRouter({ loadSettings, getToday }) {
         dailyChallenge,
         dailyChallenges,
         store,
-      });
+      };
     } catch (error) {
       await connection.rollback();
       return next(error);
     } finally {
       connection.release();
     }
+    // Compression must not keep a database connection or transaction occupied.
+    payload.store.products = await optimizeStoreProducts(payload.store.products);
+    return res.json(payload);
   });
 
   return router;

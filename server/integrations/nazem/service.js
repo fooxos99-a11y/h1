@@ -1994,6 +1994,7 @@ async function refreshTeacherFollowUps(connection, job) {
 
 /** Refresh linked students in order and retain partial failures for review without discarding successful imports. */
 async function refreshLinkedStudentFollowUps({ links, connection, job, adapter, timing, imported, issues, checkedStudentIds }) {
+  const fetchedPlans = new Set();
   for (const [index, link] of links.entries()) {
     await updateNazemJobProgress(connection, job, 10 + (index / Math.max(1, links.length)) * 85, 'followups_loading');
     try {
@@ -2001,9 +2002,11 @@ async function refreshLinkedStudentFollowUps({ links, connection, job, adapter, 
       const history = await adapter.readStudentFollowUpHistory(link.nazemPlanId, {
         nazemStudentId: link.nazemStudentId, nazemStudentName: link.nazemStudentName,
       }, 1, {
+        freshCurrent: !fetchedPlans.has(String(link.nazemPlanId)),
         endDate: job.operationType === 'account.daily_reconcile' ? job.payload.workDate : null,
         confirmedRecordIds: await loadConfirmedNazemRecordIds(connection, { ...link, teacherId: job.teacherId })
       });
+      fetchedPlans.add(String(link.nazemPlanId));
       timing.fetchMs += Date.now() - phaseStarted;
       phaseStarted = Date.now();
       const result = await importTeacherFollowUps(connection, { ...link, teacherId: job.teacherId }, history);
@@ -2037,15 +2040,15 @@ async function reconcileTeacher(connection, job) {
       || Boolean(job.payload?.discoverPlans);
     const discovery = refreshPlansRequested
       ? await discoverTeacherData(connection, job, adapter, {
-          progressStart: 20,
-          progressEnd: 76,
-        })
+        progressStart: 20,
+        progressEnd: 76,
+      })
       : {
-          remotePlans: [],
-          discoveryIssues: [],
-          studentDiscovery: {},
-          planDiscovery: {},
-        };
+        remotePlans: [],
+        discoveryIssues: [],
+        studentDiscovery: {},
+        planDiscovery: {},
+      };
     const {
       remotePlans,
       discoveryIssues,
@@ -2139,7 +2142,7 @@ async function reconcileTeacher(connection, job) {
             status: 'applied',
             changedInNazem: remoteChanged,
             changedInRuwasi: localChanged,
-            message: 'تم تحديث الخطة في رواسي من ناظم.',
+            message: 'تم تحديث الخطة في الحبيب ماب من ناظم.',
             differences,
           });
         } catch (error) {
@@ -2149,8 +2152,8 @@ async function reconcileTeacher(connection, job) {
               last_error_code = ?, last_error = ?
              WHERE ruwasi_plan_id = ? AND teacher_id = ?`,
             [JSON.stringify(remoteSnapshot), error?.code || 'NAZEM_REMOTE_APPLY_FAILED',
-              String(error?.message || 'تعذر تطبيق خطة ناظم في المنصة.').slice(0, 500),
-              link.planId, job.teacherId],
+            String(error?.message || 'تعذر تطبيق خطة ناظم في المنصة.').slice(0, 500),
+            link.planId, job.teacherId],
           );
           planReview += 1;
           planChanges.push({
@@ -2160,7 +2163,7 @@ async function reconcileTeacher(connection, job) {
             status: 'requires_review',
             changedInNazem: remoteChanged,
             changedInRuwasi: localChanged,
-            message: String(error?.message || 'تعذر تطبيق خطة ناظم في رواسي.').slice(0, 300),
+            message: String(error?.message || 'تعذر تطبيق خطة ناظم في الحبيب ماب.').slice(0, 300),
             differences,
           });
           continue;

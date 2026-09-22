@@ -159,7 +159,7 @@ export function createProgramRouter({ loadSettings, applyStudentPointDelta, logS
     }
     return requirePermission('programs')(req, res, next);
   };
-  const ensureEnabled = async (req, res, next) => {
+  const ensureEnabled = async (_req, res, next) => {
     try {
       if (!(await loadSettings()).learningPathsEnabled) return res.status(404).json({ message: 'البرامج غير مفعلة.' });
       return next();

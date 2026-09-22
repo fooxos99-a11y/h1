@@ -24,9 +24,7 @@ globalThis.fetch = async (input, init) => {
     return nativeFetch(input, init);
   }
   const path = url.pathname;
-  if (new URLSearchParams(location.search).has('slowRankings') && path.includes('/rankings/')) {
-    await new Promise(resolve => setTimeout(resolve, 15000));
-  }
+  await delayPreviewRankings(path);
   let data = [];
   if (path.endsWith('/quran-tasks/execution')) {
     const payload = JSON.parse(init?.body || '{}');
@@ -46,3 +44,10 @@ globalThis.fetch = async (input, init) => {
 };
 createRoot(document.getElementById('root')).render(<BrowserRouter><StudentHome studentId="preview-student" showPath showDailyChallenge executionEnabled onLogout={() => location.reload()} /><Toaster /></BrowserRouter>);
 
+
+/** Simulate delayed rankings only when the preview explicitly requests the scenario. */
+async function delayPreviewRankings(path) {
+  if (new URLSearchParams(location.search).has('slowRankings') && path.includes('/rankings/')) {
+    await new Promise(resolve => setTimeout(resolve, 15000));
+  }
+}

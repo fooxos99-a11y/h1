@@ -14,6 +14,10 @@ const taskEnd = (task) => ({
 });
 
 const compareTaskPosition = (first, second) => {
+  if (Number(first?.nazemLate) && Number(second?.nazemLate)) {
+    const dates = String(first.taskDate).localeCompare(String(second.taskDate));
+    if (dates) return dates;
+  }
   const direction = Number(first?.planDirection || second?.planDirection || 1) < 0 ? -1 : 1;
   const firstPosition = [Number(first?.fromPage || 0), Number(first?.fromSurah || 0), Number(first?.fromAyah || 0)];
   const secondPosition = [Number(second?.fromPage || 0), Number(second?.fromSurah || 0), Number(second?.fromAyah || 0)];

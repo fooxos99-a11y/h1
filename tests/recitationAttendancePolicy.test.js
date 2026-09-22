@@ -22,7 +22,7 @@ test('teacher attendance permits unmarked pupils only for the authorized teacher
 
 test('API writes and task lists enforce the same attendance policy, including cached UI data', () => {
   const server = readFileSync(new URL('../server/index.js', import.meta.url), 'utf8');
-  assert.match(server, /const teacherMode = req.body.mode === 'recitation_teacher'\s*&& canTeacherSetRecitationAttendance\(settings, req.auth\?\.role\)/);
+  assert.match(server, /req.body.mode === 'recitation_teacher'\s*&& canTeacherSetRecitationAttendance\(settings, req.auth\?\.role\)/);
   assert.match(server, /tasks: rows\s*\.filter\(\(row\) => isRecitationAttendanceVisible/);
   assert.match(server, /taskQueue: allRows\s*\.filter\(\(row\) => isRecitationAttendanceVisible/);
   const list = readFileSync(new URL('../src/components/portal/TeacherRecitationTaskList.jsx', import.meta.url), 'utf8');

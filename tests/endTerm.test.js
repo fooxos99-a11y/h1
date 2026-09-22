@@ -94,7 +94,9 @@ test('new plans respect the next term start date in the API and dashboard', asyn
 
   assert.match(publicSettings, /currentTermStartDate/);
   assert.match(savePlanEndpoint, /const minimumPlanStartDate/);
-  assert.match(savePlanEndpoint, /startDate < minimumPlanStartDate/);
+  assert.match(savePlanEndpoint, /rejectPastNewPlanStart/);
+  const dateValidation = server.slice(server.indexOf("async function rejectPastNewPlanStart("));
+  assert.match(dateValidation, /startDate < minimumPlanStartDate/);
   assert.match(plans, /setMinimumPlanStartDate/);
   assert.match(plans, /min=\{minimumPlanStartDate\}/);
   assert.match(settings, /يبدأ الفصل الجديد في اليوم التالي/);

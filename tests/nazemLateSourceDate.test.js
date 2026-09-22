@@ -20,7 +20,7 @@ test('one-day refresh imports the explicit previous pending day for every track 
     assert.deepEqual(history.scheduledFollowUps[0], { ...pending, remoteType: type,
       taskType: type === 'revision' ? 'review' : 'memorization', attendanceStatus: null,
       nazemLate: false, nazemPendingDay: true, nazemLateAvailableOn: getBusinessDate(),
-      nazemQueueDate: getBusinessDate(), nazemActionableDate: getBusinessDate(), nazemLinkDate: getBusinessDate() });
+      nazemQueueDate: getBusinessDate(), nazemActionableDate: pending.date, nazemLinkDate: pending.date });
   }
 });
 

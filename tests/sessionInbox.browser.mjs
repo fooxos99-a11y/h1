@@ -30,14 +30,7 @@ try {
             fromSurahName: 'البقرة', toSurahName: 'البقرة', targetPages: 1, teacherCompleted: null, expectedRepeatCount: 10, normalEnd: { surah: 2, ayah: 16, surahName: 'البقرة' }, options: [16, 17].map((ayah) => ({ surah: 2, ayah, surahName: 'البقرة', page: 3 })) }],
           listeningEnabled: true, executionSources: { memorization: 'teacher' },
         };
-        if (evaluationLoads > 1) {
-          body.tasks.push({ ...body.tasks[0], id: 901, taskType: 'link', options: [] });
-          if (bothTracks || masteryOnly) {
-            body.tasks.push({ ...body.tasks[0], id: 902, taskType: 'review', options: [] },
-        { ...body.tasks[0], id: 903, track: 'mastery', options: [] });
-            if (masteryOnly) body.tasks = body.tasks.filter((task) => task.id !== 900);
-          }
-        }
+        addSessionInboxTracks(evaluationLoads, body, bothTracks, masteryOnly);
       } else if (path.endsWith('/notifications/read')) {
         reads = route.request().postDataJSON().ids;
         for (const notice of notices) if (reads.includes(notice.id)) notice.isRead = true;
@@ -128,3 +121,15 @@ try {
   }
 } finally { await browser.close(); }
 process.stdout.write('Session refresh, accessible arrowless attendance, and read-on-open inbox passed at 360/768/1440px.\n');
+
+/** Extend the mocked response with the selected tracks after its initial loading response. */
+function addSessionInboxTracks(evaluationLoads, body, bothTracks, masteryOnly) {
+  if (evaluationLoads > 1) {
+    body.tasks.push({ ...body.tasks[0], id: 901, taskType: 'link', options: [] });
+    if (bothTracks || masteryOnly) {
+      body.tasks.push({ ...body.tasks[0], id: 902, taskType: 'review', options: [] },
+        { ...body.tasks[0], id: 903, track: 'mastery', options: [] });
+      if (masteryOnly) body.tasks = body.tasks.filter((task) => task.id !== 900);
+    }
+  }
+}

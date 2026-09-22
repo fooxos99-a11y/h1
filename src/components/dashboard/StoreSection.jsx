@@ -1,5 +1,5 @@
 import CheckboxOption from '@/components/ui/checkbox-option';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ImagePlus, Package, Pencil, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -43,6 +43,7 @@ const StoreSection = () => {
   const [configurationSaving, setConfigurationSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const originalDisplayImage = useRef('');
   const [form, setForm] = useState(emptyProduct);
   const [isSaving, setIsSaving] = useState(false);
   const [deletingProduct, setDeletingProduct] = useState(null);
@@ -99,6 +100,7 @@ const StoreSection = () => {
   };
 
   const openProduct = (product = null) => {
+    originalDisplayImage.current = product?.imageData || '';
     setEditingId(product?.id || null);
     setForm(product ? {
       name: product.name || '',
@@ -131,6 +133,8 @@ const StoreSection = () => {
     try {
       const payload = {
         ...form,
+        // Omit an unchanged display copy so the server retains the full original.
+        imageData: editingId && form.imageData === originalDisplayImage.current ? undefined : form.imageData,
         pointsPrice: Number(form.pointsPrice),
         stock: form.stock === '' ? null : Number(form.stock),
       };

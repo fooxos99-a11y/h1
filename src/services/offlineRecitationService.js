@@ -226,9 +226,7 @@ function collectCurrentOfflineTasks({ keys, nazemManagedKeys, studentById, cache
     const unresolvedDates = [...new Set(history
       .filter((task) => task.taskDate >= base.date && Number(task.teacherCompleted) !== 1)
       .map((task) => task.taskDate))].sort((a, b) => a.localeCompare(b));
-    let carry = null;
-    let blocked = !trustedEnough;
-    ({ blocked, carry } = resolveOfflineCarry({ unresolvedDates, history, usableSessions, studentId, type, blocked, carry }));
+    const { blocked, carry } = resolveOfflineCarry({ unresolvedDates, history, usableSessions, studentId, type, blocked: !trustedEnough });
     const student = studentById.get(studentId);
     if (blocked && student) student.offlineSequenceBlocked = true;
     if (!blocked) currentTasks.push(...(carry || due));
@@ -236,7 +234,8 @@ function collectCurrentOfflineTasks({ keys, nazemManagedKeys, studentById, cache
 }
 
 /** Require complete recorded outcomes for every earlier group before carrying work forward. */
-function resolveOfflineCarry({ unresolvedDates, history, usableSessions, studentId, type, blocked, carry }) {
+function resolveOfflineCarry({ unresolvedDates, history, usableSessions, studentId, type, blocked }) {
+  let carry = null;
   for (const taskDate of unresolvedDates) {
     const group = history.filter((task) => task.taskDate === taskDate);
     const groupIds = new Set(group.map((task) => Number(task.id)));
@@ -301,7 +300,7 @@ const prefetchTask = limitedTaskQueue(
       throw error;
     }
   },
-  (supervisorId, task, actorKey, sessionVersion) => JSON.stringify([actorKey, sessionVersion, Number(task.id)]),
+  (_supervisorId, task, actorKey, sessionVersion) => JSON.stringify([actorKey, sessionVersion, Number(task.id)]),
   4,
 );
 

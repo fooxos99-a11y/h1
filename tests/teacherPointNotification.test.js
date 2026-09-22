@@ -67,6 +67,9 @@ test('the teacher route commits movement and notification together or rolls both
         if (failNotification) throw new Error('inbox unavailable');
       },
     });
+    const validationStart = source.indexOf('async function rejectInvalidTeacherPointInput(');
+    const validationEnd = source.indexOf('\n}', validationStart) + 2;
+    vm.runInContext(source.slice(validationStart, validationEnd), context);
     vm.runInContext(routeSource, context);
     await handler({ auth: { role: 'supervisor', id: 3 }, body: { studentId: 8, adjustmentTypeId: 'good', reason: 'سبب محدد' } },
       { json: () => events.push('response') }, () => events.push('error'));

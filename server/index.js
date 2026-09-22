@@ -32,6 +32,7 @@ import { buildStudentPointsReport } from './services/studentPointsReport.js';
 import { setQuranTaskGroupReward } from './services/quranTaskRewards.js';
 import { buildNazemLateTaskExistsSql } from './integrations/nazem/lateTaskScope.js';
 import { nazemStudentRefreshState } from './integrations/nazem/refreshState.js';
+import { validateNazemLateSession } from './services/nazemLateSelection.js';
 import { buildStudentPlanPoints } from './services/studentPlanPoints.js';
 import { getManualAttendancePoints, applyStudentPointDelta, applyAttendancePointDelta, syncStudentPointBalance, logStudentPointTransaction, syncStudentFamilyPointsForAttendance } from './services/studentPoints.js';
 import { saveAttendanceWithPoints } from './services/attendancePoints.js';
@@ -392,7 +393,7 @@ app.use(
   express.json({ limit: '16mb' }),
 );
 app.use(express.json({ limit: '1mb' }));
-app.use((req, res, next) => {
+app.use((req, _res, next) => {
   req.body = req.body || {};
   next();
 });
@@ -418,7 +419,7 @@ app.get('/api/quran-fonts/hafs/v2/page/:page/font.woff2', async (req, res, next)
   }
 });
 
-app.get('/api/quran-fonts/hafs/uthmanic/font.woff2', async (req, res, next) => {
+app.get('/api/quran-fonts/hafs/uthmanic/font.woff2', async (_req, res, next) => {
   try {
     await sendQuranFont(res, 'uthmanic-hafs.woff2');
   } catch (error) {
@@ -2014,8 +2015,9 @@ async function buildDescendingQuranRangeByMushafFaces(connection, start, endLimi
 }
 
 /** Collect whole faces in Quran traversal order without crossing the requested end. */
-async function collectDescendingWholeFaces({ wholeFaces, cursor, connection, endLimit, segments, end }) {
-  for (let face = 0;face < wholeFaces && cursor;face += 1) {
+async function collectDescendingWholeFaces({ wholeFaces, cursor, connection, endLimit, segments, end: initialEnd }) {
+  let end = initialEnd;
+  for (let face = 0; face < wholeFaces && cursor; face += 1) {
     const segmentEnd = await getQuranTraversalPageEnd(connection, cursor, endLimit, -1);
     segments.push({ start: cursor, end: segmentEnd, faces: 1 });
     end = segmentEnd;
@@ -2693,7 +2695,8 @@ async function buildQuranRangeByFaceTarget(connection, start, endLimit, targetFa
 }
 
 /** Measure page fractions from the canonical boundaries when line-layout data is unavailable. */
-async function collectFallbackQuranFaces({ cursorPage, endLimit, unitsRemaining, start, startBoundary, connection, end, usedUnits }) {
+async function collectFallbackQuranFaces({ cursorPage, endLimit, unitsRemaining, start, startBoundary, connection, end: initialEnd, usedUnits }) {
+  let end = initialEnd;
   while (cursorPage <= Number(endLimit.page) && unitsRemaining > 0) {
     const boundary = await getFallbackPageBoundary(cursorPage, start, startBoundary, connection);
     if (!boundary) break;
@@ -2922,8 +2925,7 @@ async function buildExactLinkRanges(connection, ranges, currentMemorizationStart
     ));
     const fixedEnd = traversedAyahs.at(-1);
     const orderedCandidates = [...traversedAyahs].reverse();
-    let selectedStart = null;
-    selectedStart = selectLinkRangeStart({ orderedCandidates, fixedEnd, pageStats, limitToTarget, remainingFaces, selectedStart });
+    const selectedStart = selectLinkRangeStart({ orderedCandidates, fixedEnd, pageStats, limitToTarget, remainingFaces });
     if (!selectedStart) continue;
     const canonical = canonicalizeQuranRange({
       startPage: selectedStart.page,
@@ -2945,7 +2947,8 @@ async function buildExactLinkRanges(connection, ranges, currentMemorizationStart
 }
 
 /** Choose the earliest eligible start that respects the requested face limit. */
-function selectLinkRangeStart({ orderedCandidates, fixedEnd, pageStats, limitToTarget, remainingFaces, selectedStart }) {
+function selectLinkRangeStart({ orderedCandidates, fixedEnd, pageStats, limitToTarget, remainingFaces }) {
+  let selectedStart = null;
   for (const candidate of orderedCandidates) {
     const candidateFaces = calculateQuranRangeFacesFromLines(candidate, fixedEnd)
       || calculateQuranRangeFacesFromStats({
@@ -4323,7 +4326,7 @@ async function importNazemPlanCandidate(connection, candidate) {
   }
   const progress = candidate.progressSnapshot || null;
   const direction = getQuranRangeDirection(start, end);
-  var { completedToday, completedPlan, scheduleAnchor, next } = await resolveImportedPlanProgress(progress, connection, start, direction, end);
+  let { completedToday, completedPlan, scheduleAnchor, next } = await resolveImportedPlanProgress(progress, connection, start, direction, end);
   const revision = remote.revision;
   const revisionStart = revision
     ? await getNazemQuranPosition(connection, revision.startSurah, revision.startAyah)
@@ -5654,20 +5657,7 @@ function normalizeSettings(rows) {
       ? settings.familyEvaluationScope
       : 'program_supervisor',
     activityLogEnabled: false,
-    rankingsVisible: settings.rankingsVisible !== 'false',
-    studentRankingsVisible: settings.studentRankingsVisible === undefined
-      ? settings.rankingsVisible !== 'false'
-      : settings.studentRankingsVisible !== 'false',
-    familyRankingsVisible: settings.familyRankingsVisible === undefined
-      ? settings.rankingsVisible !== 'false'
-      : settings.familyRankingsVisible !== 'false',
-    familyRankingMode: normalizeFamilyRankingMode(settings.familyRankingMode),
-    rankingPointsVisible: settings.rankingPointsVisible !== 'false',
-    teacherManualPointsEnabled: settings.pointsSystemEnabled === 'true' && settings.teacherManualPointsEnabled === 'true',
-    teacherManualPointsTermLimit: Math.max(0, Math.trunc(Number(settings.teacherManualPointsTermLimit ?? 100))),
-    teacherPointTypes: normalizeTeacherPointTypes(settings.teacherPointTypes),
-    storeEnabled: siteConfig.features?.store !== false && settings.storeEnabled === 'true',
-    storePurchaseDeductsRanking: settings.storePurchaseDeductsRanking === 'true',
+    ...normalizeRankingAndStoreSettings(settings),
     ...normalizeAttendanceSettings(settings, attendanceDays),
     attendanceAbsentTemplate: settings.attendanceAbsentTemplate || 'السلام عليكم، تم تسجيل غياب الطالب {name} بتاريخ {date}.',
     automaticAbsenceMessageEnabled: settings.automaticAbsenceMessageEnabled === 'true',
@@ -6214,7 +6204,7 @@ async function reconcilePointSettingsOnStartup() {
   }
 }
 
-async function syncStudentPointFamilyContributionSetting(connection, previousSettings, nextSettings) {
+async function syncStudentPointFamilyContributionSetting(connection, _previousSettings, nextSettings) {
   const isEnabled = Boolean(nextSettings?.studentPointsAddToFamily);
   const contributionRows = await getStudentPointFamilyContributionRows(connection);
   const contributionByFamily = new Map(
@@ -6654,7 +6644,7 @@ async function loadSettings(queryExecutor = db()) {
   };
 }
 
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
 app.get('/api/native-update', async (req, res, next) => {
@@ -7052,8 +7042,8 @@ app.put('/api/narration-events/:eventId/parts/:partId', requireNarrationAccess, 
     const normalizedWordMarks = evaluationMode === 'mushaf'
       ? await normalizeQuranRangeWordMarks(connection, part, req.body.wordMarks)
       : null;
-    if (evaluationMode === 'mushaf' && normalizedWordMarks === null) return res.status(422).json({ message: 'تحديد أخطاء المصحف غير صحيح.' });
-    if (evaluationMode === 'count' && Array.isArray(req.body.wordMarks)) return res.status(422).json({ message: 'لا ترسل علامات كلمات مع النتيجة اليدوية.' });
+    const rejectInvalidNarrationMarksResult = await rejectInvalidNarrationMarks({ evaluationMode, normalizedWordMarks, req, res });
+    if (rejectInvalidNarrationMarksResult) { return rejectInvalidNarrationMarksResult; }
     const warnings = countNarrationWarnings(evaluationMode, normalizedWordMarks, req);
     const mistakes = countNarrationMistakes(evaluationMode, normalizedWordMarks, req);
     const score = Math.max(0, Number(settings.narrationMaxScore) - warnings * Number(settings.narrationWarningDeduction) - mistakes * Number(settings.narrationMistakeDeduction));
@@ -7176,7 +7166,7 @@ app.post('/api/student-notifications/:id/read', async (req, res, next) => {
   }
 });
 
-app.get('/api/site-config', (req, res) => {
+app.get('/api/site-config', (_req, res) => {
   res.json(currentSiteConfig());
 });
 
@@ -7198,7 +7188,7 @@ app.get('/api/dashboard-permissions/me', async (req, res, next) => {
   }
 });
 
-app.get('/api/dashboard-permissions', requirePermission, async (req, res, next) => {
+app.get('/api/dashboard-permissions', requirePermission, async (_req, res, next) => {
   try {
     const [supervisors] = await db().query(
       `
@@ -7355,7 +7345,7 @@ app.use('/api/nazem', createNazemIntegrationRouter({
   importPlanCandidate: importNazemPlanCandidate,
 }));
 
-app.get('/api/settings', requirePermission('settings'), async (req, res, next) => {
+app.get('/api/settings', requirePermission('settings'), async (_req, res, next) => {
   try {
     res.json(await loadSettings());
   } catch (error) {
@@ -7363,7 +7353,7 @@ app.get('/api/settings', requirePermission('settings'), async (req, res, next) =
   }
 });
 
-app.get('/api/settings/execution-reminder-students', requirePermission('settings'), async (req, res, next) => {
+app.get('/api/settings/execution-reminder-students', requirePermission('settings'), async (_req, res, next) => {
   try {
     const [students] = await db().query(
       `SELECT s.id, s.name, c.name AS committeeName
@@ -7377,7 +7367,7 @@ app.get('/api/settings/execution-reminder-students', requirePermission('settings
   }
 });
 
-app.get('/api/public-settings', async (req, res, next) => {
+app.get('/api/public-settings', async (_req, res, next) => {
   try {
     res.json(publicSettingsForClient(await loadSettings()));
   } catch (error) {
@@ -7541,12 +7531,7 @@ app.put('/api/settings', requirePermission('settings'), async (req, res, next) =
   let transactionStarted = false;
   try {
     const previousSettings = await loadSettings();
-    const studentRankingsVisible = req.body.studentRankingsVisible === undefined
-      ? req.body.rankingsVisible !== false && req.body.rankingsVisible !== 'false'
-      : parseBoolean(req.body.studentRankingsVisible);
-    const familyRankingsVisible = req.body.familyRankingsVisible === undefined
-      ? req.body.rankingsVisible !== false && req.body.rankingsVisible !== 'false'
-      : parseBoolean(req.body.familyRankingsVisible);
+    const { studentRankingsVisible, familyRankingsVisible } = requestedRankingVisibility(req);
     const { teacherMemorizationRecitationMode, teacherReviewRecitationMode, teacherLinkRecitationMode, reciterMemorizationRecitationMode, reciterReviewRecitationMode, reciterLinkRecitationMode } = retainedRecitationModes(previousSettings);
     const _resolveStaffAttendanceSource = () => {
       if (req.body.staffAttendanceSource === undefined) {
@@ -7570,23 +7555,23 @@ app.put('/api/settings', requirePermission('settings'), async (req, res, next) =
       return 'ayah';
     };
     const buildRewardSettingsUpdateValues = buildRewardSettingsUpdate(req, studentRankingsVisible, familyRankingsVisible, previousSettings);
-const buildAttendanceSettingsUpdateValues = buildAttendanceSettingsUpdate(req, _resolveStaffAttendanceSource, previousSettings);
-const buildNotificationSettingsUpdateValues = buildNotificationSettingsUpdate(req, previousSettings, _resolveQuranReferenceMode);
-const buildRegistrationSettingsUpdateValues = buildRegistrationSettingsUpdate(req, previousSettings);
-const buildChallengeSettingsUpdateValues = buildChallengeSettingsUpdate(req, previousSettings);
-const buildExecutionSourceSettingsUpdateValues = buildExecutionSourceSettingsUpdate(req, previousSettings);
-const buildExecutionEditingSettingsUpdateValues = buildExecutionEditingSettingsUpdate(req, previousSettings);
-const buildEvaluationSettingsUpdateValues = buildEvaluationSettingsUpdate({ req, previousSettings, teacherMemorizationRecitationMode, teacherReviewRecitationMode, teacherLinkRecitationMode, reciterMemorizationRecitationMode, reciterReviewRecitationMode, reciterLinkRecitationMode });
-const settings = {
-...buildRewardSettingsUpdateValues,
-...buildAttendanceSettingsUpdateValues,
-...buildNotificationSettingsUpdateValues,
-...buildRegistrationSettingsUpdateValues,
-...buildChallengeSettingsUpdateValues,
-...buildExecutionSourceSettingsUpdateValues,
-...buildExecutionEditingSettingsUpdateValues,
-...buildEvaluationSettingsUpdateValues
-};
+    const buildAttendanceSettingsUpdateValues = buildAttendanceSettingsUpdate(req, _resolveStaffAttendanceSource, previousSettings);
+    const buildNotificationSettingsUpdateValues = buildNotificationSettingsUpdate(req, previousSettings, _resolveQuranReferenceMode);
+    const buildRegistrationSettingsUpdateValues = buildRegistrationSettingsUpdate(req, previousSettings);
+    const buildChallengeSettingsUpdateValues = buildChallengeSettingsUpdate(req, previousSettings);
+    const buildExecutionSourceSettingsUpdateValues = buildExecutionSourceSettingsUpdate(req, previousSettings);
+    const buildExecutionEditingSettingsUpdateValues = buildExecutionEditingSettingsUpdate(req, previousSettings);
+    const buildEvaluationSettingsUpdateValues = buildEvaluationSettingsUpdate({ req, previousSettings, teacherMemorizationRecitationMode, teacherReviewRecitationMode, teacherLinkRecitationMode, reciterMemorizationRecitationMode, reciterReviewRecitationMode, reciterLinkRecitationMode });
+    const settings = {
+      ...buildRewardSettingsUpdateValues,
+      ...buildAttendanceSettingsUpdateValues,
+      ...buildNotificationSettingsUpdateValues,
+      ...buildRegistrationSettingsUpdateValues,
+      ...buildChallengeSettingsUpdateValues,
+      ...buildExecutionSourceSettingsUpdateValues,
+      ...buildExecutionEditingSettingsUpdateValues,
+      ...buildEvaluationSettingsUpdateValues
+    };
 
     platformFeatureSettingKeys.forEach((key) => {
       settings[key] = true;
@@ -7602,15 +7587,15 @@ const settings = {
     ].every((source) => source === 'teacher') ? 'teacher' : 'student';
     const resolveAttendanceLocationSettingsResult = await resolveAttendanceLocationSettings({ settings, res });
     if (resolveAttendanceLocationSettingsResult) { return resolveAttendanceLocationSettingsResult; }
-        const rejectInvalidAttendanceSettingsResult = await rejectInvalidAttendanceSettings({ settings, res });
+    const rejectInvalidAttendanceSettingsResult = await rejectInvalidAttendanceSettings({ settings, res });
     if (rejectInvalidAttendanceSettingsResult) { return rejectInvalidAttendanceSettingsResult; }
-        const rejectMissingMessageTemplatesResult = await rejectMissingMessageTemplates({ settings, res });
+    const rejectMissingMessageTemplatesResult = await rejectMissingMessageTemplates({ settings, res });
     if (rejectMissingMessageTemplatesResult) { return rejectMissingMessageTemplatesResult; }
-        const rejectEmptyActivitySchedulesResult = await rejectEmptyActivitySchedules({ settings, res });
+    const rejectEmptyActivitySchedulesResult = await rejectEmptyActivitySchedules({ settings, res });
     if (rejectEmptyActivitySchedulesResult) { return rejectEmptyActivitySchedulesResult; }
-        const rejectInvalidEvaluationSettingsResult = await rejectInvalidEvaluationSettings({ settings, res });
+    const rejectInvalidEvaluationSettingsResult = await rejectInvalidEvaluationSettings({ settings, res });
     if (rejectInvalidEvaluationSettingsResult) { return rejectInvalidEvaluationSettingsResult; }
-        await connection.beginTransaction();
+    await connection.beginTransaction();
     transactionStarted = true;
 
     await connection.query(
@@ -8001,7 +7986,7 @@ const settings = {
   }
 });
 
-app.get('/api/administrators', requirePermission('administrators'), async (req, res, next) => {
+app.get('/api/administrators', requirePermission('administrators'), async (_req, res, next) => {
   try {
     const [rows] = await db().query(
       `
@@ -8159,7 +8144,7 @@ app.delete('/api/administrators/:id', requirePermission('administrators'), async
   }
 });
 
-app.get('/api/homepage-stats', async (req, res, next) => {
+app.get('/api/homepage-stats', async (_req, res, next) => {
   try {
     const [rows] = await db().query('SELECT setting_value FROM app_settings WHERE setting_key = ?', ['homepageStats']);
     const rawStats = rows[0]?.setting_value || '[]';
@@ -8178,7 +8163,7 @@ app.get('/api/homepage-stats', async (req, res, next) => {
   }
 });
 
-app.get('/api/committees', async (req, res, next) => {
+app.get('/api/committees', async (_req, res, next) => {
   try {
     const [rows] = await db().query(`
       SELECT
@@ -8194,7 +8179,7 @@ app.get('/api/committees', async (req, res, next) => {
   }
 });
 
-app.get('/api/registration/public', async (req, res, next) => {
+app.get('/api/registration/public', async (_req, res, next) => {
   try {
     const settings = await loadSettings();
     const juzRanges = settings.registrationEnabled ? await getQuranJuzRangesForClient(db()) : [];
@@ -8243,7 +8228,7 @@ app.post('/api/registration/public', async (req, res, next) => {
   }
 });
 
-app.get('/api/registration-requests', requirePermission('registrationRequests'), async (req, res, next) => {
+app.get('/api/registration-requests', requirePermission('registrationRequests'), async (_req, res, next) => {
   try {
     const [rows] = await db().query(
       `
@@ -8416,7 +8401,7 @@ app.post('/api/registration-requests/:id/accept', requirePermission('registratio
   }
 });
 
-app.get('/api/quran/chapters', requireStudentPlanAccess, async (req, res, next) => {
+app.get('/api/quran/chapters', requireStudentPlanAccess, async (_req, res, next) => {
   try {
     res.json(await getQuranChaptersForClient(db()));
   } catch (error) {
@@ -8443,7 +8428,7 @@ app.get('/api/quran/ayahs', requireStudentPlanAccess, async (req, res, next) => 
   }
 });
 
-app.get('/api/quran/juz-ranges', requireStudentPlanAccess, async (req, res, next) => {
+app.get('/api/quran/juz-ranges', requireStudentPlanAccess, async (_req, res, next) => {
   try {
     res.json(await getQuranJuzRangesForClient(db()));
   } catch (error) {
@@ -8691,47 +8676,17 @@ app.put('/api/student-plans/:studentId', requireStudentPlanAccess, async (req, r
     const requestedStartDate = String(req.body.startDate || '').trim() || minimumPlanStartDate;
     const rejectInvalidPlanInputsResult = await rejectInvalidPlanInputs({ requestedStartDate, reviewSplitWeekly, reviewWeekStartDay, reviewWeekEndDay, planSettings, studentId, requestedStartPage, requestedEndPage, startSurah, startAyah, endSurah, endAyah, res });
     if (rejectInvalidPlanInputsResult) { return rejectInvalidPlanInputsResult; }
-        await connection.beginTransaction();
+    await connection.beginTransaction();
     const [[student]] = await connection.query('SELECT id FROM students WHERE id = ? FOR UPDATE', [studentId]);
-    if (!student) {
-      await connection.rollback();
-      return res.status(404).json({ message: 'الطالب غير موجود.' });
-    }
-    if (req.auth?.role === 'supervisor' && !await hasSupervisorStudentPlanAccess(req, studentId)) {
-      await connection.rollback();
-      return res.status(403).json({ message: 'لا يمكنك تعديل خطة طالب خارج حلقاتك.' });
-    }
-    if (await isStudentPlanManagedByNazem(connection, studentId)) {
-      await connection.rollback();
-      return rejectNazemManagedPlanChange(res);
-    }
-    const requestedPageDirection = requestedStartPage && requestedEndPage && requestedStartPage > requestedEndPage ? -1 : 1;
-    const requestedStartBoundary = requestedStartPage
-      ? await getQuranPageBoundaryInDirection(connection, requestedStartPage, requestedPageDirection)
-      : null;
-    const requestedEndBoundary = requestedEndPage
-      ? await getQuranPageBoundaryInDirection(connection, requestedEndPage, requestedPageDirection)
-      : null;
-    if ((requestedStartPage && !requestedStartBoundary) || (requestedEndPage && !requestedEndBoundary)) {
-      await connection.rollback();
-      return res.status(422).json({ message: 'رقم الصفحة غير صحيح.' });
-    }
-    if (requestedStartBoundary) {
-      const boundary = requestedStartBoundary.start;
-      startSurah = Number(boundary.surah);
-      startAyah = Number(boundary.ayah);
-    }
-    if (requestedEndBoundary) {
-      const boundary = requestedEndBoundary.end;
-      endSurah = Number(boundary.surah);
-      endAyah = Number(boundary.ayah);
-    }
-    const start = requestedStartBoundary
-      ? requestedStartBoundary.start
-      : await getQuranAyah(connection, startSurah, startAyah);
-    const end = requestedEndBoundary
-      ? requestedEndBoundary.end
-      : await getQuranAyah(connection, endSurah, endAyah);
+    const rejectUneditableStudentPlanResult = await rejectUneditableStudentPlan({ student, connection, res, req, studentId });
+    if (rejectUneditableStudentPlanResult) { return rejectUneditableStudentPlanResult; }
+    const { requestedStartBoundary, requestedEndBoundary } = await resolveRequestedPlanPageBounds(requestedStartPage, requestedEndPage, connection);
+    const rejectMissingPlanPageBoundaryResult = await rejectMissingPlanPageBoundary({ requestedStartPage, requestedStartBoundary, requestedEndPage, requestedEndBoundary, connection, res });
+    if (rejectMissingPlanPageBoundaryResult) { return rejectMissingPlanPageBoundaryResult; }
+
+    let start;
+    let end;
+    ({ start, end, startSurah, startAyah, endSurah, endAyah } = await resolvePlanPositions({ requestedStartBoundary, startSurah, startAyah, requestedEndBoundary, endSurah, endAyah, connection }));
     if (!start || !end) {
       await connection.rollback();
       return res.status(422).json({ message: 'السورة أو الآية غير صحيحة.' });
@@ -8771,10 +8726,9 @@ app.put('/api/student-plans/:studentId', requireStudentPlanAccess, async (req, r
     );
     const startDate = existingPlan?.startDate || requestedStartDate;
     const effectiveFrom = existingPlan ? minimumPlanStartDate : startDate;
-    if (!existingPlan && startDate < minimumPlanStartDate) {
-      await connection.rollback();
-      return res.status(422).json({ message: `بداية الخطة يجب ألا تسبق ${minimumPlanStartDate}.` });
-    }
+    const rejectPastNewPlanStartResult = await rejectPastNewPlanStart({ existingPlan, startDate, minimumPlanStartDate, connection, res });
+    if (rejectPastNewPlanStartResult) { return rejectPastNewPlanStartResult; }
+
     const existingPriorMemorization = await getPriorMemorizationRangesForStudent(connection, studentId);
     const completedMemorization = await getCompletedMemorizationRanges(connection, { studentId });
     const priorMemorization = await mergeQuranRanges(connection, [
@@ -8783,10 +8737,9 @@ app.put('/api/student-plans/:studentId', requireStudentPlanAccess, async (req, r
       ...submittedPriorMemorization,
     ]);
     const memorizedPlanAyahs = await countMemorizedAyahsInRange(connection, priorMemorization, start, end);
-    if (memorizedPlanAyahs.totalAyahs > 0 && memorizedPlanAyahs.memorizedAyahs >= memorizedPlanAyahs.totalAyahs) {
-      await connection.rollback();
-      return res.status(422).json({ message: 'نطاق الخطة المحدد محفوظ بالكامل. اختر صفحات غير محفوظة.' });
-    }
+    const rejectFullyMemorizedPlanResult = await rejectFullyMemorizedPlan({ memorizedPlanAyahs, connection, res });
+    if (rejectFullyMemorizedPlanResult) { return rejectFullyMemorizedPlanResult; }
+
     const fullyMemorizedPages = await getFullyMemorizedPages(connection, priorMemorization, 1, 604);
     const nextMemorizationStart = await skipFullyMemorizedTraversalPages(
       connection,
@@ -8796,7 +8749,7 @@ app.put('/api/student-plans/:studentId', requireStudentPlanAccess, async (req, r
       fullyMemorizedPages
     );
     const nextMemorizationPage = nextMemorizationStart?.page || 0;
-    var { scheduleDays, scheduleAnchor } = await resolveReplacementPlanAnchor({ existingPlan, startSurah, startAyah, startDate, effectiveFrom, connection, planSettings });
+    let { scheduleDays, scheduleAnchor } = await resolveReplacementPlanAnchor({ existingPlan, startSurah, startAyah, startDate, effectiveFrom, connection, planSettings });
 
     if (existingPlan?.id) {
       await connection.query(
@@ -8859,14 +8812,7 @@ app.put('/api/student-plans/:studentId', requireStudentPlanAccess, async (req, r
       const savedPlan = await getActivePlanForStudent(connection, studentId);
       await ensureStudentPlanTasks(connection, savedPlan, todayDate, planSettings);
     }
-    if (!existingPlan && startDate) {
-      await connection.query(
-        `INSERT INTO quran_plan_user_preferences (actor_role, actor_id, last_start_date)
-         VALUES (?, ?, ?)
-         ON DUPLICATE KEY UPDATE last_start_date = VALUES(last_start_date)`,
-        [String(req.auth?.role || 'manager'), Number(req.auth?.id || 0), startDate],
-      );
-    }
+    await saveInitialPlanDatePreference(existingPlan, startDate, connection, req);
     const nazemTeacherId = existingPlan?.id
       ? await prepareNazemPlanReplacement(connection, {
         oldPlanId: existingPlan.id,
@@ -9363,7 +9309,7 @@ app.get('/api/families/:id/students', async (req, res, next) => {
   }
 });
 
-app.get('/api/quran-tests/students', requirePermission('quranTests'), async (req, res, next) => {
+app.get('/api/quran-tests/students', requirePermission('quranTests'), async (_req, res, next) => {
   try {
     const [students] = await db().query(
       `
@@ -9592,27 +9538,16 @@ app.post('/api/quran-tests/result', requirePermission('quranTests'), async (req,
   const connection = await db().getConnection();
   try {
     const requestId = isUuid(req.body?.requestId) ? String(req.body.requestId).toLowerCase() : null;
-    if (requestId) {
-      const [[receipt]] = await connection.query(
-        `SELECT result_json AS result FROM offline_operation_receipts
-         WHERE request_id = ? AND actor_role = ? AND actor_id = ? AND operation_type = 'quran_test_result' LIMIT 1`,
-        [requestId, req.auth?.role, req.auth?.id],
-      );
-      if (receipt) return res.json(typeof receipt.result === 'string' ? JSON.parse(receipt.result) : receipt.result);
-    }
+    const replyToExistingQuranTestReceiptResult = await replyToExistingQuranTestReceipt({ requestId, connection, req, res });
+    if (replyToExistingQuranTestReceiptResult) { return replyToExistingQuranTestReceiptResult; }
     const studentId = Number(req.body.studentId || 0);
     const juzNumber = Number(req.body.juzNumber || 0);
     let warningsCount = Math.max(0, Number(req.body.warningsCount || 0));
     let mistakesCount = Math.max(0, Number(req.body.mistakesCount || 0));
-    const scheduledDate = req.body.scheduledDate && isValidDateOnly(String(req.body.scheduledDate))
-      ? String(req.body.scheduledDate)
-      : null;
-    const rescheduleDate = req.body.rescheduleDate && isValidDateOnly(String(req.body.rescheduleDate))
-      ? String(req.body.rescheduleDate)
-      : null;
-    if (!studentId || juzNumber < 1 || juzNumber > 30) {
-      return res.status(422).json({ message: 'بيانات الاختبار غير مكتملة.' });
-    }
+    const { rescheduleDate, scheduledDate } = normalizeQuranTestDates(req);
+    const rejectInvalidQuranTestIdentityResult = await rejectInvalidQuranTestIdentity({ studentId, juzNumber, res });
+    if (rejectInvalidQuranTestIdentityResult) { return rejectInvalidQuranTestIdentityResult; }
+
     const availableJuzs = await getStudentCompletedJuzs(connection, studentId);
     if (!availableJuzs.some((juz) => Number(juz.juz) === juzNumber)) {
       return res.status(422).json({ message: 'هذا الجزء غير مكتمل حفظه للطالب.' });
@@ -9625,25 +9560,20 @@ app.post('/api/quran-tests/result', requirePermission('quranTests'), async (req,
     const _resolveSamplePages = () => {
       if (evaluationMode === 'mushaf' && juzRange) {
         return [...new Set((Array.isArray(req.body.samplePages) ? req.body.samplePages : [])
-        .map(Number)
-        .filter((page) => Number.isInteger(page) && page >= Number(juzRange.startPage) && page <= Number(juzRange.endPage)))];
+          .map(Number)
+          .filter((page) => Number.isInteger(page) && page >= Number(juzRange.startPage) && page <= Number(juzRange.endPage)))];
       }
       return [];
     };
     const samplePages = _resolveSamplePages();
-    const normalizedWordMarks = evaluationMode === 'mushaf' && juzRange
-      ? await normalizeQuranRangeWordMarks(connection, juzRange, req.body.wordMarks)
-      : null;
-    if (evaluationMode === 'mushaf' && normalizedWordMarks === null) return res.status(422).json({ message: 'تحديد أخطاء المصحف غير صحيح.' });
-    if (evaluationMode === 'count' && Array.isArray(req.body.wordMarks)) return res.status(422).json({ message: 'لا ترسل علامات كلمات مع النتيجة اليدوية.' });
+    const normalizedWordMarks = await normalizeQuranTestWordMarks(evaluationMode, juzRange, connection, req);
+    const rejectInvalidNarrationMarksResult = await rejectInvalidNarrationMarks({ evaluationMode, normalizedWordMarks, req, res });
+    if (rejectInvalidNarrationMarksResult) { return rejectInvalidNarrationMarksResult; }
     if (evaluationMode === 'mushaf') {
       warningsCount = normalizedWordMarks.filter((mark) => mark.markType === 'warning').length;
       mistakesCount = normalizedWordMarks.filter((mark) => mark.markType === 'mistake').length;
     }
-    const score = calculateQuranTestScore(settings, warningsCount, mistakesCount);
-    const passed = score >= Number(settings.quranTestPassingScore || 85);
-    const requiresRetest = !passed && score >= Number(settings.quranTestRetestScore || 60);
-    const failAction = requiresRetest ? 'reschedule' : 'repeat_memorization';
+    const { requiresRetest, passed, score, failAction } = calculateQuranTestOutcome(settings, warningsCount, mistakesCount);
     if (requiresRetest && (!rescheduleDate || rescheduleDate < getSaudiDateTimeParts().date)) {
       return res.status(422).json({ message: 'اختر تاريخاً صحيحاً لإعادة الاختبار.' });
     }
@@ -9780,7 +9710,7 @@ app.get('/api/rankings/students', async (req, res, next) => {
   }
 });
 
-app.get('/api/rankings/families', async (req, res, next) => {
+app.get('/api/rankings/families', async (_req, res, next) => {
   try {
     const settings = await loadSettings();
     if (!settings.familyRankingsVisible) {
@@ -10048,29 +9978,7 @@ app.get('/api/students/:id/quran-today', async (req, res, next) => {
       : null;
     const executionAyahMap = new Map();
     const executionAyahsByType = {};
-    for (const row of rows) {
-      const start = { page: Number(row.fromPage), surah: Number(row.fromSurah), ayah: Number(row.fromAyah) };
-      const expectedEnd = { page: Number(row.toPage), surah: Number(row.toSurah), ayah: Number(row.toAyah) };
-      if (!isValidQuranPosition(start) || !isValidQuranPosition(expectedEnd)) continue;
-      const allowedEnd = row.taskType === 'memorization' && memorizationContext?.allowedEnd
-        ? memorizationContext.allowedEnd
-        : expectedEnd;
-      const taskDirection = ['memorization', 'repeat'].includes(row.taskType)
-        ? getQuranRangeDirection(
-          { page: Number(plan.startPage), surah: Number(plan.startSurah), ayah: Number(plan.startAyah) },
-          { page: Number(plan.endPage), surah: Number(plan.endSurah), ayah: Number(plan.endAyah) },
-        )
-        : getQuranRangeDirection(start, allowedEnd);
-      const taskAyahs = await getQuranAyahsInPageRange(connection, start.page, allowedEnd.page);
-      taskAyahs
-        .filter((ayah) => compareQuranPositionInDirection(ayah, start, taskDirection) >= 0
-          && compareQuranPositionInDirection(ayah, allowedEnd, taskDirection) <= 0)
-        .forEach((ayah) => {
-          executionAyahMap.set(`${ayah.surah}:${ayah.ayah}`, ayah);
-          executionAyahsByType[row.taskType] ||= [];
-          executionAyahsByType[row.taskType].push(ayah);
-        });
-    }
+    await buildTodayExecutionAyahs({ rows, memorizationContext, plan, connection, executionAyahMap, executionAyahsByType });
     const executionAyahs = [...executionAyahMap.values()];
     const progress = await getPlanProgressSummary(connection, memorizationContext);
     const normalizedTasks = rows.map((row) => normalizeTaskRow(
@@ -10274,6 +10182,116 @@ app.get('/api/students/:id/quran-saved', async (req, res, next) => {
     connection.release();
   }
 });
+
+/** Normalize word marks only for a Mushaf evaluation with a resolved Quran range. */
+async function normalizeQuranTestWordMarks(evaluationMode, juzRange, connection, req) {
+  return evaluationMode === 'mushaf' && juzRange
+    ? await normalizeQuranRangeWordMarks(connection, juzRange, req.body.wordMarks)
+    : null;
+}
+
+/** Accept only valid date-only strings for scheduled tests and retests. */
+function normalizeQuranTestDates(req) {
+  const scheduledDate = req.body.scheduledDate && isValidDateOnly(String(req.body.scheduledDate))
+    ? String(req.body.scheduledDate)
+    : null;
+  const rescheduleDate = req.body.rescheduleDate && isValidDateOnly(String(req.body.rescheduleDate))
+    ? String(req.body.rescheduleDate)
+    : null;
+  return { rescheduleDate, scheduledDate };
+}
+
+/** Remember the authenticated actor start date only when creating the first plan. */
+async function saveInitialPlanDatePreference(existingPlan, startDate, connection, req) {
+  if (!existingPlan && startDate) {
+    await connection.query(
+      `INSERT INTO quran_plan_user_preferences (actor_role, actor_id, last_start_date)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE last_start_date = VALUES(last_start_date)`,
+      [String(req.auth?.role || 'manager'), Number(req.auth?.id || 0), startDate]
+    );
+  }
+}
+
+/** Resolve the selected Quran page or ayah endpoints and their persisted coordinates. */
+async function resolvePlanPositions({ requestedStartBoundary, startSurah, startAyah, requestedEndBoundary, endSurah, endAyah, connection }) {
+  if (requestedStartBoundary) {
+    const boundary = requestedStartBoundary.start;
+    startSurah = Number(boundary.surah);
+    startAyah = Number(boundary.ayah);
+  }
+  if (requestedEndBoundary) {
+    const boundary = requestedEndBoundary.end;
+    endSurah = Number(boundary.surah);
+    endAyah = Number(boundary.ayah);
+  }
+  const start = requestedStartBoundary
+    ? requestedStartBoundary.start
+    : await getQuranAyah(connection, startSurah, startAyah);
+  const end = requestedEndBoundary
+    ? requestedEndBoundary.end
+    : await getQuranAyah(connection, endSurah, endAyah);
+  return { start, end, startSurah, startAyah, endSurah, endAyah };
+}
+
+/** Apply the current passing and retest thresholds consistently to the counted mistakes and warnings. */
+function calculateQuranTestOutcome(settings, warningsCount, mistakesCount) {
+  const score = calculateQuranTestScore(settings, warningsCount, mistakesCount);
+  const passed = score >= Number(settings.quranTestPassingScore || 85);
+  const requiresRetest = !passed && score >= Number(settings.quranTestRetestScore || 60);
+  const failAction = requiresRetest ? 'reschedule' : 'repeat_memorization';
+  return { requiresRetest, passed, score, failAction };
+}
+
+/** Resolve Quran page boundaries in the requested direction before validating the plan. */
+async function resolveRequestedPlanPageBounds(requestedStartPage, requestedEndPage, connection) {
+  const requestedPageDirection = requestedStartPage && requestedEndPage && requestedStartPage > requestedEndPage ? -1 : 1;
+  const requestedStartBoundary = requestedStartPage
+    ? await getQuranPageBoundaryInDirection(connection, requestedStartPage, requestedPageDirection)
+    : null;
+  const requestedEndBoundary = requestedEndPage
+    ? await getQuranPageBoundaryInDirection(connection, requestedEndPage, requestedPageDirection)
+    : null;
+  return { requestedStartBoundary, requestedEndBoundary };
+}
+
+/** Build unique execution choices from valid task bounds and the permitted traversal direction. */
+async function buildTodayExecutionAyahs({ rows, memorizationContext, plan, connection, executionAyahMap, executionAyahsByType }) {
+  for (const row of rows) {
+    const start = { page: Number(row.fromPage), surah: Number(row.fromSurah), ayah: Number(row.fromAyah) };
+    const expectedEnd = { page: Number(row.toPage), surah: Number(row.toSurah), ayah: Number(row.toAyah) };
+    if (!isValidQuranPosition(start) || !isValidQuranPosition(expectedEnd)) continue;
+    const allowedEnd = row.taskType === 'memorization' && memorizationContext?.allowedEnd
+      ? memorizationContext.allowedEnd
+      : expectedEnd;
+    const taskDirection = ['memorization', 'repeat'].includes(row.taskType)
+      ? getQuranRangeDirection(
+        { page: Number(plan.startPage), surah: Number(plan.startSurah), ayah: Number(plan.startAyah) },
+        { page: Number(plan.endPage), surah: Number(plan.endSurah), ayah: Number(plan.endAyah) }
+      )
+      : getQuranRangeDirection(start, allowedEnd);
+    const taskAyahs = await getQuranAyahsInPageRange(connection, start.page, allowedEnd.page);
+    taskAyahs
+      .filter((ayah) => compareQuranPositionInDirection(ayah, start, taskDirection) >= 0
+        && compareQuranPositionInDirection(ayah, allowedEnd, taskDirection) <= 0)
+      .forEach((ayah) => {
+        executionAyahMap.set(`${ayah.surah}:${ayah.ayah}`, ayah);
+        executionAyahsByType[row.taskType] ||= [];
+        executionAyahsByType[row.taskType].push(ayah);
+      });
+  }
+}
+
+/** Preserve legacy ranking visibility when a specific visibility field is omitted. */
+function requestedRankingVisibility(req) {
+  const studentRankingsVisible = req.body.studentRankingsVisible === undefined
+    ? req.body.rankingsVisible !== false && req.body.rankingsVisible !== 'false'
+    : parseBoolean(req.body.studentRankingsVisible);
+  const familyRankingsVisible = req.body.familyRankingsVisible === undefined
+    ? req.body.rankingsVisible !== false && req.body.rankingsVisible !== 'false'
+    : parseBoolean(req.body.familyRankingsVisible);
+  return { studentRankingsVisible, familyRankingsVisible };
+}
 
 /** Index completed ranges by date to avoid counting superseded unsuccessful attempts. */
 function indexCompletedFollowUpTasks(tasks, completedTaskDatesByKey) {
@@ -11510,15 +11528,14 @@ const executeStudentQuranTasks = async (req, res, next) => {
   const connection = await db().getConnection();
   try {
     const studentId = Number(req.params.id || 0);
-    const administrativeCorrection = req.body.administrativeCorrection === true
-      && await canManageStudentExecutionCorrections(req);
-    if (!administrativeCorrection && (req.auth?.role !== 'student' || Number(req.auth.id) !== studentId)) {
-      return res.status(403).json({ message: 'تنفيذ الخطة متاح للطالب صاحب الحساب فقط.' });
-    }
+    const administrativeCorrection = await isAuthorizedExecutionCorrection(req);
+    const rejectForeignStudentExecutionResult = await rejectForeignStudentExecution({ administrativeCorrection, req, studentId, res });
+    if (rejectForeignStudentExecutionResult) { return rejectForeignStudentExecutionResult; }
+
     const settings = await loadSettings();
-    if (administrativeCorrection && !hasStudentQuranExecution(settings)) {
-      return res.status(409).json({ message: 'تصحيح تنفيذ الطلاب غير متاح ما دام تنفيذ الطالب غير مفعّل.' });
-    }
+    const rejectDisabledAdministrativeExecutionResult = await rejectDisabledAdministrativeExecution({ administrativeCorrection, settings, res });
+    if (rejectDisabledAdministrativeExecutionResult) { return rejectDisabledAdministrativeExecutionResult; }
+
     const taskIds = [...new Set((Array.isArray(req.body.taskIds) ? req.body.taskIds : [req.body.taskId]).map(Number).filter(Boolean))];
     if (!taskIds.length) return res.status(422).json({ message: 'اختر مهمة للتنفيذ.' });
     const status = req.body.status === 'done' ? 'done' : 'not_done';
@@ -11572,19 +11589,18 @@ const executeStudentQuranTasks = async (req, res, next) => {
       `,
       [...taskIds, studentId]
     );
-    if (taskRows.length !== taskIds.length) {
-      await connection.rollback();
-      return res.status(404).json({ message: 'بعض المهام غير موجودة أو تم تقييمها.' });
-    }
+    const rejectMissingExecutionTasksResult = await rejectMissingExecutionTasks({ taskRows, taskIds, connection, res });
+    if (rejectMissingExecutionTasksResult) { return rejectMissingExecutionTasksResult; }
+
 
     const first = taskRows[0];
     const rejectInvalidExecutionCorrectionResult = await rejectInvalidExecutionCorrection({ administrativeCorrection, req, first, settings, connection, res });
     if (rejectInvalidExecutionCorrectionResult) { return rejectInvalidExecutionCorrectionResult; }
-        const nazemTeacherId = await getNazemManagedTeacherForPlan(connection, first.planId, studentId);
+    const nazemTeacherId = await getNazemManagedTeacherForPlan(connection, first.planId, studentId);
     const nazemManaged = Boolean(nazemTeacherId);
     const rejectInvalidExecutionGroupResult = await rejectInvalidExecutionGroup({ taskRows, first, nazemManaged, connection, settings, res });
     if (rejectInvalidExecutionGroupResult) { return rejectInvalidExecutionGroupResult; }
-        const plan = {
+    const plan = {
       id: first.planId,
       studentId: first.studentId,
       track: first.track,
@@ -11605,51 +11621,17 @@ const executeStudentQuranTasks = async (req, res, next) => {
     if (first.taskType === 'repeat') {
       return await executeRepeatTaskGroup({ first, settings, status, nazemManaged, req, connection, placeholders, studentId, taskIds, administrativeCorrection, res });
     }
-    const planDirection = getQuranRangeDirection(
-      { page: Number(plan.startPage), surah: Number(plan.startSurah), ayah: Number(plan.startAyah) },
-      { page: Number(plan.endPage), surah: Number(plan.endSurah), ayah: Number(plan.endAyah) }
-    );
-    const executionDirection = ['memorization', 'repeat'].includes(first.taskType)
-      ? planDirection
-      : getQuranRangeDirection(taskStartPosition(first), taskEndPosition(first));
-    let tasks = [...taskRows].sort((a, b) => (
-      compareQuranPositionInDirection(taskStartPosition(a), taskStartPosition(b), executionDirection)
-    ));
-    const expectedStart = taskStartPosition(tasks[0]);
-    const expectedEnd = taskEndPosition(tasks.at(-1));
-    const expectedPages = tasks.reduce((sum, task) => sum + Math.max(0.25, Number(task.targetPages || 0) || (Math.abs(Number(task.toPage) - Number(task.fromPage)) + 1)), 0);
-    let actualEnd = status === 'done'
-      ? await resolveExecutionEndPosition(connection, req.body.actualEnd, expectedEnd, executionDirection)
-      : null;
+    let { actualEnd, expectedEnd, executionDirection, expectedStart, tasks, expectedPages } = await prepareStudentExecutionRange({ plan, first, taskRows, status, connection, req });
     let memorizationContext = null;
     if (status === 'done') {
       const endComparison = compareQuranPositionInDirection(actualEnd, expectedEnd, executionDirection);
-      if (!administrativeCorrection && !canStudentSetQuranTaskEnd(settings, first.taskType, endComparison)) {
-        await connection.rollback();
-        return res.status(422).json({ message: 'تعديل نهاية المقدار غير مسموح حسب الإعدادات.' });
-      }
-      memorizationContext = first.taskType === 'memorization'
-        ? await getPlanProgressContext(connection, plan, first.taskDate, settings, expectedStart)
-        : null;
-      let allowedEnd;
-      if (['review', 'link'].includes(first.taskType)) {
-        allowedEnd = expectedEnd;
-      } else if (administrativeCorrection) {
-          allowedEnd = await getAllowedExecutionEnd(connection, plan, expectedEnd, first.taskType);
-        } else {
-          allowedEnd = memorizationContext?.allowedEnd
-          || await getAllowedExecutionEnd(connection, plan, expectedEnd, first.taskType);
-        }
-      const isExpectedCompletion = isSameQuranPosition(actualEnd, expectedEnd);
-      if (
-        !actualEnd
-        || compareQuranPositionInDirection(actualEnd, expectedStart, executionDirection) < 0
-        || (!isExpectedCompletion && compareQuranPositionInDirection(actualEnd, allowedEnd, executionDirection) > 0)
-      ) {
-        await connection.rollback();
-        return res.status(422).json({ message: 'نهاية التنفيذ خارج الحد المسموح.' });
-      }
+      const rejectDisabledExecutionEndChangeResult = await rejectDisabledExecutionEndChange({ administrativeCorrection, settings, first, endComparison, connection, res });
+      if (rejectDisabledExecutionEndChangeResult) { return rejectDisabledExecutionEndChangeResult; }
 
+      memorizationContext = await loadExecutionMemorizationContext({ first, connection, plan, settings, expectedStart });
+      let { isExpectedCompletion, allowedEnd } = await resolveStudentExecutionLimit({ first, expectedEnd, administrativeCorrection, connection, plan, memorizationContext, actualEnd });
+      const rejectOutOfRangeExecutionResult = await rejectOutOfRangeExecution({ actualEnd, expectedStart, expectedEnd, executionDirection, isExpectedCompletion, allowedEnd, connection, res });
+      if (rejectOutOfRangeExecutionResult) { return rejectOutOfRangeExecutionResult; }
       tasks = await createExtraExecutionTasks({ actualEnd, expectedEnd, executionDirection, connection, plan, first, studentId, tasks });
     }
 
@@ -11693,28 +11675,11 @@ const executeStudentQuranTasks = async (req, res, next) => {
     let executionSegments = [];
     let executionPointDetails = [];
     let executionRewardTotal = 0;
-    ({ executionRewardTotal, executionSegments, executionPointDetails } = await calculateExecutionGroupRewards({ administrativeCorrection, settings, status, first, expectedPages, actualEnd, connection, expectedStart, actualRepeatCount, expectedRepeatCount, actualListeningCount, expectedListeningCount, executionRewardTotal, memorizationContext, executionSegments, nazemManaged, plan, executionPointDetails, tasks, studentId, req }));
+    ({ executionSegments, executionPointDetails } = await calculateExecutionGroupRewards({ administrativeCorrection, settings, status, first, expectedPages, actualEnd, connection, expectedStart, actualRepeatCount, expectedRepeatCount, actualListeningCount, expectedListeningCount, executionRewardTotal, memorizationContext, executionSegments, nazemManaged, plan, executionPointDetails, tasks, studentId, req }));
 
-    if (status === 'done' && first.taskType === 'memorization' && executionSegments.length) {
-      await saveQuranExecutionSegments(connection, {
-        plan,
-        date: first.taskDate,
-        sourceType: 'student',
-        sourceId: tasks.find((task) => task.taskType === 'memorization')?.id,
-        segments: executionSegments,
-        pointDetails: executionPointDetails,
-        settings,
-      });
-    }
+    await saveStudentExecutionSegments({ status, first, executionSegments, connection, plan, tasks, executionPointDetails, settings });
 
-    if (nazemManaged && ['review', 'link'].includes(first.taskType)) {
-      await saveStudentNazemExecutionAttempts(connection, {
-        tasks: tasks.filter((task) => task.taskType === first.taskType),
-        settings,
-        status,
-        teacherId: nazemTeacherId,
-      });
-    }
+    await saveStudentRemoteExecution({ nazemManaged, first, connection, tasks, settings, status, nazemTeacherId });
 
     await refreshPlanAfterExecutionCorrection({ administrativeCorrection, first, connection, plan, studentId, settings, status, actualEnd, nazemManaged });
 
@@ -11876,6 +11841,82 @@ app.patch('/api/reciters/:id/active', requirePermission('reciters'), async (req,
 });
 
 const shareTeacherPreparation = createSharedPreparation();
+/** Treat a request as an administrative correction only after verifying the authenticated permission. */
+async function isAuthorizedExecutionCorrection(req) {
+  return req.body.administrativeCorrection === true
+    && await canManageStudentExecutionCorrections(req);
+}
+
+/** Load plan progress only for memorization before checking the permitted endpoint. */
+async function loadExecutionMemorizationContext({ first, connection, plan, settings, expectedStart }) {
+  return first.taskType === 'memorization'
+    ? await getPlanProgressContext(connection, plan, first.taskDate, settings, expectedStart)
+    : null;
+}
+
+/** Sort the owned task group in plan order and derive its expected and requested boundaries. */
+async function prepareStudentExecutionRange({ plan, first, taskRows, status, connection, req }) {
+  const planDirection = getQuranRangeDirection(
+    { page: Number(plan.startPage), surah: Number(plan.startSurah), ayah: Number(plan.startAyah) },
+    { page: Number(plan.endPage), surah: Number(plan.endSurah), ayah: Number(plan.endAyah) }
+  );
+  const executionDirection = ['memorization', 'repeat'].includes(first.taskType)
+    ? planDirection
+    : getQuranRangeDirection(taskStartPosition(first), taskEndPosition(first));
+  let tasks = [...taskRows].sort((a, b) => (
+    compareQuranPositionInDirection(taskStartPosition(a), taskStartPosition(b), executionDirection)
+  ));
+  const expectedStart = taskStartPosition(tasks[0]);
+  const expectedEnd = taskEndPosition(tasks.at(-1));
+  const expectedPages = tasks.reduce((sum, task) => sum + Math.max(0.25, Number(task.targetPages || 0) || (Math.abs(Number(task.toPage) - Number(task.fromPage)) + 1)), 0);
+  let actualEnd = status === 'done'
+    ? await resolveExecutionEndPosition(connection, req.body.actualEnd, expectedEnd, executionDirection)
+    : null;
+  return { actualEnd, expectedEnd, executionDirection, expectedStart, tasks, expectedPages };
+}
+
+/** Queue only student-executed review and link outcomes for a Nazem-managed plan. */
+async function saveStudentRemoteExecution({ nazemManaged, first, connection, tasks, settings, status, nazemTeacherId }) {
+  if (nazemManaged && ['review', 'link'].includes(first.taskType)) {
+    await saveStudentNazemExecutionAttempts(connection, {
+      tasks: tasks.filter((task) => task.taskType === first.taskType),
+      settings,
+      status,
+      teacherId: nazemTeacherId,
+    });
+  }
+}
+
+/** Save the completed student segments and point details in the current execution transaction. */
+async function saveStudentExecutionSegments({ status, first, executionSegments, connection, plan, tasks, executionPointDetails, settings }) {
+  if (status === 'done' && first.taskType === 'memorization' && executionSegments.length) {
+    await saveQuranExecutionSegments(connection, {
+      plan,
+      date: first.taskDate,
+      sourceType: 'student',
+      sourceId: tasks.find((task) => task.taskType === 'memorization')?.id,
+      segments: executionSegments,
+      pointDetails: executionPointDetails,
+      settings,
+    });
+  }
+}
+
+/** Resolve the permitted endpoint from the task kind, correction mode and plan progress. */
+async function resolveStudentExecutionLimit({ first, expectedEnd, administrativeCorrection, connection, plan, memorizationContext, actualEnd }) {
+  let allowedEnd;
+  if (['review', 'link'].includes(first.taskType)) {
+    allowedEnd = expectedEnd;
+  } else if (administrativeCorrection) {
+    allowedEnd = await getAllowedExecutionEnd(connection, plan, expectedEnd, first.taskType);
+  } else {
+    allowedEnd = memorizationContext?.allowedEnd
+      || await getAllowedExecutionEnd(connection, plan, expectedEnd, first.taskType);
+  }
+  const isExpectedCompletion = isSameQuranPosition(actualEnd, expectedEnd);
+  return { isExpectedCompletion, allowedEnd };
+}
+
 /** Build correction choices for owned task groups while preserving teacher and Nazem locks. */
 async function buildExecutionCorrectionGroups({ groups, connection, studentId, repeatRows, settings, tasks }) {
   for (const [key, groupRows] of groups) {
@@ -12762,79 +12803,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
     const activeTaskStudentIds = new Set(rows.map((row) => Number(row.studentId)));
     const marksByTask = await getQuranTaskDisplayMarks(connection, allRows.map((row) => row.id));
     const executionOptionsByGroup = new Map();
-    for (const row of allRows.filter((item) => (
-        item.taskType === 'memorization' || (item.taskType === 'review' && Number(item.nazemManaged))
-      ))) {
-        const groupKey = `${row.planId}:${row.taskDate}:${row.taskType}:${row.track}`;
-        if (executionOptionsByGroup.has(groupKey)) continue;
-        const plan = {
-          id: row.planId,
-          studentId: row.studentId,
-          startPage: row.planStartPage,
-          startSurah: row.planStartSurah,
-          startSurahName: row.planStartSurahName,
-          startAyah: row.planStartAyah,
-          endPage: row.planEndPage,
-          endSurah: row.planEndSurah,
-          endSurahName: row.planEndSurahName,
-          endAyah: row.planEndAyah,
-          dailyPages: row.planDailyPages,
-          startDate: row.planStartDate,
-          effectiveFrom: row.planEffectiveFrom,
-          scheduleDays: row.planScheduleDays,
-          scheduleAnchorPage: row.planScheduleAnchorPage,
-          scheduleAnchorSurah: row.planScheduleAnchorSurah,
-          scheduleAnchorAyah: row.planScheduleAnchorAyah,
-        };
-        const groupRows = allRows.filter((item) => `${item.planId}:${item.taskDate}:${item.taskType}:${item.track}` === groupKey);
-        const direction = row.taskType === 'review' || row.track !== row.planTrack
-          ? getQuranRangeDirection(taskStartPosition(row), taskEndPosition(row))
-          : getQuranRangeDirection(
-            { page: Number(plan.startPage), surah: Number(plan.startSurah), ayah: Number(plan.startAyah) },
-            { page: Number(plan.endPage), surah: Number(plan.endSurah), ayah: Number(plan.endAyah) },
-          );
-        const ordered = [...groupRows].sort((first, second) => compareQuranPositionInDirection(taskStartPosition(first), taskStartPosition(second), direction));
-        const start = taskStartPosition(ordered[0]);
-        if (Number(row.nazemManaged)) {
-          const lastTask = ordered.at(-1) || row;
-          const scheduledEnd = taskEndPosition(lastTask);
-          const nazemLate = Boolean(Number(row.nazemLate));
-          const planEnd = {
-            page: Number(plan.endPage),
-            surah: Number(plan.endSurah),
-            surahName: plan.endSurahName || '',
-            ayah: Number(plan.endAyah),
-          };
-          const fixedRange = nazemLate;
-          const allowedEnd = fixedRange || row.taskType === 'review' || row.track !== row.planTrack ? scheduledEnd : planEnd;
-          const candidates = fixedRange ? [scheduledEnd] : [start, scheduledEnd, allowedEnd];
-          executionOptionsByGroup.set(groupKey, {
-            normalEnd: scheduledEnd,
-            scheduledEnd,
-            selectionStart: start,
-            selectionEnd: allowedEnd,
-            selectionDirection: direction,
-            options: candidates
-              .filter((ayah) => compareQuranPositionInDirection(ayah, start, direction) >= 0
-                && compareQuranPositionInDirection(ayah, allowedEnd, direction) <= 0)
-              .sort((first, second) => compareQuranPositionInDirection(first, second, direction))
-              .map(toQuranExecutionOption),
-          });
-          continue;
-        }
-        const context = await getPlanProgressContext(connection, plan, date, settings, start);
-        if (!context?.allowedEnd) continue;
-        const candidates = await getQuranAyahsInPageRange(connection, start.page, context.allowedEnd.page);
-        executionOptionsByGroup.set(groupKey, {
-          normalEnd: context.normalEnd,
-          scheduledEnd: context.scheduledEnd,
-          options: candidates
-            .filter((ayah) => compareQuranPositionInDirection(ayah, start, direction) >= 0
-              && compareQuranPositionInDirection(ayah, context.allowedEnd, direction) <= 0)
-            .sort((first, second) => compareQuranPositionInDirection(first, second, direction))
-            .map(toQuranExecutionOption),
-        });
-      }
+    await buildTeacherExecutionChoices(allRows, executionOptionsByGroup, connection, date, settings);
     const [nazemPendingRows] = await connection.query(
       `SELECT student_id AS studentId,
          MAX(status IN ('failed','blocked','requires_review','conflict')) AS syncFailed,
@@ -12892,49 +12861,51 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
       [supervisorId, date, date, date],
     );
     const nazemDueStudentIds = new Set(nazemDueRows.map((row) => Number(row.studentId)));
-    const serializeEvaluationTask = (row) => { const _resolveExpectedRepeatCount = () => {
-                                                 if (row.nazemManaged) {
-                                                   return row.nazemRepeatCount;
-                                                 }
-                                                 if (row.track === 'mastery') {
-                                                   return settings.masteryRepeatCount;
-                                                 }
-                                                 return settings.memorizationRepeatCount;
-                                               };
-                                               const _resolveExpectedListeningCount = () => {
-                                                 if (row.taskType === 'memorization') {
-                                                   if (row.nazemManaged) {
-                                                     return 1;
-                                                   }
-                                                   return normalizeRepeatCount(row.track === 'mastery' ? settings.masteryListeningCount : settings.memorizationListeningCount, 3);
-                                                 }
-                                                 return 0;
-                                               };
-                                               return ({
-      ...normalizeTaskRow(row, row.nazemManaged ? 'ayah' : settings.quranReferenceMode),
-      nazemManaged: Boolean(row.nazemManaged),
-      nazemLate: Boolean(Number(row.nazemManaged) && Number(row.nazemLate)),
-      nazemSubmissionLocked: Boolean(row.nazemManaged
-        && Number(row.attemptCount || 0) > 0),
-      allowQuranCompensation: !row.nazemManaged && Boolean(settings.allowQuranCompensation),
-      allowQuranExtra: !row.nazemManaged && Boolean(settings.allowQuranExtra),
-      expectedRepeatCount: row.taskType === 'memorization'
-        ? normalizeRepeatCount(_resolveExpectedRepeatCount(), 1)
-        : 0,
-      expectedListeningCount: _resolveExpectedListeningCount(),
-      expectedLinkCount: row.nazemManaged && ['memorization', 'link'].includes(row.taskType) && row.track !== 'mastery'
-        ? readNazemLinkCount(row.nazemLinkCount)
-        : 0,
-      planDirection: row.nazemManaged && row.track !== row.planTrack
-        ? getQuranRangeDirection(taskStartPosition(row), taskEndPosition(row))
-        : getQuranRangeDirection(
-        { page: Number(row.planStartPage), surah: Number(row.planStartSurah), ayah: Number(row.planStartAyah) },
-        { page: Number(row.planEndPage), surah: Number(row.planEndSurah), ayah: Number(row.planEndAyah) },
-      ),
-      ...(executionOptionsByGroup.get(`${row.planId}:${row.taskDate}:${row.taskType}:${row.track}`)),
-      ayahMarkCount: new Set((marksByTask.get(Number(row.id)) || []).map(quranTaskMarkVerseKey)).size,
-      ayahMarks: marksByTask.get(Number(row.id)) || [],
-    }); };
+    const serializeEvaluationTask = (row) => {
+      const _resolveExpectedRepeatCount = () => {
+        if (row.nazemManaged) {
+          return row.nazemRepeatCount;
+        }
+        if (row.track === 'mastery') {
+          return settings.masteryRepeatCount;
+        }
+        return settings.memorizationRepeatCount;
+      };
+      const _resolveExpectedListeningCount = () => {
+        if (row.taskType === 'memorization') {
+          if (row.nazemManaged) {
+            return 1;
+          }
+          return normalizeRepeatCount(row.track === 'mastery' ? settings.masteryListeningCount : settings.memorizationListeningCount, 3);
+        }
+        return 0;
+      };
+      return ({
+        ...normalizeTaskRow(row, row.nazemManaged ? 'ayah' : settings.quranReferenceMode),
+        nazemManaged: Boolean(row.nazemManaged),
+        nazemLate: Boolean(Number(row.nazemManaged) && Number(row.nazemLate)),
+        nazemSubmissionLocked: Boolean(row.nazemManaged
+          && Number(row.attemptCount || 0) > 0),
+        allowQuranCompensation: !row.nazemManaged && Boolean(settings.allowQuranCompensation),
+        allowQuranExtra: !row.nazemManaged && Boolean(settings.allowQuranExtra),
+        expectedRepeatCount: row.taskType === 'memorization'
+          ? normalizeRepeatCount(_resolveExpectedRepeatCount(), 1)
+          : 0,
+        expectedListeningCount: _resolveExpectedListeningCount(),
+        expectedLinkCount: row.nazemManaged && ['memorization', 'link'].includes(row.taskType) && row.track !== 'mastery'
+          ? readNazemLinkCount(row.nazemLinkCount)
+          : 0,
+        planDirection: row.nazemManaged && row.track !== row.planTrack
+          ? getQuranRangeDirection(taskStartPosition(row), taskEndPosition(row))
+          : getQuranRangeDirection(
+            { page: Number(row.planStartPage), surah: Number(row.planStartSurah), ayah: Number(row.planStartAyah) },
+            { page: Number(row.planEndPage), surah: Number(row.planEndSurah), ayah: Number(row.planEndAyah) },
+          ),
+        ...(executionOptionsByGroup.get(`${row.planId}:${row.taskDate}:${row.taskType}:${row.track}`)),
+        ayahMarkCount: new Set((marksByTask.get(Number(row.id)) || []).map(quranTaskMarkVerseKey)).size,
+        ayahMarks: marksByTask.get(Number(row.id)) || [],
+      });
+    };
     res.json({
       date,
       previousSessionDate,
@@ -12949,7 +12920,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
         repeat: getQuranTaskExecutionSource(settings, 'repeat'),
       },
       recitationAttendanceSource: settings.recitationAttendanceSource,
-      nazemRefreshPending: ['pending','retrying','syncing'].includes(followUpRefresh?.status)
+      nazemRefreshPending: ['pending', 'retrying', 'syncing'].includes(followUpRefresh?.status)
         || nazemPendingRows.some((row) => Number(row.syncPending)),
       allowRepeatCountEditing: canTeacherExecuteQuranTask(settings, 'repeat'),
       listeningEnabled: true,
@@ -12981,10 +12952,12 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
           recitationSyncFailed: nazemFailedStudentIds.has(Number(student.id)),
           recitationSyncNeedsRecheck: nazemRecheckStudentIds.has(Number(student.id)),
           recitationSyncErrorCode: nazemStudentErrors.get(Number(student.id)) || null,
-          ...nazemStudentRefreshState({ managed: Number(student.nazemManaged), studentId: student.id,
+          ...nazemStudentRefreshState({
+            managed: Number(student.nazemManaged), studentId: student.id,
             hasTasks: activeTaskStudentIds.has(Number(student.id)),
             finished: attemptedStudentIds.has(Number(student.id)) && !nazemDueStudentIds.has(Number(student.id)),
-            refresh: followUpRefresh }),
+            refresh: followUpRefresh
+          }),
           recitationFinished: attemptedStudentIds.has(Number(student.id))
             && !activeTaskStudentIds.has(Number(student.id))
             && !(Number(student.nazemManaged)
@@ -13084,23 +13057,8 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
       return res.status(404).json({ message: 'مهمة التسميع غير موجودة.' });
     }
     const plan = { ...anchor, id: anchor.planId };
-    const direction = anchor.taskType === 'review' || anchor.track !== anchor.planTrack
-      ? getQuranRangeDirection(taskStartPosition(anchor), taskEndPosition(anchor))
-      : getQuranRangeDirection(
-        { page: Number(plan.startPage), surah: Number(plan.startSurah), ayah: Number(plan.startAyah) },
-        { page: Number(plan.endPage), surah: Number(plan.endSurah), ayah: Number(plan.endAyah) },
-      );
-    const requestedTaskIds = [...new Set(
-      (Array.isArray(req.body.taskIds) ? req.body.taskIds : [])
-        .map(Number)
-        .filter((id) => Number.isInteger(id) && id > 0)
-        .concat(taskId),
-    )].slice(0, 100);
-    const useCombinedTasks = requestedTaskIds.length > 1;
-    const taskScopeSql = useCombinedTasks
-      ? `id IN (${requestedTaskIds.map(() => '?').join(', ')})`
-      : 'task_date = ?';
-    const taskScopeParams = useCombinedTasks ? requestedTaskIds : [anchor.taskDate];
+    const direction = getRecitationRangeDirection(anchor, plan);
+    const { taskScopeSql, taskScopeParams } = buildRequestedRecitationTaskScope(req, taskId, anchor);
     let [tasks] = await connection.query(
       `SELECT id, plan_id AS planId, student_id AS studentId, DATE_FORMAT(task_date, '%Y-%m-%d') AS taskDate,
         task_type AS taskType, track, from_page AS fromPage, to_page AS toPage,
@@ -13144,16 +13102,12 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
       const fixedRange = nazemLate;
       const allowedEnd = fixedRange || anchor.taskType === 'review' || anchor.track !== anchor.planTrack ? expectedEnd : planEnd;
       const requestedEnd = await resolveExecutionEndPosition(connection, req.body.actualEnd, expectedEnd, direction);
-      if (fixedRange && !isSameQuranPosition(requestedEnd, expectedEnd)) {
-        await connection.rollback();
-        return res.status(422).json({ message: 'مقدار التسميع ثابت كما ورد من ناظم.' });
-      }
-      if (!requestedEnd
-        || compareQuranPositionInDirection(requestedEnd, expectedStart, direction) < 0
-        || compareQuranPositionInDirection(requestedEnd, allowedEnd, direction) > 0) {
-        await connection.rollback();
-        return res.status(422).json({ message: 'نهاية التسميع خارج نطاق ناظم.' });
-      }
+      const rejectChangedFixedNazemRangeResult = await rejectChangedFixedNazemRange({ fixedRange, requestedEnd, expectedEnd, connection, res });
+      if (rejectChangedFixedNazemRangeResult) { return rejectChangedFixedNazemRangeResult; }
+
+      const rejectOutOfRangeNazemRecitationResult = await rejectOutOfRangeNazemRecitation({ requestedEnd, expectedStart, direction, allowedEnd, connection, res });
+      if (rejectOutOfRangeNazemRecitationResult) { return rejectOutOfRangeNazemRecitationResult; }
+
       await persistNazemRecitationRange(tasks, requestedEnd, direction, connection);
       await connection.commit();
       return res.json({
@@ -13297,14 +13251,7 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
       req.auth.role,
       settings,
     );
-    const ayahMarksPayload = Array.isArray(req.body.ayahMarks) ? req.body.ayahMarks : null;
-    const wordMarksPayload = Array.isArray(req.body.wordMarks) ? req.body.wordMarks : null;
-    const notMemorized = req.body.notMemorized === true;
-    const rawRequestId = String(req.body.requestId || '').trim();
-    const requestId = /^[A-Za-z0-9:_-]{8,80}$/.test(rawRequestId) ? rawRequestId : null;
-    const markLimit = 1000;
-    let warningCount = Math.min(markLimit, Math.max(0, Number(req.body.warningCount ?? req.body.warningsCount ?? 0)));
-    let mistakeCount = Math.min(markLimit, Math.max(0, Number(req.body.mistakeCount ?? req.body.mistakesCount ?? 0)));
+    let { warningCount, mistakeCount, notMemorized, requestId, ayahMarksPayload, wordMarksPayload, markLimit } = normalizeRecitationEvaluationInput(req);
     if (!Number.isFinite(warningCount) || !Number.isFinite(mistakeCount)) {
       return res.status(422).json({ message: 'التقييم غير صحيح.' });
     }
@@ -13476,7 +13423,15 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
     );
     const rejectInvalidRecitationTaskResult = await rejectInvalidRecitationTask({ task, settings, connection, res, req, notMemorized });
     if (rejectInvalidRecitationTaskResult) { return rejectInvalidRecitationTaskResult; }
-        if (notMemorized) {
+    if (Number(task.nazemLate) && !(req.recitationSessionTaskIds || []).length
+      && !await validateNazemLateSession(connection, {
+        studentId: task.studentId, sessionDate: date, sessionId: req.body.sessionId,
+        tasks: [{ taskId }],
+      }, supervisorId)) {
+      await connection.rollback();
+      return res.status(409).json({ code: 'INVALID_SEQUENCE', message: 'يجب البدء بأقدم مقطع متأخر متاح.' });
+    }
+    if (notMemorized) {
       warningCount = 0;
       mistakeCount = 0;
     }
@@ -13490,15 +13445,9 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
       sessionDate: date,
       requestId,
     });
-    if (!sessionClaim.accepted) {
-      await connection.commit();
-      return res.status(409).json({
-        message: 'تم تسميع الطالب اليوم بالفعل.',
-        code: 'REJECTED_DUPLICATE',
-        sessionId: sessionClaim.sessionId,
-        winningSessionId: sessionClaim.winningSessionId,
-      });
-    }
+    const replyToRejectedRecitationClaimResult = await replyToRejectedRecitationClaim({ sessionClaim, connection, res });
+    if (replyToRejectedRecitationClaimResult) { return replyToRejectedRecitationClaimResult; }
+
     const evaluationMode = getRecitationEvaluationMode(
       settings,
       task,
@@ -13510,11 +13459,11 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
       : null;
     const rejectInvalidRecitationModeResult = await rejectInvalidRecitationMode({ requestedEvaluationMode, evaluationMode, connection, res, ayahMarksPayload, wordMarksPayload, notMemorized });
     if (rejectInvalidRecitationModeResult) { return rejectInvalidRecitationModeResult; }
-        const replyToExistingRecitationAttemptResult = await replyToExistingRecitationAttempt({ requestId, connection, taskId, res });
+    const replyToExistingRecitationAttemptResult = await replyToExistingRecitationAttempt({ requestId, connection, taskId, res });
     if (replyToExistingRecitationAttemptResult) { return replyToExistingRecitationAttemptResult; }
-      let normalizedAyahMarks = null;
+    let normalizedAyahMarks = null;
     let normalizedWordMarks = null;
-    ({ normalizedWordMarks, normalizedAyahMarks, mistakeCount, warningCount } = await saveValidatedRecitationMarks({ ayahMarksPayload, wordMarksPayload, connection, task, normalizedWordMarks, markLimit, normalizedAyahMarks, mistakeCount, warningCount, taskId, supervisorId }));
+    ({ mistakeCount, warningCount } = await saveValidatedRecitationMarks({ ayahMarksPayload, wordMarksPayload, connection, task, normalizedWordMarks, markLimit, normalizedAyahMarks, mistakeCount, warningCount, taskId, supervisorId }));
     const { ratingLabel, score, policy, completed, evaluatedFaces } = await calculateTaskEvaluationOutcome({ task, connection, settings, notMemorized, warningCount, mistakeCount });
     await connection.query(
       `
@@ -13744,6 +13693,11 @@ app.post('/api/offline-recitation/batch', async (req, res) => {
     try {
       const outcome = await runRecitationSessionTransaction(db(), async (connection, transaction) => {
         const taskResults = [];
+        if (!await validateNazemLateSession(connection, session, Number(req.auth?.id))) {
+          transaction.failed = true;
+          return [{ taskId: Number(session.tasks?.[0]?.taskId), result: 'invalid_sequence',
+            message: 'تغيّرت مقاطع المتأخرات أو ترتيبها. حدّث الجلسة واختر المقاطع الكاملة من الأقدم.' }];
+        }
         for (const item of (Array.isArray(session?.tasks) ? session.tasks : [])) {
           const body = {
             ...(item.payload),
@@ -13857,7 +13811,7 @@ app.get('/api/students', async (req, res, next) => {
   }
 });
 
-app.get('/api/whatsapp/status', requirePermission('whatsappSend'), async (req, res) => {
+app.get('/api/whatsapp/status', requirePermission('whatsappSend'), async (_req, res) => {
   try {
     await refreshWhatsAppState({ waitMs: 2000 });
   } catch (error) {
@@ -13869,7 +13823,7 @@ app.get('/api/whatsapp/status', requirePermission('whatsappSend'), async (req, r
   res.json(whatsAppState);
 });
 
-app.post('/api/whatsapp/disconnect', requirePermission('whatsappSend'), async (req, res, next) => {
+app.post('/api/whatsapp/disconnect', requirePermission('whatsappSend'), async (_req, res, next) => {
   try {
     await disconnectWhatsAppClient();
     res.json(whatsAppState);
@@ -14324,34 +14278,22 @@ app.post('/api/students/:id/attendance', async (req, res, next) => {
   try {
     const now = getSaudiDateTimeParts();
     const settings = await loadSettings();
-    const teacherMode = req.body.mode === 'recitation_teacher'
-      && canTeacherSetRecitationAttendance(settings, req.auth?.role)
-      && await hasSupervisorStudentPlanAccess(req, req.params.id);
+    const teacherMode = await isTeacherAttendanceRequest(req, settings);
     if (req.body.mode === 'recitation_teacher' && !teacherMode) {
       return res.status(403).json({ message: 'تحضير جلسة التسميع غير متاح لهذا الحساب.' });
     }
     const manualMode = teacherMode || (req.body.mode === 'manual' && await canUseManualAttendance(req));
     const rejectDisabledAttendanceModeResult = await rejectDisabledAttendanceMode({ manualMode, teacherMode, req, settings, res });
     if (rejectDisabledAttendanceModeResult) { return rejectDisabledAttendanceModeResult; }
-        const requestedDate = manualMode && isValidDateOnly(req.body.date) ? req.body.date : now.date;
-    const date = manualMode ? requestedDate : now.date;
-    const manualStatus = manualMode ? normalizeManualAttendanceStatus(req.body.status, null) : null;
+    const { manualStatus, date } = normalizeStudentAttendanceInput(manualMode, req, now);
     if (manualMode && !manualStatus) {
       return res.status(422).json({ message: 'اختر حالة الطالب أولاً.' });
     }
     const status = manualMode ? manualStatus : 'present';
     const time = now.time;
-    if (date > now.date) {
-      return res.status(422).json({ message: 'لا يمكن تسجيل الحضور في تاريخ مستقبلي.' });
-    }
-    const isToday = date === now.date;
     const recordedTime = manualMode ? null : time;
-    if (!isRecitationSessionDay(date, settings)) {
-      return res.status(403).json({ message: 'لا توجد جلسة تسميع في هذا اليوم.' });
-    }
-    if (!manualMode && !settings.allowEarlyAttendance && isToday && isBeforeAttendanceStart(settings, time)) {
-      return res.status(403).json({ message: 'التحضير قبل الوقت المحدد غير مسموح.' });
-    }
+    const rejectInvalidAttendanceTimeResult = await rejectInvalidAttendanceTime({ date, now, settings, manualMode, time, res });
+    if (rejectInvalidAttendanceTimeResult) { return rejectInvalidAttendanceTimeResult; }
     const distance = !manualMode ? validateAttendanceLocation(settings, req.body) : null;
     const [students] = await connection.query('SELECT id FROM students WHERE id = ?', [req.params.id]);
     if (!students[0]) {
@@ -14359,12 +14301,7 @@ app.post('/api/students/:id/attendance', async (req, res, next) => {
     }
 
     await connection.beginTransaction();
-    const { previous, points } = await saveAttendanceWithPoints(connection, {
-      studentId: req.params.id, date, status, checkInTime: recordedTime,
-      requestedPoints: manualMode ? getManualAttendancePoints(settings, status) : calculateAttendancePoints(settings, time),
-      actorRole: req.auth?.role || 'system', actorName: req.auth?.name || 'النظام',
-      reason: getAttendanceReason(status),
-    }, settings);
+    const { previous, points } = await persistStudentAttendance({ connection, req, date, status, recordedTime, manualMode, settings, time });
     if (previous?.status === status) req.activitySkip = true;
     const [[attendanceRecord]] = await connection.query(
       'SELECT id FROM attendance_records WHERE student_id = ? AND record_date = ? LIMIT 1',
@@ -14381,14 +14318,7 @@ app.post('/api/students/:id/attendance', async (req, res, next) => {
       })
       : null;
     await connection.commit();
-    if (
-      status === 'absent'
-      && previous?.status !== 'absent'
-      && settings.automaticAbsenceMessageEnabled
-      && settings.attendanceAbsentTemplate
-    ) {
-      void notifyStudentGuardianAbsenceOnce(req.params.id, settings.attendanceAbsentTemplate, date).catch(() => {});
-    }
+    notifyChangedStudentAbsence(status, previous, settings, req, date);
     res.json({
       ok: true,
       date,
@@ -14517,10 +14447,10 @@ app.post('/api/supervisors/:id/attendance', async (req, res, next) => {
     const date = isValidDateOnly(requestedDate) ? requestedDate : now.date;
     const status = manualMode ? normalizeManualAttendanceStatus(req.body.status, 'present') : 'present';
     const time = now.time;
+    const recordedTime = manualMode ? null : time;
     if (date > now.date) {
       return res.status(422).json({ message: 'لا يمكن تسجيل الحضور في تاريخ مستقبلي.' });
     }
-    const recordedTime = manualMode ? null : time;
     const distance = null;
     const [supervisors] = await connection.query("SELECT id FROM supervisors WHERE id = ? AND role IN ('supervisor', 'reciter', 'admin')", [req.params.id]);
     if (!supervisors[0]) {
@@ -14704,6 +14634,157 @@ app.get('/api/reports/students', requireReportsOrOwnCommittee, async (req, res, 
     next(error);
   }
 });
+
+/** Use the task direction for review or an alternate track and the plan direction for memorization. */
+function getRecitationRangeDirection(anchor, plan) {
+  return anchor.taskType === 'review' || anchor.track !== anchor.planTrack
+    ? getQuranRangeDirection(taskStartPosition(anchor), taskEndPosition(anchor))
+    : getQuranRangeDirection(
+      { page: Number(plan.startPage), surah: Number(plan.startSurah), ayah: Number(plan.startAyah) },
+      { page: Number(plan.endPage), surah: Number(plan.endSurah), ayah: Number(plan.endAyah) }
+    );
+}
+
+/** Normalize and bound selected task IDs and bind them in the recitation scope query. */
+function buildRequestedRecitationTaskScope(req, taskId, anchor) {
+  const requestedTaskIds = [...new Set(
+    (Array.isArray(req.body.taskIds) ? req.body.taskIds : [])
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0)
+      .concat(taskId)
+  )].slice(0, 100);
+  const useCombinedTasks = requestedTaskIds.length > 1;
+  const taskScopeSql = useCombinedTasks
+    ? `id IN (${requestedTaskIds.map(() => '?').join(', ')})`
+    : 'task_date = ?';
+  const taskScopeParams = useCombinedTasks ? requestedTaskIds : [anchor.taskDate];
+  return { taskScopeSql, taskScopeParams };
+}
+
+/** Persist attendance and its point change together within the caller transaction. */
+async function persistStudentAttendance({ connection, req, date, status, recordedTime, manualMode, settings, time }) {
+  return await saveAttendanceWithPoints(connection, {
+    studentId: req.params.id, date, status, checkInTime: recordedTime,
+    requestedPoints: manualMode ? getManualAttendancePoints(settings, status) : calculateAttendancePoints(settings, time),
+    actorRole: req.auth?.role || 'system', actorName: req.auth?.name || 'النظام',
+    reason: getAttendanceReason(status),
+  }, settings);
+}
+
+/** Require teacher attendance mode, an allowed role and an assigned student. */
+async function isTeacherAttendanceRequest(req, settings) {
+  return req.body.mode === 'recitation_teacher'
+    && canTeacherSetRecitationAttendance(settings, req.auth?.role)
+    && await hasSupervisorStudentPlanAccess(req, req.params.id);
+}
+
+/** Normalize the selected date and manual status while keeping self attendance on the current day. */
+function normalizeStudentAttendanceInput(manualMode, req, now) {
+  const requestedDate = manualMode && isValidDateOnly(req.body.date) ? req.body.date : now.date;
+  const date = manualMode ? requestedDate : now.date;
+  const manualStatus = manualMode ? normalizeManualAttendanceStatus(req.body.status, null) : null;
+  return { manualStatus, date };
+}
+
+/** Normalize optional marks, idempotency identity and bounded warning and mistake counts. */
+function normalizeRecitationEvaluationInput(req) {
+  const ayahMarksPayload = Array.isArray(req.body.ayahMarks) ? req.body.ayahMarks : null;
+  const wordMarksPayload = Array.isArray(req.body.wordMarks) ? req.body.wordMarks : null;
+  const notMemorized = req.body.notMemorized === true;
+  const rawRequestId = String(req.body.requestId || '').trim();
+  const requestId = /^[A-Za-z0-9:_-]{8,80}$/.test(rawRequestId) ? rawRequestId : null;
+  const markLimit = 1000;
+  let warningCount = Math.min(markLimit, Math.max(0, Number(req.body.warningCount ?? req.body.warningsCount ?? 0)));
+  let mistakeCount = Math.min(markLimit, Math.max(0, Number(req.body.mistakeCount ?? req.body.mistakesCount ?? 0)));
+  return { warningCount, mistakeCount, notMemorized, requestId, ayahMarksPayload, wordMarksPayload, markLimit };
+}
+
+/** Notify an absence only when the attendance status actually changed and automatic messages are enabled. */
+function notifyChangedStudentAbsence(status, previous, settings, req, date) {
+  if (status === 'absent'
+    && previous?.status !== 'absent'
+    && settings.automaticAbsenceMessageEnabled
+    && settings.attendanceAbsentTemplate) {
+    void notifyStudentGuardianAbsenceOnce(req.params.id, settings.attendanceAbsentTemplate, date).catch(() => { });
+  }
+}
+
+/** Build each recitation group once and retain the fixed Nazem and local plan limits. */
+async function buildTeacherExecutionChoices(allRows, executionOptionsByGroup, connection, date, settings) {
+  for (const row of allRows.filter((item) => (
+    item.taskType === 'memorization' || (item.taskType === 'review' && Number(item.nazemManaged))
+  ))) {
+    const groupKey = `${row.planId}:${row.taskDate}:${row.taskType}:${row.track}`;
+    if (executionOptionsByGroup.has(groupKey)) continue;
+    const plan = {
+      id: row.planId,
+      studentId: row.studentId,
+      startPage: row.planStartPage,
+      startSurah: row.planStartSurah,
+      startSurahName: row.planStartSurahName,
+      startAyah: row.planStartAyah,
+      endPage: row.planEndPage,
+      endSurah: row.planEndSurah,
+      endSurahName: row.planEndSurahName,
+      endAyah: row.planEndAyah,
+      dailyPages: row.planDailyPages,
+      startDate: row.planStartDate,
+      effectiveFrom: row.planEffectiveFrom,
+      scheduleDays: row.planScheduleDays,
+      scheduleAnchorPage: row.planScheduleAnchorPage,
+      scheduleAnchorSurah: row.planScheduleAnchorSurah,
+      scheduleAnchorAyah: row.planScheduleAnchorAyah,
+    };
+    const groupRows = allRows.filter((item) => `${item.planId}:${item.taskDate}:${item.taskType}:${item.track}` === groupKey);
+    const direction = row.taskType === 'review' || row.track !== row.planTrack
+      ? getQuranRangeDirection(taskStartPosition(row), taskEndPosition(row))
+      : getQuranRangeDirection(
+        { page: Number(plan.startPage), surah: Number(plan.startSurah), ayah: Number(plan.startAyah) },
+        { page: Number(plan.endPage), surah: Number(plan.endSurah), ayah: Number(plan.endAyah) }
+      );
+    const ordered = [...groupRows].sort((first, second) => compareQuranPositionInDirection(taskStartPosition(first), taskStartPosition(second), direction));
+    const start = taskStartPosition(ordered[0]);
+    if (Number(row.nazemManaged)) {
+      const lastTask = ordered.at(-1) || row;
+      const scheduledEnd = taskEndPosition(lastTask);
+      const nazemLate = Boolean(Number(row.nazemLate));
+      const planEnd = {
+        page: Number(plan.endPage),
+        surah: Number(plan.endSurah),
+        surahName: plan.endSurahName || '',
+        ayah: Number(plan.endAyah),
+      };
+      const fixedRange = nazemLate;
+      const allowedEnd = fixedRange || row.taskType === 'review' || row.track !== row.planTrack ? scheduledEnd : planEnd;
+      const candidates = fixedRange ? [scheduledEnd] : [start, scheduledEnd, allowedEnd];
+      executionOptionsByGroup.set(groupKey, {
+        normalEnd: scheduledEnd,
+        scheduledEnd,
+        selectionStart: start,
+        selectionEnd: allowedEnd,
+        selectionDirection: direction,
+        options: candidates
+          .filter((ayah) => compareQuranPositionInDirection(ayah, start, direction) >= 0
+            && compareQuranPositionInDirection(ayah, allowedEnd, direction) <= 0)
+          .sort((first, second) => compareQuranPositionInDirection(first, second, direction))
+          .map(toQuranExecutionOption),
+      });
+      continue;
+    }
+    const context = await getPlanProgressContext(connection, plan, date, settings, start);
+    if (!context?.allowedEnd) continue;
+    const candidates = await getQuranAyahsInPageRange(connection, start.page, context.allowedEnd.page);
+    executionOptionsByGroup.set(groupKey, {
+      normalEnd: context.normalEnd,
+      scheduledEnd: context.scheduledEnd,
+      options: candidates
+        .filter((ayah) => compareQuranPositionInDirection(ayah, start, direction) >= 0
+          && compareQuranPositionInDirection(ayah, context.allowedEnd, direction) <= 0)
+        .sort((first, second) => compareQuranPositionInDirection(first, second, direction))
+        .map(toQuranExecutionOption),
+    });
+  }
+}
 
 /** Calculate bounded evaluation scores from the actual range and the current task policy. */
 async function calculateTaskEvaluationOutcome({ task, connection, settings, notMemorized, warningCount, mistakeCount }) {
@@ -17618,7 +17699,7 @@ app.get('/api/reports/student-saved', requireReportsOrOwnCommittee, async (req, 
   }
 });
 
-app.get('/api/reports/archives', requireManagementReportAccess, async (req, res, next) => {
+app.get('/api/reports/archives', requireManagementReportAccess, async (_req, res, next) => {
   try {
     const [rows] = await db().query(
       `
@@ -17800,7 +17881,7 @@ app.get('/api/reports/student-saved/export', requireReportsOrOwnCommittee, async
   }
 });
 
-app.get('/api/reports/whatsapp-recipients', requireManagementReportAccess, async (req, res, next) => {
+app.get('/api/reports/whatsapp-recipients', requireManagementReportAccess, async (_req, res, next) => {
   try {
     const [rows] = await db().query(
       `
@@ -18026,10 +18107,8 @@ app.post('/api/teacher-points/adjustments', async (req, res, next) => {
     const studentId = Number(req.body.studentId || 0);
     const adjustmentTypeId = String(req.body.adjustmentTypeId || '').trim();
     const note = String(req.body.reason || '').trim();
-    if (!studentId) return res.status(422).json({ message: 'اختر الطالب.' });
-    if (!adjustmentTypeId) return res.status(422).json({ message: 'اختر نوع العملية.' });
-    if (note.length > 400) return res.status(422).json({ message: 'الملاحظة طويلة جدًا.' });
-
+    const rejectInvalidTeacherPointInputResult = await rejectInvalidTeacherPointInput({ studentId, adjustmentTypeId, note, res });
+    if (rejectInvalidTeacherPointInputResult) { return rejectInvalidTeacherPointInputResult; }
     await connection.beginTransaction();
     transactionStarted = true;
     await connection.query('SELECT id FROM supervisors WHERE id = ? FOR UPDATE', [req.auth.id]);
@@ -18294,66 +18373,7 @@ app.get('/api/reports/points', async (req, res, next) => {
         detailsByFamily.get(key).push(detail);
       };
 
-      if (familyIds.length > 0) {
-        const placeholders = familyIds.map(() => '?').join(', ');
-        const [awardRows] = await db().query(
-          `
-          SELECT
-            a.committee_id AS familyId,
-            COALESCE(i.name, 'بند تقييم حلقة') AS itemName,
-            COALESCE(sp.name, 'المعلم') AS supervisorName,
-            COALESCE(SUM(a.points), 0) AS points,
-            COUNT(*) AS count,
-            DATE_FORMAT(MAX(a.award_date), '%Y-%m-%d') AS latestDate
-          FROM supervisor_family_point_awards a
-          LEFT JOIN supervisor_family_items i ON i.id = a.item_id
-          LEFT JOIN supervisors sp ON sp.id = a.supervisor_id
-          WHERE a.committee_id IN (${placeholders})
-          GROUP BY a.committee_id, i.name, sp.name
-          HAVING points > 0
-          `,
-          familyIds
-        );
-        for (const detail of awardRows) {
-          addFamilyDetail(detail.familyId, {
-            source: 'family_evaluation',
-            sourceLabel: 'تقييم الحلقة',
-            reason: `تقييم الحلقة: ${detail.itemName}`,
-            actorName: detail.supervisorName,
-            points: Number(detail.points || 0),
-            count: Number(detail.count || 0),
-            latestDate: detail.latestDate || '',
-          });
-        }
-
-        const [achievementRows] = await db().query(
-          `
-          SELECT
-            family_id AS familyId,
-            title,
-            COALESCE(supervisor_name, 'المدير') AS actorName,
-            COALESCE(SUM(points), 0) AS points,
-            COUNT(*) AS count,
-            DATE_FORMAT(MAX(achieved_at), '%Y-%m-%d') AS latestDate
-          FROM family_achievements
-          WHERE family_id IN (${placeholders})
-          GROUP BY family_id, title, supervisor_name
-          HAVING points > 0
-          `,
-          familyIds
-        );
-        for (const detail of achievementRows) {
-          addFamilyDetail(detail.familyId, {
-            source: 'family_achievement',
-            sourceLabel: 'وسام الحلقة',
-            reason: `وسام الحلقة: ${detail.title}`,
-            actorName: detail.actorName,
-            points: Number(detail.points || 0),
-            count: Number(detail.count || 0),
-            latestDate: detail.latestDate || '',
-          });
-        }
-      }
+      await loadFamilyPointDetails(familyIds, addFamilyDetail);
 
       return res.json(rows.map((row) => {
         const points = Number(row.points || 0);
@@ -18541,6 +18561,70 @@ try {
 
 
 import { nativeUpdatePolicy } from './services/nativeUpdate.js';
+
+/** Load point histories for all selected families using batched parameterized queries. */
+async function loadFamilyPointDetails(familyIds, addFamilyDetail) {
+  if (familyIds.length > 0) {
+    const placeholders = familyIds.map(() => '?').join(', ');
+    const [awardRows] = await db().query(
+      `
+          SELECT
+            a.committee_id AS familyId,
+            COALESCE(i.name, 'بند تقييم حلقة') AS itemName,
+            COALESCE(sp.name, 'المعلم') AS supervisorName,
+            COALESCE(SUM(a.points), 0) AS points,
+            COUNT(*) AS count,
+            DATE_FORMAT(MAX(a.award_date), '%Y-%m-%d') AS latestDate
+          FROM supervisor_family_point_awards a
+          LEFT JOIN supervisor_family_items i ON i.id = a.item_id
+          LEFT JOIN supervisors sp ON sp.id = a.supervisor_id
+          WHERE a.committee_id IN (${placeholders})
+          GROUP BY a.committee_id, i.name, sp.name
+          HAVING points > 0
+          `,
+      familyIds
+    );
+    for (const detail of awardRows) {
+      addFamilyDetail(detail.familyId, {
+        source: 'family_evaluation',
+        sourceLabel: 'تقييم الحلقة',
+        reason: `تقييم الحلقة: ${detail.itemName}`,
+        actorName: detail.supervisorName,
+        points: Number(detail.points || 0),
+        count: Number(detail.count || 0),
+        latestDate: detail.latestDate || '',
+      });
+    }
+
+    const [achievementRows] = await db().query(
+      `
+          SELECT
+            family_id AS familyId,
+            title,
+            COALESCE(supervisor_name, 'المدير') AS actorName,
+            COALESCE(SUM(points), 0) AS points,
+            COUNT(*) AS count,
+            DATE_FORMAT(MAX(achieved_at), '%Y-%m-%d') AS latestDate
+          FROM family_achievements
+          WHERE family_id IN (${placeholders})
+          GROUP BY family_id, title, supervisor_name
+          HAVING points > 0
+          `,
+      familyIds
+    );
+    for (const detail of achievementRows) {
+      addFamilyDetail(detail.familyId, {
+        source: 'family_achievement',
+        sourceLabel: 'وسام الحلقة',
+        reason: `وسام الحلقة: ${detail.title}`,
+        actorName: detail.actorName,
+        points: Number(detail.points || 0),
+        count: Number(detail.count || 0),
+        latestDate: detail.latestDate || '',
+      });
+    }
+  }
+}
 
 /** Normalize attendance modes and location values without changing legacy defaults. */
 function normalizeAttendanceSettings(settings, attendanceDays) {
@@ -19002,7 +19086,7 @@ if (requestId) {
         });
       }
     }
-  
+
   return null;
 }
 
@@ -19022,5 +19106,204 @@ if (
       return res.status(403).json({ message: 'التحضير عن طريق الحسابات معطل.' });
     }
 
+  return null;
+}
+
+/** Normalize ranking visibility and point/store controls from persisted string settings. */
+function normalizeRankingAndStoreSettings(settings) {
+  return {
+    rankingsVisible: settings.rankingsVisible !== 'false',
+    studentRankingsVisible: settings.studentRankingsVisible === undefined
+      ? settings.rankingsVisible !== 'false'
+      : settings.studentRankingsVisible !== 'false',
+    familyRankingsVisible: settings.familyRankingsVisible === undefined
+      ? settings.rankingsVisible !== 'false'
+      : settings.familyRankingsVisible !== 'false',
+    familyRankingMode: normalizeFamilyRankingMode(settings.familyRankingMode),
+    rankingPointsVisible: settings.rankingPointsVisible !== 'false',
+    teacherManualPointsEnabled: settings.pointsSystemEnabled === 'true' && settings.teacherManualPointsEnabled === 'true',
+    teacherManualPointsTermLimit: Math.max(0, Math.trunc(Number(settings.teacherManualPointsTermLimit ?? 100))),
+    teacherPointTypes: normalizeTeacherPointTypes(settings.teacherPointTypes),
+    storeEnabled: siteConfig.features?.store !== false && settings.storeEnabled === 'true',
+    storePurchaseDeductsRanking: settings.storePurchaseDeductsRanking === 'true',
+  };
+}
+
+/** Reject invalid Mushaf marks and mismatched manual-mode payloads. */
+async function rejectInvalidNarrationMarks({ evaluationMode, normalizedWordMarks, req, res }) {
+  if (evaluationMode === 'mushaf' && normalizedWordMarks === null) return res.status(422).json({ message: 'تحديد أخطاء المصحف غير صحيح.' });
+  if (evaluationMode === 'count' && Array.isArray(req.body.wordMarks)) return res.status(422).json({ message: 'لا ترسل علامات كلمات مع النتيجة اليدوية.' });
+
+  return null;
+}
+
+/** Validate the selected student, adjustment type and note before taking point locks. */
+async function rejectInvalidTeacherPointInput({ studentId, adjustmentTypeId, note, res }) {
+  if (!studentId) return res.status(422).json({ message: 'اختر الطالب.' });
+  if (!adjustmentTypeId) return res.status(422).json({ message: 'اختر نوع العملية.' });
+  if (note.length > 400) return res.status(422).json({ message: 'الملاحظة طويلة جدًا.' });
+
+
+  return null;
+}
+
+/** Return the authenticated actor receipt before creating a duplicate Quran test result. */
+async function replyToExistingQuranTestReceipt({ requestId, connection, req, res }) {
+  if (requestId) {
+    const [[receipt]] = await connection.query(
+      `SELECT result_json AS result FROM offline_operation_receipts
+         WHERE request_id = ? AND actor_role = ? AND actor_id = ? AND operation_type = 'quran_test_result' LIMIT 1`,
+      [requestId, req.auth?.role, req.auth?.id],
+    );
+    if (receipt) return res.json(typeof receipt.result === 'string' ? JSON.parse(receipt.result) : receipt.result);
+  }
+
+  return null;
+}
+
+/** Reject missing, reversed or excessive execution endpoints before extending or writing tasks. */
+async function rejectOutOfRangeExecution({ actualEnd, expectedStart, executionDirection, isExpectedCompletion, allowedEnd, connection, res }) {
+  if (!actualEnd
+    || compareQuranPositionInDirection(actualEnd, expectedStart, executionDirection) < 0
+    || (!isExpectedCompletion && compareQuranPositionInDirection(actualEnd, allowedEnd, executionDirection) > 0)) {
+    await connection.rollback();
+    return res.status(422).json({ message: 'نهاية التنفيذ خارج الحد المسموح.' });
+  }
+  return null;
+}
+
+/** Require an existing authorized student and keep Nazem-managed plans read-only. */
+async function rejectUneditableStudentPlan({ student, connection, res, req, studentId }) {
+  if (!student) {
+    await connection.rollback();
+    return res.status(404).json({ message: 'الطالب غير موجود.' });
+  }
+  if (req.auth?.role === 'supervisor' && !await hasSupervisorStudentPlanAccess(req, studentId)) {
+    await connection.rollback();
+    return res.status(403).json({ message: 'لا يمكنك تعديل خطة طالب خارج حلقاتك.' });
+  }
+  if (await isStudentPlanManagedByNazem(connection, studentId)) {
+    await connection.rollback();
+    return rejectNazemManagedPlanChange(res);
+  }
+  return null;
+}
+
+/** Reject future, non-session and disallowed early attendance before checking location. */
+async function rejectInvalidAttendanceTime({ date, now, settings, manualMode, time, res }) {
+  if (date > now.date) {
+    return res.status(422).json({ message: 'لا يمكن تسجيل الحضور في تاريخ مستقبلي.' });
+  }
+  const isToday = date === now.date;
+  if (!isRecitationSessionDay(date, settings)) {
+    return res.status(403).json({ message: 'لا توجد جلسة تسميع في هذا اليوم.' });
+  }
+  if (!manualMode && !settings.allowEarlyAttendance && isToday && isBeforeAttendanceStart(settings, time)) {
+    return res.status(403).json({ message: 'التحضير قبل الوقت المحدد غير مسموح.' });
+  }
+
+  return null;
+}
+
+/** Reject missing page boundaries before deriving plan coordinates. */
+async function rejectMissingPlanPageBoundary({ requestedStartPage, requestedStartBoundary, requestedEndPage, requestedEndBoundary, connection, res }) {
+  if ((requestedStartPage && !requestedStartBoundary) || (requestedEndPage && !requestedEndBoundary)) {
+    await connection.rollback();
+    return res.status(422).json({ message: 'رقم الصفحة غير صحيح.' });
+  }
+  return null;
+}
+
+/** Keep the requested remote recitation endpoint within the permitted range. */
+async function rejectOutOfRangeNazemRecitation({ requestedEnd, expectedStart, direction, allowedEnd, connection, res }) {
+  if (!requestedEnd
+    || compareQuranPositionInDirection(requestedEnd, expectedStart, direction) < 0
+    || compareQuranPositionInDirection(requestedEnd, allowedEnd, direction) > 0) {
+    await connection.rollback();
+    return res.status(422).json({ message: 'نهاية التسميع خارج نطاق ناظم.' });
+  }
+  return null;
+}
+
+/** Respect the configured student permission to change the execution endpoint. */
+async function rejectDisabledExecutionEndChange({ administrativeCorrection, settings, first, endComparison, connection, res }) {
+  if (!administrativeCorrection && !canStudentSetQuranTaskEnd(settings, first.taskType, endComparison)) {
+    await connection.rollback();
+    return res.status(422).json({ message: 'تعديل نهاية المقدار غير مسموح حسب الإعدادات.' });
+  }
+  return null;
+}
+
+/** Commit the existing claim state and reject a duplicate daily recitation without changing its evaluation. */
+async function replyToRejectedRecitationClaim({ sessionClaim, connection, res }) {
+  if (!sessionClaim.accepted) {
+    await connection.commit();
+    return res.status(409).json({
+      message: 'تم تسميع الطالب اليوم بالفعل.',
+      code: 'REJECTED_DUPLICATE',
+      sessionId: sessionClaim.sessionId,
+      winningSessionId: sessionClaim.winningSessionId,
+    });
+  }
+  return null;
+}
+
+/** Reject a new plan beginning before the permitted current-term date. */
+async function rejectPastNewPlanStart({ existingPlan, startDate, minimumPlanStartDate, connection, res }) {
+  if (!existingPlan && startDate < minimumPlanStartDate) {
+    await connection.rollback();
+    return res.status(422).json({ message: `بداية الخطة يجب ألا تسبق ${minimumPlanStartDate}.` });
+  }
+  return null;
+}
+
+/** Reject a plan whose entire selected range is already memorized. */
+async function rejectFullyMemorizedPlan({ memorizedPlanAyahs, connection, res }) {
+  if (memorizedPlanAyahs.totalAyahs > 0 && memorizedPlanAyahs.memorizedAyahs >= memorizedPlanAyahs.totalAyahs) {
+    await connection.rollback();
+    return res.status(422).json({ message: 'نطاق الخطة المحدد محفوظ بالكامل. اختر صفحات غير محفوظة.' });
+  }
+  return null;
+}
+
+/** Require a student and a valid juz before reading eligibility or recording a result. */
+async function rejectInvalidQuranTestIdentity({ studentId, juzNumber, res }) {
+  if (!studentId || juzNumber < 1 || juzNumber > 30) {
+    return res.status(422).json({ message: 'بيانات الاختبار غير مكتملة.' });
+  }
+  return null;
+}
+
+/** Preserve the exact endpoint of a fixed late Nazem recitation. */
+async function rejectChangedFixedNazemRange({ fixedRange, requestedEnd, expectedEnd, connection, res }) {
+  if (fixedRange && !isSameQuranPosition(requestedEnd, expectedEnd)) {
+    await connection.rollback();
+    return res.status(422).json({ message: 'مقدار التسميع ثابت كما ورد من ناظم.' });
+  }
+  return null;
+}
+
+/** Reject execution by another account unless the administrative correction permission was verified. */
+async function rejectForeignStudentExecution({ administrativeCorrection, req, studentId, res }) {
+  if (!administrativeCorrection && (req.auth?.role !== 'student' || Number(req.auth.id) !== studentId)) {
+    return res.status(403).json({ message: 'تنفيذ الخطة متاح للطالب صاحب الحساب فقط.' });
+  }
+  return null;
+}
+
+/** Require student execution to be enabled before allowing administrative corrections. */
+async function rejectDisabledAdministrativeExecution({ administrativeCorrection, settings, res }) {
+  if (administrativeCorrection && !hasStudentQuranExecution(settings)) {
+    return res.status(409).json({ message: 'تصحيح تنفيذ الطلاب غير متاح ما دام تنفيذ الطالب غير مفعّل.' });
+  }
+  return null;
+}
+
+/** Reject a task group when any owned unevaluated task is missing under the transaction lock. */
+async function rejectMissingExecutionTasks({ taskRows, taskIds, connection, res }) {
+  if (taskRows.length !== taskIds.length) {
+    await connection.rollback();
+    return res.status(404).json({ message: 'بعض المهام غير موجودة أو تم تقييمها.' });
+  }
   return null;
 }

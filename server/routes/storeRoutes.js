@@ -3,6 +3,7 @@ import { db } from '../db.js';
 import { requirePermission } from '../services/dashboardPermissions.js';
 import { isUuid } from '../../shared/offline-recitation.js';
 import { countTrailingCharacter } from '../../shared/string-suffix.js';
+import { optimizeStoreImage, optimizeStoreProducts } from '../services/storeImages.js';
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const IMAGE_DATA_PATTERN = /^data:image\/(?:png|jpe?g|webp);base64,[a-zA-Z0-9+/=]+$/;
@@ -131,13 +132,14 @@ export function createStoreRouter({
         ORDER BY is_active DESC, created_at DESC, id DESC
         `,
       );
-      if (req.auth?.role !== 'student') return res.json({ products: rows.map(mapProduct) });
+      const products = await optimizeStoreProducts(rows.map(mapProduct));
+      if (req.auth?.role !== 'student') return res.json({ products });
       const [[student]] = await db().query(
         'SELECT store_balance AS storeBalance FROM students WHERE id = ?',
         [req.auth.id],
       );
       return res.json({
-        products: rows.map(mapProduct),
+        products,
         storeBalance: Number(student?.storeBalance || 0),
       });
     } catch (error) {
@@ -155,7 +157,7 @@ export function createStoreRouter({
         `,
         [product.name, product.imageData, product.pointsPrice, product.stock, product.isActive ? 1 : 0],
       );
-      return res.status(201).json({ ...product, id: Number(result.insertId) });
+      return res.status(201).json({ ...product, imageData: await optimizeStoreImage(product.imageData), id: Number(result.insertId) });
     } catch (error) {
       return next(error);
     }
@@ -169,14 +171,18 @@ export function createStoreRouter({
         [req.params.id],
       );
       if (!row) return res.status(404).json({ message: 'المنتج غير موجود.' });
-      const product = normalizeProductPayload(req.body, mapProduct(row));
+      // Editing a name or price must not replace the original with its display copy.
+      const current = mapProduct(row);
+      const imageData = req.body.imageData === await optimizeStoreImage(current.imageData)
+        ? current.imageData : req.body.imageData;
+      const product = normalizeProductPayload({ ...req.body, imageData }, current);
       await db().query(
         `UPDATE store_products
          SET name = ?, description = NULL, image_data = ?, points_price = ?, stock = ?, is_active = ?
          WHERE id = ? AND deleted_at IS NULL`,
         [product.name, product.imageData, product.pointsPrice, product.stock, product.isActive ? 1 : 0, req.params.id],
       );
-      return res.json({ ...product, id: Number(req.params.id) });
+      return res.json({ ...product, imageData: await optimizeStoreImage(product.imageData), id: Number(req.params.id) });
     } catch (error) {
       return next(error);
     }

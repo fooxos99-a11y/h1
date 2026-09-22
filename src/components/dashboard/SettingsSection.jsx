@@ -1,9 +1,12 @@
+import EvaluationUnitSelector from './EvaluationUnitSelector';
+import StaffAttendanceSettings from './StaffAttendanceSettings';
+import EndTermDialog from './EndTermDialog';
+import SettingsGroup from './SettingsGroup';
 import React, { useEffect, useRef, useState } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -415,55 +418,7 @@ const SettingsSection = ({
             )}
           </SettingsGroup>
 
-          <SettingsGroup>
-            <h3 className="text-sm font-black text-primary">تحضير المعلمين والمقرئين والإدارة</h3>
-            <div className={`grid gap-3 ${settings.staffAttendanceSource === 'teacher' ? 'sm:grid-cols-2' : ''}`}>
-              <div className="space-y-2">
-                <Label>تحضير المعلمين والمقرئين والإدارة عن طريق</Label>
-                <Select
-                  value={settings.staffAttendanceSource || 'supervisor'}
-                  onValueChange={(value) => setSettings({ ...settings, staffAttendanceSource: value })}
-                >
-                  <SelectTrigger aria-label="تحضير المعلمين والمقرئين والإدارة عن طريق" className="h-11 border-primary/30 bg-card"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="supervisor">المشرف</SelectItem>
-                    <SelectItem value="teacher">حساباتهم</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {settings.staffAttendanceSource === 'teacher' && (
-                <div className="space-y-2">
-                  <Label htmlFor="staffAttendanceLateAfterAsrMinutes">وقت التأخير بعد صلاة العصر</Label>
-                  <div className="relative">
-                    <Input
-                      id="staffAttendanceLateAfterAsrMinutes"
-                      type="number"
-                      min="0"
-                      max="1440"
-                      inputMode="numeric"
-                      value={settings.staffAttendanceLateAfterAsrMinutes}
-                      onChange={(event) => setSettings({ ...settings, staffAttendanceLateAfterAsrMinutes: event.target.value })}
-                      className="h-11 border-primary/30 bg-card pe-16"
-                    />
-                    <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-sm font-bold text-muted-foreground">دقيقة</span>
-                  </div>
-                </div>
-              )}
-            </div>
-            {settings.staffAttendanceSource === 'teacher' && (
-              <div className="space-y-2">
-                <Label htmlFor="staffAttendanceLocationUrl">رابط موقع التحضير</Label>
-                <Input
-                  id="staffAttendanceLocationUrl"
-                  type="url"
-                  dir="ltr"
-                  value={settings.staffAttendanceLocationUrl || ''}
-                  onChange={(event) => setSettings({ ...settings, staffAttendanceLocationUrl: event.target.value })}
-                  className="h-11 border-primary/30 bg-card text-left"
-                />
-              </div>
-            )}
-          </SettingsGroup>
+          <StaffAttendanceSettings settings={settings} setSettings={setSettings} />
 
           <SettingsGroup>
             <h3 className="text-sm font-black text-primary">جلسات التسميع</h3>
@@ -602,38 +557,7 @@ const SettingsSection = ({
               </Select>
             </div>
             {supportsFractionalFaces && (
-              <fieldset className="min-w-0 m-0 grid grid-cols-3 gap-2 rounded-lg border border-primary/15 bg-card p-1"  aria-label="مقدار ضوابط التسميع">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={evaluationUnit === 'face' ? 'default' : 'ghost'}
-                  className={evaluationUnit === 'face' ? 'text-white hover:text-white' : undefined}
-                  aria-pressed={evaluationUnit === 'face'}
-                  onClick={() => setEvaluationUnit('face')}
-                >
-                  لكل وجه
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={evaluationUnit === 'quarterFace' ? 'default' : 'ghost'}
-                  className={evaluationUnit === 'quarterFace' ? 'text-white hover:text-white' : undefined}
-                  aria-pressed={evaluationUnit === 'quarterFace'}
-                  onClick={() => setEvaluationUnit('quarterFace')}
-                >
-                  لربع وجه
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={evaluationUnit === 'halfFace' ? 'default' : 'ghost'}
-                  className={evaluationUnit === 'halfFace' ? 'text-white hover:text-white' : undefined}
-                  aria-pressed={evaluationUnit === 'halfFace'}
-                  onClick={() => setEvaluationUnit('halfFace')}
-                >
-                  لنصف وجه
-                </Button>
-              </fieldset>
+              <EvaluationUnitSelector value={evaluationUnit} onChange={setEvaluationUnit} />
             )}
             <div className="grid grid-cols-2 gap-3 rounded-lg border border-primary/15 bg-card p-4 sm:grid-cols-4">
               <div className="col-span-2 flex justify-end sm:col-span-4">
@@ -1074,46 +998,10 @@ const SettingsSection = ({
         </output>
       </div>
 
-      <Dialog open={endTermOpen} onOpenChange={setEndTermOpen}>
-        <DialogContent className="max-w-md border-primary/30 bg-card text-foreground" dir="rtl">
-          <DialogHeader>
-            <DialogTitle className="text-primary">تأكيد إنهاء الفصل</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm font-bold leading-7 text-muted-foreground">
-              {rewardUnits.text(`${termClosureSummary} اكتب إنهاء الفصل للتأكيد.`)}
-            </p>
-            <Input
-              aria-label="تأكيد إنهاء الفصل"
-              value={endTermConfirmText}
-              onChange={(event) => setEndTermConfirmText(event.target.value)}
-              placeholder="إنهاء الفصل"
-            />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setEndTermOpen(false)}>
-              إغلاق
-            </Button>
-            <Button
-              type="button"
-              onClick={endTerm}
-              disabled={isEndingTerm || endTermConfirmText.trim() !== 'إنهاء الفصل'}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isEndingTerm ? 'جاري التنفيذ...' : 'تأكيد'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EndTermDialog {...{ endTermOpen, setEndTermOpen, rewardUnits, termClosureSummary, endTermConfirmText, setEndTermConfirmText, endTerm, isEndingTerm }} />
     </div>
   );
 };
-
-const SettingsGroup = ({ children }) => (
-  <section className="space-y-4 p-4 sm:p-6">
-    {children}
-  </section>
-);
 
 const ScoreSettingField = ({ label, settingKey, settings, setSettings, min = 0, onValueChange }) => (
   <div className="space-y-1.5">

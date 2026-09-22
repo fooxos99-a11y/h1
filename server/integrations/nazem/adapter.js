@@ -1178,12 +1178,7 @@ export class NazemAdapter {
     for (const group of groups) {
       try {
       const followUpHistory = [];
-      for (let daysAgo = 0; daysAgo < 7; daysAgo += 1) {
-        const date = saudiDate(daysAgo);
-        const payload = await this.openFollowUp(group.externalId, date).catch(() => null);
-        if (payload) followUpHistory.push({ date, payload });
-        await reportProgress();
-      }
+      await collectRecentFollowUpHistory(this, group, reportProgress, followUpHistory);
       const scopedCandidates = remoteStudents.filter((student) => (
         (!student.organization?.name || group.text.includes(student.organization.name))
         && (!student.circle?.name || group.text.includes(student.circle.name))
@@ -1281,13 +1276,13 @@ export class NazemAdapter {
     return result;
   }
 
-  async readStudentFollowUpHistory(externalPlanId, studentLink, days = 7, { endDate = null, confirmedRecordIds = [] } = {}) {
+  async readStudentFollowUpHistory(externalPlanId, studentLink, days = 7, { endDate = null, confirmedRecordIds = [], freshCurrent = true } = {}) {
     const rows = [];
     const scheduled = new Map();
     const attendance = [];
     for (let daysAgo = 0; daysAgo < Math.max(1, Number(days || 7)); daysAgo += 1) {
       const date = endDate ? shiftDateOnly(endDate, -daysAgo) : saudiDate(daysAgo);
-      const payload = await this.openFollowUp(externalPlanId, date, { fresh: daysAgo === 0 });
+      const payload = await this.openFollowUp(externalPlanId, date, { fresh: daysAgo === 0 && freshCurrent });
       const { student: attendanceStudent } = findFollowUpDay(payload, studentLink, 'conserve');
       if ([2, 3, 4, 5].includes(Number(attendanceStudent?.attendance_status))) {
         attendance.push({ date, attendanceStatus: Number(attendanceStudent.attendance_status) });
@@ -1297,10 +1292,13 @@ export class NazemAdapter {
     const queueDate = endDate || saudiDate();
     for (const remoteType of ['conserve', 'revision', 'master']) {
       const pending = [...scheduled.values()].filter(day => day.remoteType === remoteType);
+      const late = pending.filter(day => day.nazemLate).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      const blocked = pending.filter(day => day.nazemPendingDay).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      const actionableDate = late[0]?.date || blocked[0]?.date || pending[0]?.date || null;
       for (const day of [...rows, ...pending].filter(day => day.remoteType === remoteType)) {
         day.nazemQueueDate = queueDate;
-        day.nazemActionableDate = queueDate;
-        day.nazemLinkDate = queueDate;
+        day.nazemActionableDate = actionableDate;
+        day.nazemLinkDate = actionableDate;
       }
     }
     return {
@@ -1483,47 +1481,8 @@ export class NazemAdapter {
       await this.login({ forceFresh: true });
       return this.openFollowUp(externalPlanId, normalizedDate, { fresh: true, retryAuthentication: false });
     }
-    if (!response.ok() || !payload?.status) {
-      const remoteMessage = cleanText(payload?.message || payload?.error || '');
-      const cause = new Error([
-        `HTTP ${response.status()}`,
-        remoteMessage,
-        payload && typeof payload === 'object' ? `keys=${Object.keys(payload).slice(0, 8).join(',')}` : '',
-      ].filter(Boolean).join(' '));
-      throw transientNazemError(
-        'تعذر تحميل متابعة الخطة من ناظم.',
-        'NAZEM_FOLLOW_UP_LOAD_FAILED',
-        cause,
-      );
-    }
-    const marker = `/educational-plans/${externalPlanId}/follow-up`;
-    this.followUpApiBase = response.url().slice(0, response.url().indexOf(marker));
-    const requestHeaders = await response.request().allHeaders();
-    this.followUpApiHeaders = Object.fromEntries(
-      ['authorization', 'x-company-id', 'x-tenant-id', 'x-xsrf-token', 'x-csrf-token', 'accept-language']
-        .filter((name) => requestHeaders[name])
-        .map((name) => [name, requestHeaders[name]]),
-    );
-    const apiCookies = await this.context.cookies('https://api.nazem-plus.com');
-    const xsrfToken = apiCookies.find((cookie) => cookie.name === 'XSRF-TOKEN')?.value;
-    if (xsrfToken && !this.followUpApiHeaders['x-xsrf-token']) {
-      this.followUpApiHeaders['x-xsrf-token'] = decodeURIComponent(xsrfToken);
-    }
-    this.followUpApiHeaders.origin = NAZEM_BASE_URL;
-    this.followUpApiHeaders.referer = `${NAZEM_BASE_URL}/`;
-    const responseUrl = new URL(response.url());
-    const followUpApiBasePath = new URL(this.followUpApiBase).pathname.replace(/\/$/, '');
-    const absoluteResponsePath = `${responseUrl.pathname}${responseUrl.search}`;
-    const responsePath = absoluteResponsePath.startsWith(`${followUpApiBasePath}/`)
-      ? absoluteResponsePath.slice(followUpApiBasePath.length)
-      : absoluteResponsePath;
-    this.followUpApiPaths.set(cacheKey, responsePath);
-    if (responsePath.includes(normalizedDate)) {
-      this.followUpApiPathTemplate = responsePath
-        .replace(`/educational-plans/${externalPlanId}/follow-up`, '/educational-plans/{planId}/follow-up')
-        .replace(normalizedDate, '{date}');
-    }
-    this.followUpPayloadCache.set(cacheKey, payload);
+    assertFollowUpResponse(response, payload);
+    await cacheFollowUpApiSession({ adapter: this, response, externalPlanId, normalizedDate, cacheKey, payload });
     return payload;
   }
 
@@ -1792,7 +1751,15 @@ export class NazemAdapter {
       if (!initial.item) throw reviewNazemError('خطة الطالب في ناظم لا تحتوي نوع الورد المرتبط.', 'NAZEM_PLAN_TRACK_MISSING');
       const lateLookupDate = initial.followUpDate;
       const matchingLate = initial.late;
-      if (matchingLate) return await submitLateRecitation({ adapter: this, matchingLate, mapped, planLink, studentLink, lateLookupDate });
+      if (matchingLate) {
+        const lateItems = await this.datedLateItems(initial.item, planLink.nazemPlanId, studentLink, mapped.remoteType);
+        const earliest = lateItems.filter(item => !isNazemFollowUpCompleted(item.status))
+          .sort((a, b) => String(a.date).localeCompare(String(b.date)) || Number(a.id) - Number(b.id))[0];
+        if (String(earliest?.id) !== String(matchingLate.id)) {
+          throw blockedNazemError('ينتظر هذا المقطع تأكيد إكمال المتأخر الأقدم في ناظم.', 'NAZEM_PREVIOUS_DAYS_BLOCKING');
+        }
+        return await submitLateRecitation({ adapter: this, matchingLate, mapped, planLink, studentLink, lateLookupDate });
+      }
 
       if (!initial.day) {
         throw blockedNazemError('لا يوجد ورد مجدول في ناظم لهذا الطالب في تاريخ التسميع.', 'NAZEM_NO_SCHEDULED_TASK');
@@ -1840,18 +1807,7 @@ export class NazemAdapter {
       const verified = await this.verifySubmittedRecitation(studentLink, planLink, { ...mapped, nazemSourceDayId: initial.day.id });
       return verified;
     } catch (cause) {
-      if (cause?.name === 'NazemIntegrationError') throw cause;
-      if (/timeout|navigation|net::/i.test(String(cause?.message || ''))) {
-        throw transientNazemError('تعذر إكمال تسميع ناظم بسبب بطء أو انقطاع الاتصال.', 'NAZEM_RECITATION_TIMEOUT', cause);
-      }
-      const technicalReason = cleanText(cause?.message).slice(0, 180);
-      throw reviewNazemError(
-        technicalReason
-          ? `تعذر إكمال إرسال التسميع بسبب تغير غير متوقع في استجابة ناظم: ${technicalReason}`
-          : 'تغيرت بنية متابعة التسميع في ناظم وتحتاج المحولات إلى مراجعة.',
-        'NAZEM_FORM_CHANGED',
-        cause,
-      );
+      throwRecitationSubmissionError(cause);
     }
   }
 
@@ -1871,6 +1827,37 @@ export class NazemAdapter {
 }
 
 export { SELECTORS as NAZEM_SELECTORS };
+
+  function throwRecitationSubmissionError(cause) {
+  if (cause?.name === 'NazemIntegrationError') throw cause;
+  if (/timeout|navigation|net::/i.test(String(cause?.message || ''))) {
+    throw transientNazemError('تعذر إكمال تسميع ناظم بسبب بطء أو انقطاع الاتصال.', 'NAZEM_RECITATION_TIMEOUT', cause);
+  }
+  const technicalReason = cleanText(cause?.message).slice(0, 180);
+  throw reviewNazemError(
+    technicalReason
+      ? `تعذر إكمال إرسال التسميع بسبب تغير غير متوقع في استجابة ناظم: ${technicalReason}`
+      : 'تغيرت بنية متابعة التسميع في ناظم وتحتاج المحولات إلى مراجعة.',
+    'NAZEM_FORM_CHANGED',
+    cause
+  );
+}
+
+  function assertFollowUpResponse(response, payload) {
+  if (!response.ok() || !payload?.status) {
+    const remoteMessage = cleanText(payload?.message || payload?.error || '');
+    const cause = new Error([
+      `HTTP ${response.status()}`,
+      remoteMessage,
+      payload && typeof payload === 'object' ? `keys=${Object.keys(payload).slice(0, 8).join(',')}` : '',
+    ].filter(Boolean).join(' '));
+    throw transientNazemError(
+      'تعذر تحميل متابعة الخطة من ناظم.',
+      'NAZEM_FOLLOW_UP_LOAD_FAILED',
+      cause
+    );
+  }
+}
 
   async function collectNazemStudentIdentities(count, students, identities) {
     for (let index = 0;index < count;index += 1) {
@@ -2211,5 +2198,50 @@ if (adapter.followUpApiBase && directPath) {
         return adapter.openFollowUp(externalPlanId, normalizedDate, { fresh: true, retryAuthentication: false });
       }
     }
+
+}
+
+/** Read the bounded seven-day history while advancing discovery progress. */
+async function collectRecentFollowUpHistory(adapter, group, reportProgress, followUpHistory) {
+
+  for (let daysAgo = 0; daysAgo < 7; daysAgo += 1) {
+    const date = saudiDate(daysAgo);
+    const payload = await adapter.openFollowUp(group.externalId, date).catch(() => null);
+    if (payload) followUpHistory.push({ date, payload });
+    await reportProgress();
+  }
+
+}
+
+/** Cache the verified API path, response and required session headers for later follow-up requests. */
+async function cacheFollowUpApiSession({ adapter, response, externalPlanId, normalizedDate, cacheKey, payload }) {
+  const marker = `/educational-plans/${externalPlanId}/follow-up`;
+  adapter.followUpApiBase = response.url().slice(0, response.url().indexOf(marker));
+  const requestHeaders = await response.request().allHeaders();
+  adapter.followUpApiHeaders = Object.fromEntries(
+    ['authorization', 'x-company-id', 'x-tenant-id', 'x-xsrf-token', 'x-csrf-token', 'accept-language']
+      .filter((name) => requestHeaders[name])
+      .map((name) => [name, requestHeaders[name]]),
+  );
+  const apiCookies = await adapter.context.cookies('https://api.nazem-plus.com');
+  const xsrfToken = apiCookies.find((cookie) => cookie.name === 'XSRF-TOKEN')?.value;
+  if (xsrfToken && !adapter.followUpApiHeaders['x-xsrf-token']) {
+    adapter.followUpApiHeaders['x-xsrf-token'] = decodeURIComponent(xsrfToken);
+  }
+  adapter.followUpApiHeaders.origin = NAZEM_BASE_URL;
+  adapter.followUpApiHeaders.referer = `${NAZEM_BASE_URL}/`;
+  const responseUrl = new URL(response.url());
+  const followUpApiBasePath = new URL(adapter.followUpApiBase).pathname.replace(/\/$/, '');
+  const absoluteResponsePath = `${responseUrl.pathname}${responseUrl.search}`;
+  const responsePath = absoluteResponsePath.startsWith(`${followUpApiBasePath}/`)
+    ? absoluteResponsePath.slice(followUpApiBasePath.length)
+    : absoluteResponsePath;
+  adapter.followUpApiPaths.set(cacheKey, responsePath);
+  if (responsePath.includes(normalizedDate)) {
+    adapter.followUpApiPathTemplate = responsePath
+      .replace(`/educational-plans/${externalPlanId}/follow-up`, '/educational-plans/{planId}/follow-up')
+      .replace(normalizedDate, '{date}');
+  }
+  adapter.followUpPayloadCache.set(cacheKey, payload);
 
 }

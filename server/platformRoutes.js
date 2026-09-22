@@ -69,7 +69,7 @@ async function requirePlatformOwner(req, res, next) {
   }
 }
 
-router.get('/status', async (req, res, next) => {
+router.get('/status', async (_req, res, next) => {
   try {
     const [[row]] = await platformDb().query('SELECT COUNT(*) AS count FROM platform_owners');
     res.json({
@@ -181,7 +181,7 @@ router.post('/logout', requirePlatformOwner, async (req, res, next) => {
   }
 });
 
-router.get('/complexes', requirePlatformOwner, async (req, res, next) => {
+router.get('/complexes', requirePlatformOwner, async (_req, res, next) => {
   try {
     const [rows] = await platformDb().query(`
       SELECT
@@ -608,7 +608,7 @@ router.put('/complexes/:id/status', requirePlatformOwner, async (req, res, next)
   }
 });
 
-router.use((error, req, res, next) => {
+router.use((error, _req, res, next) => {
   if (error.code === 'MANAGER_LOGIN_DUPLICATE') {
     return res.status(409).json({ message: error.message });
   }
