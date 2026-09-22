@@ -12,12 +12,8 @@ export default function ScreenLoadingProvider({ children }) {
   const requests = useRef(new Set());
   const timer = useRef(null);
   const [visible, setVisible] = useState(false);
-  const startupActive = useRef(startup?.active);
-  const [branded, setBranded] = useState(false);
-  useEffect(() => { startupActive.current = startup?.active; }, [startup?.active]);
   const acquire = useCallback(() => {
     const token = Symbol('screen-loading');
-    if (!requests.current.size && !timer.current) setBranded(Boolean(startupActive.current));
     requests.current.add(token);
     window.clearTimeout(timer.current);
     timer.current = null;
@@ -38,6 +34,6 @@ export default function ScreenLoadingProvider({ children }) {
   useEffect(() => () => window.clearTimeout(timer.current), []);
   return <ScreenLoadingContext.Provider value={acquire}>
     <div className="contents" inert={visible ? '' : undefined} aria-hidden={visible || undefined}>{children}</div>
-    {visible && createPortal(<div className="screen-loading-surface fixed inset-0 z-[1000] grid place-items-center text-[#0aa3b4] [font-family:var(--font-ui)]" data-loading-indicator="screen" role="status" aria-live="polite" aria-label="جاري التحميل"><ScreenLoadingVisual branded={branded} /></div>, document.body)}
+    {visible && createPortal(<div className="screen-loading-surface fixed inset-0 z-[1000] grid place-items-center text-[#0aa3b4] [font-family:var(--font-ui)]" data-loading-indicator="screen" role="status" aria-live="polite" aria-label="جاري التحميل"><ScreenLoadingVisual /></div>, document.body)}
   </ScreenLoadingContext.Provider>;
 }

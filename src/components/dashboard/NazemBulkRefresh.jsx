@@ -1,3 +1,4 @@
+import LoadingSpinner from '@/components/ui/loading-spinner';
 import React, { useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -50,7 +51,7 @@ export default function NazemBulkRefresh({ accounts, disabled, onChanged }) {
     <div className="space-y-3 [font-family:var(--font-ui)]" dir="rtl">
       <Button type="button" className="min-h-11 w-full gap-2 sm:w-auto" onClick={start}
         disabled={disabled || busy || !accounts.some((account) => account.status === 'connected')}>
-        <RefreshCw aria-hidden="true" className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} />
+        {busy ? <LoadingSpinner /> : <RefreshCw aria-hidden="true" className="h-4 w-4" />}
         {busy ? 'جارٍ تحديث الكل' : 'تحديث الكل'}
       </Button>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

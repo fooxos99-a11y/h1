@@ -481,7 +481,7 @@ test('loading surfaces share one indicator and startup does not wait for every f
     readFile(new URL(file.replaceAll('\\', '/'), sourceRoot), 'utf8')
   )))).join('\n');
 
-  assert.match(loadingSpinnerText, /border-current border-t-transparent/);
+  assert.match(loadingSpinnerText, /loading-logo/);
   assert.match(loadingIndicatorText, /<LoadingSpinner size=/);
   assert.match(loadingIndicatorText, /data-loading-indicator=/);
   assert.match(loadingIndicatorText, /aria-label="جاري التحميل"/);

@@ -956,7 +956,7 @@ async function loadDailyFollowUp(connection, dailyFollowUpId) {
        )
        AND task.plan_id = ? AND task.student_id = ?
        AND task.task_date = ? AND task.task_type = ? AND task.track = ?
-       AND (task.task_type <> 'review' OR task.nazem_review_id = ?)
+       AND (task.task_type <> 'review' OR COALESCE(task.nazem_review_id, receipt.daily_follow_up_id) = ?)
      ORDER BY task.from_page, task.from_surah, task.from_ayah, attempt.id`,
     [daily.planId, daily.studentId, daily.taskDate, daily.taskType, daily.track, daily.id],
   );

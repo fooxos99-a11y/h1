@@ -1,3 +1,4 @@
+import LoadingSpinner from '@/components/ui/loading-spinner';
 import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -71,7 +72,7 @@ const NazemLogDialog = ({ open, onOpenChange }) => {
           <div className="flex items-center justify-between gap-3 pl-8">
             <DialogTitle>سجل ناظم</DialogTitle>
             <Button type="button" variant="outline" size="sm" className="min-h-10 gap-2" disabled={refreshing} onClick={load}>
-              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? <LoadingSpinner /> : <RefreshCw aria-hidden="true" className="h-4 w-4" />}
               تحديث
             </Button>
           </div>

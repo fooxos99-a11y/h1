@@ -1,3 +1,4 @@
+import LoadingSpinner from '@/components/ui/loading-spinner';
 import NazemIssueDate from '@/components/dashboard/NazemIssueDate';
 import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
@@ -90,7 +91,7 @@ const NazemSyncIssuesDialog = ({ account, open, onOpenChange, onQueued, inline =
                       disabled={queued || retryingStudentId === issueKey}
                       onClick={() => retryIssue(issue)}
                     >
-                      <RefreshCw className={`h-4 w-4 ${retryingStudentId === issueKey ? 'animate-spin' : ''}`} />
+                      {retryingStudentId === issueKey ? <LoadingSpinner /> : <RefreshCw aria-hidden="true" className="h-4 w-4" />}
                       {queued ? 'تمت الجدولة' : nazemRetryLabel(issue)}
                     </Button>
                   )}

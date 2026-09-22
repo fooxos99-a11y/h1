@@ -35,7 +35,7 @@ try {
           const content = globalThis.document.querySelector('[data-loading-indicator="content"]');
           const cover = screen || content;
           const local = [...globalThis.document.querySelectorAll('[data-loading-indicator="local"]')].filter(node => node.checkVisibility());
-          const shape = cover?.querySelector('.startup-hexagon, .loading-spinner--screen');
+          const shape = cover?.querySelector('.loading-spinner--screen');
           const rect = shape?.getBoundingClientRect();
           const style = cover ? globalThis.getComputedStyle(cover) : null;
           globalThis.window.loadingSamples.push({ screen: Boolean(screen), content: Boolean(content), background: style?.backgroundColor, opacity: style?.opacity, local: local.length, shape: shape?.className, x: rect ? rect.x + rect.width / 2 : null, y: rect ? rect.y + rect.height / 2 : null });
@@ -147,7 +147,7 @@ try {
   await stalled.locator('[data-loading-indicator="screen"]').waitFor();
   await stalled.clock.fastForward(16000);
   await stalled.getByRole('button', { name: 'إعادة المحاولة' }).waitFor();
-  assert.equal(await stalled.locator('.animate-spin:visible').count(), 0, 'timeout replaces indefinite spinning with retry');
+  assert.equal(await stalled.locator('.loading-logo:visible').count(), 0, 'timeout replaces indefinite spinning with retry');
   await stalled.evaluate(() => globalThis.window.dispatchEvent(new globalThis.Event('test-loading-complete')));
   await stalled.clock.fastForward(500);
   await stalled.locator('[data-loading-indicator="screen"]').waitFor({ state: 'hidden' });
