@@ -57,6 +57,27 @@ class ReleaseTests(unittest.TestCase):
                 self.assertEqual(switch.call_count, 2)
                 self.assertEqual(run.call_args.args[0], ['pm2', 'restart', 'api', 'worker', '--update-env'])
 
+    def test_cleanup_retains_current_previous_and_runtime_owner(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            releases = []
+            for number in range(4):
+                release = root / ('github-20260922-12000' + str(number) + '-aaaaaaaaaaaa')
+                release.mkdir()
+                (release / 'github-release.json').write_text('{}')
+                releases.append(release)
+            current, previous, data_owner, obsolete = releases
+            runtime = data_owner / 'runtime'
+            runtime.mkdir()
+            (runtime / 'student-data').write_text('preserved')
+            (current / 'previous-release.txt').write_text(str(previous))
+            legacy = root / 'legacy-release'
+            legacy.mkdir()
+            receiver.prune_releases({'release_root': str(root), 'runtime_source': str(runtime), 'env_source': str(root / 'shared.env')}, current)
+            self.assertFalse(obsolete.exists())
+            self.assertTrue(current.exists() and previous.exists() and legacy.exists())
+            self.assertEqual((runtime / 'student-data').read_text(), 'preserved')
+
 
 if __name__ == '__main__':
     unittest.main()
