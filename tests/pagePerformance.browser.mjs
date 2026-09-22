@@ -15,9 +15,19 @@ try {
     const history = path.endsWith('/quran-sessions');
     await setTimeout(history ? 1200 : 100);
     const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Riyadh' }).format(new Date());
-    const body = path.endsWith('/start') ? { attempt: { id: 9, status: 'started' } }
-      : path.includes('daily-challenge') ? { date, points: 10, attempt: null }
-      : history ? { rows: [], points: {} } : { date, plan: { id: 1 }, todayAmounts: [] };
+    const _resolveBody = () => {
+      if (path.endsWith('/start')) {
+        return { attempt: { id: 9, status: 'started' } };
+      }
+      if (path.includes('daily-challenge')) {
+        return { date, points: 10, attempt: null };
+      }
+      if (history) {
+        return { rows: [], points: {} };
+      }
+      return { date, plan: { id: 1 }, todayAmounts: [] };
+    };
+    const body = _resolveBody();
     await route.fulfill({ json: body });
   });
   await page.goto('http://localhost:3000/__page-performance');

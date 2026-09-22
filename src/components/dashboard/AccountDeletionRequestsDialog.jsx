@@ -62,28 +62,12 @@ const AccountDeletionRequestsDialog = ({ triggerClassName }) => {
     }
   };
 
-  return (
-    <>
-      <Button
-        type="button"
-        variant="outline"
-        className={cn('min-h-11 w-full justify-center gap-2', triggerClassName)}
-        onClick={() => handleOpenChange(true)}
-      >
-        <Trash2 className="h-4 w-4" />
-        طلبات الحذف
-      </Button>
-
-      <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="max-h-[85dvh] max-w-lg overflow-y-auto border-primary/25 bg-card [font-family:var(--font-ui)]" dir="rtl">
-          <DialogHeader>
-            <DialogTitle className="text-primary">طلبات الحذف</DialogTitle>
-          </DialogHeader>
-
-          {isLoading ? (
-            <DashboardLoader className="min-h-28" />
-          ) : requests.length ? (
-            <div className="space-y-3">
+  const _resolveAccountDeletionRequestsDialog = () => {
+    if (isLoading) {
+      return <DashboardLoader className="min-h-28" />;
+    }
+    if (requests.length) {
+      return <div className="space-y-3">
               {requests.map((request) => {
                 const isSaving = activeRequestId === request.id;
                 return (
@@ -120,12 +104,31 @@ const AccountDeletionRequestsDialog = ({ triggerClassName }) => {
                   </div>
                 );
               })}
-            </div>
-          ) : (
-            <p className="rounded-xl border border-dashed border-primary/20 p-5 text-center text-sm font-bold text-muted-foreground">
+            </div>;
+    }
+    return <p className="rounded-xl border border-dashed border-primary/20 p-5 text-center text-sm font-bold text-muted-foreground">
               لا توجد طلبات حذف معلقة.
-            </p>
-          )}
+            </p>;
+  };
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        className={cn('min-h-11 w-full justify-center gap-2', triggerClassName)}
+        onClick={() => handleOpenChange(true)}
+      >
+        <Trash2 className="h-4 w-4" />
+        طلبات الحذف
+      </Button>
+
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="max-h-[85dvh] max-w-lg overflow-y-auto border-primary/25 bg-card [font-family:var(--font-ui)]" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-primary">طلبات الحذف</DialogTitle>
+          </DialogHeader>
+
+          {_resolveAccountDeletionRequestsDialog()}
         </DialogContent>
       </Dialog>
     </>

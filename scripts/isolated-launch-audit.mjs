@@ -76,7 +76,7 @@ function startApi({ port, instanceKey, registrationNumber, managerLogin, databas
 }
 
 async function stopApi(server) {
-  if (!server || server.child.exitCode !== null) return;
+  if (server?.child.exitCode !== null) return;
   await new Promise((resolve) => {
     server.child.once('exit', resolve);
     server.child.kill();

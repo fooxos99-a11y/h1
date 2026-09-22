@@ -60,7 +60,7 @@ const responseData = (payload) => payload?.data?.data || payload?.data || payloa
 const saudiDate = (daysAgo = 0) => getBusinessDateDaysAgo(daysAgo);
 
 const normalizeDateOnly = (value) => {
-  const match = String(value || '').match(/^(\d{4}-\d{2}-\d{2})/);
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(value || ''));
   if (match) return match[1];
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return value.toISOString().slice(0, 10);
@@ -1062,8 +1062,8 @@ export class NazemAdapter {
         if (!text || text.includes('لا توجد خطط') || text.includes('جاري التحميل')) continue;
         const editLink = row.locator('a[href*="/educational-plans/"]').first();
         const href = await editLink.count() ? await editLink.getAttribute('href') : '';
-        const externalId = String(href || '').match(/\/educational-plans\/(\d+)(?:\/|$)/)?.[1]
-          || text.match(/^(\d+)\b/)?.[1]
+        const externalId = /\/educational-plans\/(\d+)(?:\/|$)/.exec(String(href || ''))?.[1]
+          || /^(\d+)\b/.exec(text)?.[1]
           || null;
         if (externalId) {
           const cells = row.getByRole('cell');
@@ -1122,7 +1122,7 @@ export class NazemAdapter {
         if (await identityElement.count()) {
           const directId = cleanText(await identityElement.getAttribute('data-student-id'))
             || cleanText(await identityElement.getAttribute('value'));
-          const hrefId = cleanText(await identityElement.getAttribute('href')).match(/\/students\/(\d+)(?:\/|$)/)?.[1];
+          const hrefId = /\/students\/(\d+)(?:\/|$)/.exec(cleanText(await identityElement.getAttribute('href')))?.[1];
           const candidateId = directId || hrefId;
           if (isNazemExternalStudentId(candidateId)) externalId = candidateId;
         }
@@ -1165,7 +1165,7 @@ export class NazemAdapter {
         studentName: studentLink.nazemStudentName,
         tab: expectedTab,
         amount: await amountButton.count() ? cleanText(await amountButton.innerText()) : null,
-        direction: text.match(/تصاعدي|تنازلي/)?.[0] || null,
+        direction: /تصاعدي|تنازلي/.exec(text)?.[0] || null,
         startSurah: cleanText(await textboxes.nth(0).inputValue()),
         startAyah: Number(await textboxes.nth(1).inputValue()),
         endSurah: cleanText(await textboxes.nth(2).inputValue()),
@@ -1322,14 +1322,26 @@ export class NazemAdapter {
         };
         try {
           const apiBundle = planDetails ? mapNazemApiPlanBundle(planDetails, studentLink) : null;
-          const conserve = apiBundle
-            ? (apiBundle.primary?.tab === 'الحفظ' ? apiBundle.primary : null)
-            : await this.readPlan(group.externalId, studentLink, 'الحفظ', { navigate: false });
-          const master = apiBundle?.primary?.tab === 'الإتقان'
-            ? apiBundle.primary
-            : (!apiBundle
-              ? await this.readPlan(group.externalId, studentLink, 'الإتقان', { navigate: false })
-              : null);
+          let conserve;
+          if (apiBundle) {
+            if (apiBundle.primary?.tab === 'الحفظ') {
+              conserve = apiBundle.primary;
+            } else {
+              conserve = null;
+            }
+          } else {
+            conserve = await this.readPlan(group.externalId, studentLink, 'الحفظ', { navigate: false });
+          }
+          let master;
+          if (apiBundle?.primary?.tab === 'الإتقان') {
+            master = apiBundle.primary;
+          } else {
+            if (!apiBundle) {
+              master = await this.readPlan(group.externalId, studentLink, 'الإتقان', { navigate: false });
+            } else {
+              master = null;
+            }
+          }
           const primary = conserve || master;
           if (!primary) continue;
           const revision = apiBundle
@@ -1832,6 +1844,13 @@ export class NazemAdapter {
     if (!item) throw reviewNazemError('خطة الطالب في ناظم لا تحتوي نوع الورد المرتبط.', 'NAZEM_PLAN_TRACK_MISSING');
     const attendanceValue = executionDate ? executionAttendanceStatus : student.attendance_status;
     const attendanceStatus = [2, 3, 4, 5].includes(Number(attendanceValue)) ? Number(attendanceValue) : null;
+    const _resolveDay = () => {
+      if (day) {
+        return { ...day, date: mapped.date, remoteType: mapped.remoteType,
+        taskType: mapped.remoteType === 'revision' ? 'review' : 'memorization', attendanceStatus };
+      }
+      return null;
+    };
     return {
       attendanceStatus,
       attendanceDate: executionDate || followUpDate,
@@ -1839,8 +1858,7 @@ export class NazemAdapter {
         && Object.hasOwn(day, 'link') && Number(day.link) === Number(mapped.linkCount)),
       linkRecordId: day?.id,
       final: Boolean(mapped.taskType !== 'link' && !late && day && FINAL_FOLLOW_UP_STATUSES.has(String(day.status || ''))),
-      day: day ? { ...day, date: mapped.date, remoteType: mapped.remoteType,
-        taskType: mapped.remoteType === 'revision' ? 'review' : 'memorization', attendanceStatus } : null,
+      day: _resolveDay(),
     };
   }
 
@@ -2033,16 +2051,21 @@ export class NazemAdapter {
       if (initial.item.is_blocked_by_late || (initial.item.is_blocked_by_previous_days && !initial.pendingDay)) {
         throw blockedNazemError('يجب إنهاء الأيام السابقة أو المتأخرات في ناظم أولًا.', 'NAZEM_PREVIOUS_DAYS_BLOCKING');
       }
-      const metrics = mapped.remoteType === 'conserve'
-        ? {
+      const _resolveMetrics = () => {
+        if (mapped.remoteType === 'conserve') {
+          return {
           mistake: Number(mapped.remoteMistakeCount || 0),
           hearing: mapped.listeningCount > 0 ? 1 : 2,
           repetition: Number(mapped.repeatCount || 0),
           link: Number(mapped.linkCount ?? initial.day.link ?? 0),
+        };
         }
-        : mapped.remoteType === 'revision'
-          ? { mistake: Number(mapped.remoteMistakeCount || 0), tune: 0 }
-          : {};
+        if (mapped.remoteType === 'revision') {
+          return { mistake: Number(mapped.remoteMistakeCount || 0), tune: 0 };
+        }
+        return {};
+      };
+      const metrics = _resolveMetrics();
       const attendance = { attendance_status: Number(mapped.attendanceStatus) };
       const endpointSuffix = mapped.completed ? '/partial' : '/not-completed';
       const savePayload = mapped.completed

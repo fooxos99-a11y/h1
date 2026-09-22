@@ -181,6 +181,15 @@ const RegistrationRequestsSection = () => {
     return <DashboardLoader className="min-h-[420px]" />;
   }
 
+  const _resolveRegistrationRequestsSection = () => {
+    if (busyKey === 'config') {
+      return <LoadingSpinner />;
+    }
+    if (registrationEnabled) {
+      return <CheckCircle2 className="h-4 w-4" />;
+    }
+    return <XCircle className="h-4 w-4" />;
+  };
   return (
     <Card className="border-primary/30 bg-card neon-glow" dir="rtl">
       <CardHeader className="border-b border-primary/15 p-3 sm:p-4">
@@ -199,11 +208,7 @@ const RegistrationRequestsSection = () => {
                   : 'border-red-600 bg-red-600 hover:border-red-700 hover:bg-red-700 hover:text-white'
               }`}
             >
-              {busyKey === 'config'
-                ? <LoadingSpinner />
-                : registrationEnabled
-                  ? <CheckCircle2 className="h-4 w-4" />
-                  : <XCircle className="h-4 w-4" />}
+              {_resolveRegistrationRequestsSection()}
               {registrationEnabled ? 'التسجيل مفتوح' : 'التسجيل مغلق'}
             </Button>
             <Button type="button" variant="outline" onClick={copyLink} className="h-11 gap-2">
@@ -372,21 +377,24 @@ const RequestDetail = ({ label, value, wide = false }) => (
   </div>
 );
 
-const ResultButton = ({ active, label, icon: Icon, danger = false, onClick }) => (
-  <button
+const ResultButton = ({ active, label, icon: Icon, danger = false, onClick }) => { const _resolveClassName = () => {
+                                                                                     if (active) {
+                                                                                       if (danger) {
+                                                                                         return 'border-destructive bg-destructive text-destructive-foreground';
+                                                                                       }
+                                                                                       return 'border-emerald-600 bg-emerald-600 text-white';
+                                                                                     }
+                                                                                     return 'border-primary/20 bg-background text-foreground hover:bg-primary/10';
+                                                                                   };
+                                                                                   return (<button
     type="button"
     onClick={onClick}
     className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-black transition ${
-      active
-        ? danger
-          ? 'border-destructive bg-destructive text-destructive-foreground'
-          : 'border-emerald-600 bg-emerald-600 text-white'
-        : 'border-primary/20 bg-background text-foreground hover:bg-primary/10'
+      _resolveClassName()
     }`}
   >
     <Icon className="h-4 w-4" />
     {label}
-  </button>
-);
+  </button>); };
 
 export default RegistrationRequestsSection;

@@ -262,32 +262,16 @@ const AdministratorsSection = () => {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <Card className="bg-card border-primary/30 neon-glow">
-        <CardHeader className="border-b border-primary/20">
-          <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-            <Input
-              aria-label="ابحث باسم الإداري"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="ابحث باسم الإداري"
-              className="bg-background border-primary/30 text-foreground"
-            />
-            <Button onClick={openAddDialog} className="min-w-20 px-4">
-              إضافة
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-6">
-          {isLoading ? (
-            <DashboardLoader />
-          ) : visibleAdministrators.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">
+  const _resolveAdministratorsSection = () => {
+    if (isLoading) {
+      return <DashboardLoader />;
+    }
+    if (visibleAdministrators.length === 0) {
+      return <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">
               لا يوجد إداريون حالياً.
-            </div>
-          ) : (
-            <div className="space-y-3">
+            </div>;
+    }
+    return <div className="space-y-3">
               {visibleAdministrators.map((administrator) => {
                 return (
                   <div
@@ -326,8 +310,27 @@ const AdministratorsSection = () => {
                   </div>
                 );
               })}
-            </div>
-          )}
+            </div>;
+  };
+  return (
+    <div className="space-y-6">
+      <Card className="bg-card border-primary/30 neon-glow">
+        <CardHeader className="border-b border-primary/20">
+          <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+            <Input
+              aria-label="ابحث باسم الإداري"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="ابحث باسم الإداري"
+              className="bg-background border-primary/30 text-foreground"
+            />
+            <Button onClick={openAddDialog} className="min-w-20 px-4">
+              إضافة
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-6">
+          {_resolveAdministratorsSection()}
         </CardContent>
       </Card>
 

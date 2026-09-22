@@ -55,6 +55,15 @@ const NarrationStudentPanel = ({ eventId, student, archived, onSavePart, onStart
     return { ...result, teacherCompleted: true };
   };
 
+  const _resolveNarrationStudentPanel = () => {
+    if (student.status === 'completed') {
+      return 'تم الانتهاء';
+    }
+    if (archived) {
+      return 'عرض';
+    }
+    return 'بدء';
+  };
   return (
     <>
       <article className="flex min-h-32 flex-col justify-between gap-4 rounded-xl border border-primary/15 bg-background/70 p-4 shadow-sm shadow-primary/5 transition hover:border-primary/35 hover:shadow-md sm:min-h-36">
@@ -78,7 +87,7 @@ const NarrationStudentPanel = ({ eventId, student, archived, onSavePart, onStart
             className={`min-h-11 min-w-24 gap-2 touch-manipulation ${student.status === 'completed' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : ''}`}
           >
             {student.status === 'completed' ? <CheckCircle2 className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-            {student.status === 'completed' ? 'تم الانتهاء' : archived ? 'عرض' : 'بدء'}
+            {_resolveNarrationStudentPanel()}
           </Button>
         </div>
       </article>

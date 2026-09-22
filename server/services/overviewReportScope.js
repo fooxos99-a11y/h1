@@ -12,15 +12,31 @@ export function createOverviewReportScope(connection, { auth = null, committeeId
   ].join(' AND ');
   const student = (column) => teacherId !== null || selectedCommitteeId !== null
     ? `${column} IN (SELECT overview_student.id FROM students overview_student WHERE ${committee('overview_student.committee_id')})` : '1=1';
-  const staff = (column) => teacherId !== null ? `${column} = :overviewTeacher`
-    : selectedCommitteeId !== null ? `EXISTS (SELECT 1 FROM supervisor_committees overview_staff WHERE overview_staff.supervisor_id = ${column} AND overview_staff.committee_id = :overviewCommittee)` : '1=1';
+  const staff = (column) => {
+  if (teacherId !== null) {
+    return `${column} = :overviewTeacher`;
+  }
+  if (selectedCommitteeId !== null) {
+    return `EXISTS (SELECT 1 FROM supervisor_committees overview_staff WHERE overview_staff.supervisor_id = ${column} AND overview_staff.committee_id = :overviewCommittee)`;
+  }
+  return '1=1';
+};
   return {
     committee, student, staff,
     query: (sql, parameters = []) => {
       let index = 0;
       const values = [];
       const boundSql = sql.replace(/:overviewTeacher|:overviewCommittee|\?/g, (token) => {
-        values.push(token === ':overviewTeacher' ? teacherId : token === ':overviewCommittee' ? selectedCommitteeId : parameters[index++]);
+        const _resolveBoundSql = () => {
+          if (token === ':overviewTeacher') {
+            return teacherId;
+          }
+          if (token === ':overviewCommittee') {
+            return selectedCommitteeId;
+          }
+          return parameters[index++];
+        };
+        values.push(_resolveBoundSql());
         return '?';
       });
       return connection.query(boundSql, values);

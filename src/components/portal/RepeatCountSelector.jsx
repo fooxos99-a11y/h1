@@ -21,6 +21,15 @@ const RepeatCountSelector = ({
   const countSuffix = (count) => (pluralLabel && Number(count) !== 1 ? 'مرات' : 'مرة');
 
   if (!editable) {
+    const _resolveRepeatCountSelector = () => {
+      if (!label) {
+        return selected;
+      }
+      if (compact) {
+        return `${label}: ${selected}`;
+      }
+      return `${label} ${selected} ${countSuffix(selected)}`;
+    };
     return (
       <span
         className={cn(
@@ -29,7 +38,7 @@ const RepeatCountSelector = ({
         )}
         dir="rtl"
       >
-        {!label ? selected : compact ? `${label}: ${selected}` : `${label} ${selected} ${countSuffix(selected)}`}
+        {_resolveRepeatCountSelector()}
       </span>
     );
   }

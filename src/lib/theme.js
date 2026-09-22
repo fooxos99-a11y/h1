@@ -24,7 +24,7 @@ export const getPreferredThemeForPath = (pathname, basePath) => {
     : getDefaultThemeForPath(pathname, basePath);
 };
 
-export const saveThemePreference = (theme, pathname = window.location.pathname, basePath) => {
+export const saveThemePreference = (theme, pathname = window.location.pathname, basePath = undefined) => {
   const scope = getThemeScopeForPath(pathname, basePath);
   const preference = theme === 'light' ? 'light' : 'dark';
   sessionPreferences[scope] = preference;

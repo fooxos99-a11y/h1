@@ -135,7 +135,9 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
       || !studentId || attendancePendingIds.includes(studentId)) return;
     const shouldHideStudent = ['absent', 'excused'].includes(status);
     setAttendancePendingIds((current) => [...current, studentId]);
-    setData((current) => current ? {
+    setData((current) => {
+  if (current) {
+    return {
       ...current,
       tasks: shouldHideStudent
         ? (current.tasks || []).filter((task) => Number(task.studentId) !== studentId)
@@ -145,7 +147,10 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
         : (current.students || []).map((item) => (
           Number(item.studentId) === studentId ? { ...item, attendanceStatus: status } : item
         )),
-    } : current);
+    };
+  }
+  return current;
+});
     try {
       await commitOfflineAttendance({
         supervisorId,
@@ -353,8 +358,12 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
     </div>
   );
 
-  const recitationDialog = !selectedStudent ? null : selectedEvaluationMode === 'count' ? (
-    <CountOnlyEvaluationDialog
+  let recitationDialog;
+  if (!selectedStudent) {
+    recitationDialog = null;
+  } else {
+    if (selectedEvaluationMode === 'count') {
+      recitationDialog = <CountOnlyEvaluationDialog
       secondaryAction={notCompletedAction}
       open={Boolean(selectedStudent)}
       onOpenChange={(nextOpen) => !nextOpen && setSelectedStudent(null)}
@@ -366,9 +375,9 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
       items={countEvaluationItems(selectedStudent?.tasks)}
       showItemLabels={!isNazemLinkTask(selectedTask) && !isNazemMasteryTask(selectedTask)}
       submitLabel={isNazemMasteryTask(selectedTask) ? 'متقن' : 'إنهاء'}
-    />
-  ) : (
-    <Suspense fallback={<DashboardLoader />}><MushafRecitationDialog
+    />;
+    } else {
+      recitationDialog = <Suspense fallback={<DashboardLoader />}><MushafRecitationDialog
       secondaryAction={notCompletedAction}
       supervisorId={supervisorId}
       student={selectedStudent}
@@ -400,8 +409,9 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
         return { session, results: [], pending: true };
       }}
       onSaved={() => undefined}
-    /></Suspense>
-  );
+    /></Suspense>;
+    }
+  }
 
   if (inline) {
     return (

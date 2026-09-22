@@ -133,13 +133,20 @@ const ManualAttendanceSection = ({ teacherScoped = false }) => {
     setPendingIds((current) => [...current, row.id]);
     try {
       const payload = { date: effectiveDate, mode: 'manual', status };
-      const result = target === 'students'
-        ? status === 'absent'
-          ? await studentsApi.markStudentAbsent(row.id, payload)
-          : await studentsApi.checkInStudent(row.id, payload)
-        : status === 'absent'
-          ? await studentsApi.markSupervisorAbsent(row.id, payload)
-          : await studentsApi.checkInSupervisor(row.id, payload);
+      let result;
+      if (target === 'students') {
+        if (status === 'absent') {
+          result = await studentsApi.markStudentAbsent(row.id, payload);
+        } else {
+          result = await studentsApi.checkInStudent(row.id, payload);
+        }
+      } else {
+        if (status === 'absent') {
+          result = await studentsApi.markSupervisorAbsent(row.id, payload);
+        } else {
+          result = await studentsApi.checkInSupervisor(row.id, payload);
+        }
+      }
 
       updateRowStatus(row.id, result.status || status, Number(result.points || 0));
       toast({
@@ -153,6 +160,54 @@ const ManualAttendanceSection = ({ teacherScoped = false }) => {
     }
   };
 
+  const _resolveManualAttendanceSection = () => {
+    if (isLoading) {
+      return <DashboardLoader />;
+    }
+    if (rows.length === 0) {
+      return <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">
+              لا توجد بيانات للتحضير.
+            </div>;
+    }
+    return <div className="space-y-2">
+              {groupedRows.map((group) => (
+                <section key={group.title}>
+                  <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] lg:grid-cols-[repeat(auto-fill,minmax(9.5rem,11rem))]" dir="rtl">
+                    {group.rows.map((row) => (
+                      <article key={row.id} className="grid content-start gap-1.5 rounded-lg border border-primary/20 bg-background p-2.5 shadow-sm shadow-primary/5">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-black text-foreground">{row.name}</p>
+                          {target === 'supervisors' && (
+                            <p className="mt-0.5 truncate text-xs text-muted-foreground">{row.jobTitle || 'معلم'}</p>
+                          )}
+                        </div>
+                        {row.status === 'no_session' ? (
+                          <div className="flex min-h-10 items-center rounded-lg border border-primary/15 bg-muted/30 px-3 text-sm font-bold text-muted-foreground">
+                            {statusLabel(row.status)}
+                          </div>
+                        ) : (
+                          <Select
+                            value={row.status || ''}
+                            onValueChange={(value) => setAttendanceStatus(row, value)}
+                            disabled={pendingIds.includes(row.id)}
+                          >
+                            <SelectTrigger aria-label={`حالة حضور ${row.name}`} className="h-11 w-[7.25rem] max-w-full justify-self-start bg-card px-3 pl-8 text-foreground">
+                              <SelectValue placeholder="اختر الحالة" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {attendanceStatuses.map(({ key, label }) => (
+                                <SelectItem key={key} value={key}>{label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>;
+  };
   return (
     <div className="space-y-5">
       <Card className="border-primary/30 bg-card neon-glow">
@@ -209,52 +264,7 @@ const ManualAttendanceSection = ({ teacherScoped = false }) => {
         </CardHeader>
 
         <CardContent className="px-3 pt-3 sm:px-4 lg:px-4">
-          {isLoading ? (
-            <DashboardLoader />
-          ) : rows.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">
-              لا توجد بيانات للتحضير.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {groupedRows.map((group) => (
-                <section key={group.title}>
-                  <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] lg:grid-cols-[repeat(auto-fill,minmax(9.5rem,11rem))]" dir="rtl">
-                    {group.rows.map((row) => (
-                      <article key={row.id} className="grid content-start gap-1.5 rounded-lg border border-primary/20 bg-background p-2.5 shadow-sm shadow-primary/5">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-black text-foreground">{row.name}</p>
-                          {target === 'supervisors' && (
-                            <p className="mt-0.5 truncate text-xs text-muted-foreground">{row.jobTitle || 'معلم'}</p>
-                          )}
-                        </div>
-                        {row.status === 'no_session' ? (
-                          <div className="flex min-h-10 items-center rounded-lg border border-primary/15 bg-muted/30 px-3 text-sm font-bold text-muted-foreground">
-                            {statusLabel(row.status)}
-                          </div>
-                        ) : (
-                          <Select
-                            value={row.status || ''}
-                            onValueChange={(value) => setAttendanceStatus(row, value)}
-                            disabled={pendingIds.includes(row.id)}
-                          >
-                            <SelectTrigger aria-label={`حالة حضور ${row.name}`} className="h-11 w-[7.25rem] max-w-full justify-self-start bg-card px-3 pl-8 text-foreground">
-                              <SelectValue placeholder="اختر الحالة" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {attendanceStatuses.map(({ key, label }) => (
-                                <SelectItem key={key} value={key}>{label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
-          )}
+          {_resolveManualAttendanceSection()}
         </CardContent>
       </Card>
     </div>

@@ -13,7 +13,18 @@ import { buildNazemLateTaskExistsSql } from '../integrations/nazem/lateTaskScope
 import { publicErrorMessage } from './publicErrors.js';
 
 const position = (task, prefix) => ({ page: Number(task[`${prefix}Page`]), surah: Number(task[`${prefix}Surah`]), ayah: Number(task[`${prefix}Ayah`]) });
-const getQuranRangeDirection = (start, end) => start.surah !== end.surah ? (start.surah < end.surah ? 1 : -1) : (start.ayah <= end.ayah ? 1 : -1);
+const getQuranRangeDirection = (start, end) => {
+  if (start.surah !== end.surah) {
+    if (start.surah < end.surah) {
+      return 1;
+    }
+    return -1;
+  }
+  if (start.ayah <= end.ayah) {
+    return 1;
+  }
+  return -1;
+};
 const missingRange = () => { const error = new Error('تعذر إثبات مقدار التسميع لاحتساب النقاط.'); error.statusCode = 409; throw error; };
 
 export async function enqueueNazemPointReconciliation(connection, dailyId, snapshot) {
@@ -94,7 +105,7 @@ export async function settleNazemPoints(connection, dailyId) {
       d.sync_status AS syncStatus, work.status, work.source_hash AS sourceHash
       FROM nazem_point_reconciliations work JOIN nazem_daily_follow_up_links d ON d.id = work.daily_follow_up_id
       WHERE d.id = ? FOR UPDATE`, [dailyId]);
-    if (!daily || daily.status !== 'pending') { await connection.commit(); return false; }
+    if (daily?.status !== 'pending') { await connection.commit(); return false; }
     sourceHash = daily.sourceHash;
     if (daily.syncStatus !== 'synced') { await connection.commit(); return false; }
     const [[activation]] = await connection.query("SELECT setting_value AS value FROM app_settings WHERE setting_key = 'nazemPointsStartDate'");
@@ -126,13 +137,25 @@ export async function settleNazemPoints(connection, dailyId) {
     if (attendanceStatus) await saveAttendanceWithPoints(connection, { studentId: daily.studentId,
       date: daily.taskDate, status: attendanceStatus, awardNewPoints: true }, await loadAttendancePointSettings(connection));
     const delta = (group) => group.points - group.tasks.reduce((sum, task) => sum + Number(task.points || 0), 0);
+    const _resolveReason = (group) => {
+      if (group.taskType === 'repeat') {
+        return 'اعتماد التكرار والسماع من ناظم';
+      }
+      if (group.taskType === 'link') {
+        return 'اعتماد الربط من ناظم';
+      }
+      if (daily.track === 'mastery') {
+        return 'اعتماد الإتقان من ناظم';
+      }
+      if (group.taskType === 'review') {
+        return 'اعتماد المراجعة من ناظم';
+      }
+      return 'اعتماد الحفظ من ناظم';
+    };
     for (const group of [...groups].sort((a, b) => delta(a) - delta(b))) await setQuranTaskGroupReward(connection, {
       taskIds: group.tasks.map((task) => task.id), studentId: daily.studentId, targetPoints: group.points,
       settings, date: daily.taskDate, actorRole: 'system', actorName: 'مزامنة ناظم', supervisorId: daily.teacherId,
-      sourceType: 'quran_evaluation', reason: group.taskType === 'repeat' ? 'اعتماد التكرار والسماع من ناظم'
-        : group.taskType === 'link' ? 'اعتماد الربط من ناظم'
-          : daily.track === 'mastery' ? 'اعتماد الإتقان من ناظم'
-            : group.taskType === 'review' ? 'اعتماد المراجعة من ناظم' : 'اعتماد الحفظ من ناظم',
+      sourceType: 'quran_evaluation', reason: _resolveReason(group),
       dedupeKey: `quran_evaluation:${daily.planId}:${daily.taskDate}:${group.taskType}${daily.track === 'mastery' ? ':mastery' : ''}`,
     });
     await connection.query(`UPDATE nazem_point_reconciliations SET status = 'synced', expected_points = ?, recorded_points = ?,

@@ -15,7 +15,7 @@ const segmentPoints = (from, to, step = 1.25) => {
 };
 
 const ForestMazeGame = ({ challenge, isSubmitting, onComplete }) => {
-  const gradientId = useId().replace(/:/g, '');
+  const gradientId = useId().replaceAll(':', '');
   const surfaceRef = useRef(null);
   const draggingRef = useRef(false);
   const completedRef = useRef(false);

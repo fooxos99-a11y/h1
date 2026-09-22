@@ -26,12 +26,21 @@ const planStateLabel = (candidate, availablePlans, failed) => {
   if (candidate.plans.length) return 'الخطة مرتبطة سابقًا';
   return failed ? 'تعذر التحقق من الخطة' : 'لم تُكتشف خطة';
 };
-const buildSelections = (candidates, localStudents) => Object.fromEntries(candidates.map((candidate) => {
+const buildSelections = (candidates, localStudents) => { return (Object.fromEntries(candidates.map((candidate) => {
   const suggested = localStudents.find((student) => Number(student.id) === Number(candidate.suggestedStudentId));
   const requiresConfirmation = !candidate.linkedStudentId && Boolean(suggested);
   const availablePlans = importablePlans(candidate);
+  const _resolveAction = () => {
+    if (candidate.linkedStudentId) {
+      return 'keep';
+    }
+    if (suggested) {
+      return 'match';
+    }
+    return 'create';
+  };
   return [candidate.id, {
-    action: candidate.linkedStudentId ? 'keep' : suggested ? 'match' : 'create',
+    action: _resolveAction(),
     studentId: suggested ? String(suggested.id) : '',
     importPlan: availablePlans.length === 1,
     planCandidateId: availablePlans.length === 1 ? String(availablePlans[0].id) : '',
@@ -39,7 +48,7 @@ const buildSelections = (candidates, localStudents) => Object.fromEntries(candid
     requiresConfirmation,
     confirmed: !requiresConfirmation,
   }];
-}));
+}))); };
 
 const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }) => {
   const { toast } = useToast();
@@ -257,27 +266,21 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
     || selections[candidate.id]?.requiresPlanChoice
   ));
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-h-[92dvh] max-w-5xl [font-family:var(--font-ui)]"
-        dir="rtl"
-        onInteractOutside={(event) => event.preventDefault()}
-      >
-        <DialogHeader><DialogTitle>استيراد طلاب وخطط {teacher?.teacherName} من ناظم</DialogTitle></DialogHeader>
-        {data && loadError && <ErrorState message={loadError} onRetry={() => load({ refresh: true })} />}
-        {loadError && !data ? (
-          <div className="space-y-4">
+  const _resolveNazemStudentPlanImportDialog = () => {
+    if (loadError && !data) {
+      return <div className="space-y-4">
             <ErrorState message={loadError} onRetry={() => load({ refresh: true })} />
             <DialogFooter><Button type="button" variant="outline" className="min-h-11" onClick={() => onOpenChange(false)}>إلغاء</Button></DialogFooter>
-          </div>
-        ) : !data ? (
-          <div className="space-y-4">
+          </div>;
+    }
+    if (!data) {
+      return <div className="space-y-4">
             <DashboardLoader />
             <DialogFooter><Button type="button" variant="outline" className="min-h-11" onClick={() => onOpenChange(false)}>إلغاء</Button></DialogFooter>
-          </div>
-        ) : result ? (
-          <div className="space-y-4">
+          </div>;
+    }
+    if (result) {
+      return <div className="space-y-4">
             <NazemPlanRefreshSummary result={refreshResult} />
             <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm font-bold text-emerald-700">
               أضيف {result.created}، وربط {result.matched}، والموجود سابقًا {result.kept}، واستورد {result.plansImported} خطة.
@@ -301,17 +304,18 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
               </div>
             )}
             <DialogFooter><Button type="button" className="min-h-11" onClick={() => onOpenChange(false)}>إغلاق</Button></DialogFooter>
-          </div>
-        ) : visibleCandidates.length === 0 ? (
-          <div className="space-y-4">
+          </div>;
+    }
+    if (visibleCandidates.length === 0) {
+      return <div className="space-y-4">
             <NazemPlanRefreshSummary result={refreshResult} />
             <div className="rounded-xl border border-primary/15 bg-muted/30 p-4 text-sm font-bold text-muted-foreground">
               {data.candidates.length ? 'كل الطلاب والخطط المستوردة مرتبطة مسبقًا.' : 'لم يُكتشف أي طالب في حساب ناظم.'}
             </div>
             <DialogFooter><Button type="button" variant="outline" className="min-h-11" onClick={() => onOpenChange(false)}>إلغاء</Button></DialogFooter>
-          </div>
-        ) : (
-          <div className="space-y-4">
+          </div>;
+    }
+    return <div className="space-y-4">
             <NazemPlanRefreshSummary result={refreshResult} />
             {circles.length > 1 && (
               <div className="space-y-1.5"><label className="text-sm font-black" htmlFor="nazem-circle">حلقة ناظم</label>
@@ -346,6 +350,50 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
                   Number(row.studentId) === studentId && !hiddenConflictIds.includes(row.id)
                 ));
                 const isExcluded = excludedCandidateIds.includes(candidate.id);
+                const _resolve_resolveNazemStudentPlanImportDialog = () => {
+                  if (candidate.linkedStudentId) {
+                    return <div className="flex flex-col items-start gap-2">
+                          <div className="text-sm font-bold text-emerald-600">مرتبط بـ {candidate.linkedStudentName}</div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={isExcluded ? 'outline' : 'ghost'}
+                            className="min-h-11 gap-2"
+                            onClick={() => setExcludedCandidateIds((current) => (
+                              current.includes(candidate.id)
+                                ? current.filter((id) => id !== candidate.id)
+                                : [...current, candidate.id]
+                            ))}
+                          >
+                            {isExcluded
+                              ? <RotateCcw className="h-4 w-4" />
+                              : <X className="h-4 w-4" />}
+                            {isExcluded ? 'إعادة إلى الاستيراد' : 'استبعاد من الاستيراد'}
+                          </Button>
+                          {isExcluded && <div className="text-xs font-bold text-muted-foreground">مستبعد من هذه الدفعة فقط</div>}
+                        </div>;
+                  }
+                  if (suggestedStudent) {
+                    return <div className="flex flex-col items-start gap-2">
+                          <div className="text-sm font-bold text-foreground">مطابقة مقترحة: {suggestedStudent.name}</div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={selection.confirmed ? 'outline' : 'default'}
+                            className="min-h-11 gap-2"
+                            disabled={selection.confirmed}
+                            onClick={() => updateSelection(candidate.id, { confirmed: true })}
+                          >
+                            <Check className="h-4 w-4" />
+                            {selection.confirmed ? 'تم تأكيد المطابقة' : 'تأكيد المطابقة'}
+                          </Button>
+                        </div>;
+                  }
+                  if (importablePlans(candidate).length > 0) {
+                    return <div className="flex min-h-11 items-center text-xs font-bold leading-5 text-emerald-600">سيُنشأ في المنصة ويُطابق بناظم تلقائيًا</div>;
+                  }
+                  return null;
+                };
                 return (
                   <div
                     key={candidate.id}
@@ -366,45 +414,7 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
                           {candidate.profile?.educationLevel && <span>{candidate.profile.educationLevel}</span>}
                         </div>
                       </div>
-                      {candidate.linkedStudentId ? (
-                        <div className="flex flex-col items-start gap-2">
-                          <div className="text-sm font-bold text-emerald-600">مرتبط بـ {candidate.linkedStudentName}</div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={isExcluded ? 'outline' : 'ghost'}
-                            className="min-h-11 gap-2"
-                            onClick={() => setExcludedCandidateIds((current) => (
-                              current.includes(candidate.id)
-                                ? current.filter((id) => id !== candidate.id)
-                                : [...current, candidate.id]
-                            ))}
-                          >
-                            {isExcluded
-                              ? <RotateCcw className="h-4 w-4" />
-                              : <X className="h-4 w-4" />}
-                            {isExcluded ? 'إعادة إلى الاستيراد' : 'استبعاد من الاستيراد'}
-                          </Button>
-                          {isExcluded && <div className="text-xs font-bold text-muted-foreground">مستبعد من هذه الدفعة فقط</div>}
-                        </div>
-                      ) : suggestedStudent ? (
-                        <div className="flex flex-col items-start gap-2">
-                          <div className="text-sm font-bold text-foreground">مطابقة مقترحة: {suggestedStudent.name}</div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={selection.confirmed ? 'outline' : 'default'}
-                            className="min-h-11 gap-2"
-                            disabled={selection.confirmed}
-                            onClick={() => updateSelection(candidate.id, { confirmed: true })}
-                          >
-                            <Check className="h-4 w-4" />
-                            {selection.confirmed ? 'تم تأكيد المطابقة' : 'تأكيد المطابقة'}
-                          </Button>
-                        </div>
-                      ) : importablePlans(candidate).length > 0 ? (
-                        <div className="flex min-h-11 items-center text-xs font-bold leading-5 text-emerald-600">سيُنشأ في المنصة ويُطابق بناظم تلقائيًا</div>
-                      ) : null}
+                      {_resolve_resolveNazemStudentPlanImportDialog()}
                       <div className="min-w-0">
                         <div className={`flex min-h-11 items-center text-sm font-black ${candidate.plans.length ? 'text-emerald-600' : 'text-destructive'}`}>
                           {planStateLabel(
@@ -464,8 +474,18 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
                 {saving ? 'جاري الاستيراد...' : `استيراد الطلاب ذوي الخطط (${candidatesWithPlans.length})`}
               </Button>
             </DialogFooter>
-          </div>
-        )}
+          </div>;
+  };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-h-[92dvh] max-w-5xl [font-family:var(--font-ui)]"
+        dir="rtl"
+        onInteractOutside={(event) => event.preventDefault()}
+      >
+        <DialogHeader><DialogTitle>استيراد طلاب وخطط {teacher?.teacherName} من ناظم</DialogTitle></DialogHeader>
+        {data && loadError && <ErrorState message={loadError} onRetry={() => load({ refresh: true })} />}
+        {_resolveNazemStudentPlanImportDialog()}
       </DialogContent>
     </Dialog>
   );

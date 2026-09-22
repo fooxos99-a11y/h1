@@ -54,7 +54,7 @@ const mapRuwasiTrackToNazemTab = (track) => (
 );
 
 const normalizeRecitationDate = (value) => {
-  const direct = String(value || '').match(/^(\d{4}-\d{2}-\d{2})/);
+  const direct = /^(\d{4}-\d{2}-\d{2})/.exec(String(value || ''));
   if (direct) return direct[1];
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return value.toISOString().slice(0, 10);
@@ -129,9 +129,16 @@ export function mapNazemOwnedPlanSnapshot(plan, source = {}) {
 export function mapRuwasiRecitationToNazem(recitation) {
   const taskType = String(recitation.taskType || '');
   const track = String(recitation.track || 'memorization');
-  const remoteType = taskType === 'review'
-    ? 'revision'
-    : track === 'mastery' ? 'master' : 'conserve';
+  const _resolveRemoteType = () => {
+    if (taskType === 'review') {
+      return 'revision';
+    }
+    if (track === 'mastery') {
+      return 'master';
+    }
+    return 'conserve';
+  };
+  const remoteType = _resolveRemoteType();
   const attendanceStatus = mapRuwasiAttendanceStatusToNazem(recitation.attendanceStatus);
   const warningCount = Math.max(0, Number(recitation.warningCount || 0));
   const mistakeCount = Math.max(0, Number(recitation.mistakeCount || 0));
@@ -143,10 +150,19 @@ export function mapRuwasiRecitationToNazem(recitation) {
     completed: Number(recitation.linkCount || 0) > 0,
     linkCount: recitation.linkCount === null ? null : Math.max(0, Number(recitation.linkCount || 0)),
   };
+  const _resolveRemoteTab = () => {
+    if (remoteType === 'revision') {
+      return 'مراجعة';
+    }
+    if (remoteType === 'master') {
+      return 'إتقان';
+    }
+    return 'حفظ';
+  };
   return {
     taskType,
     remoteType,
-    remoteTab: remoteType === 'revision' ? 'مراجعة' : remoteType === 'master' ? 'إتقان' : 'حفظ',
+    remoteTab: _resolveRemoteTab(),
     warningCount,
     mistakeCount,
     remoteMistakeCount: remoteType === 'master' ? 0 : mistakeCount,

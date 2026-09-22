@@ -22,12 +22,21 @@ const getSaudiDate = getBusinessDate;
 
 function ResultScreen({ result, onBack }) {
   const rewardUnits = useRewardUnits();
+  const _resolveConditional = () => {
+    if (result.pendingSync) {
+      return 'حُفظت محاولة اليوم';
+    }
+    if (result.correct) {
+      return 'أحسنت، أنجزت تحدي اليوم!';
+    }
+    return 'انتهت محاولة اليوم';
+  };
   return (
     <main className="daily-challenge-app">
       <div className="daily-challenge-ambient" aria-hidden="true" />
       <section className="daily-challenge-result">
         <div className="daily-challenge-icon-orbit">{result.correct ? <Trophy className="h-14 w-14 text-[#f2bd4f]" /> : <Clock3 className="h-14 w-14 text-white/70" />}</div>
-        <h1>{result.pendingSync ? 'حُفظت محاولة اليوم' : (result.correct ? 'أحسنت، أنجزت تحدي اليوم!' : 'انتهت محاولة اليوم')}</h1>
+        <h1>{_resolveConditional()}</h1>
         {result.pendingSync ? <p>ستُعتمد النتيجة تلقائيًا فور عودة الاتصال.</p> : null}
         {result.correct ? <div className="daily-challenge-points"><Zap className="h-5 w-5" /> +{rewardUnits.format(result.awardedPoints)}</div> : null}
         <Button type="button" onClick={onBack} className="daily-challenge-primary bg-[#d7a43b] !text-white">العودة</Button>

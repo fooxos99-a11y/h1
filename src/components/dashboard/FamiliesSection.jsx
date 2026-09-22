@@ -131,33 +131,16 @@ const FamiliesSection = () => {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      {!isOnline ? <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-center text-sm font-black text-amber-700">عرض محلي للقراءة فقط حتى عودة الاتصال.</div> : null}
-      <Card className="bg-card border-primary/30 neon-glow">
-        <CardHeader className="border-b border-primary/20">
-          <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-              <Input
-                aria-label="ابحث باسم الحلقة"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="ابحث باسم الحلقة"
-                className="bg-background border-primary/30 text-foreground"
-              />
-              <Button onClick={openAddDialog} disabled={!isOnline} className="min-w-20 px-4">
-                إضافة
-              </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-6">
-          {isLoading ? (
-            <DashboardLoader />
-          ) : families.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">
+  const _resolveFamiliesSection = () => {
+    if (isLoading) {
+      return <DashboardLoader />;
+    }
+    if (families.length === 0) {
+      return <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">
               لا توجد حلقات حالياً.
-            </div>
-          ) : (
-            <div className="space-y-3">
+            </div>;
+    }
+    return <div className="space-y-3">
               {families.map((family) => (
                 <div key={family.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-xl border border-primary/20 bg-background p-4">
                   <div className="min-w-0">
@@ -178,8 +161,28 @@ const FamiliesSection = () => {
                   </div>
                 </div>
               ))}
-            </div>
-          )}
+            </div>;
+  };
+  return (
+    <div className="space-y-6">
+      {!isOnline ? <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-center text-sm font-black text-amber-700">عرض محلي للقراءة فقط حتى عودة الاتصال.</div> : null}
+      <Card className="bg-card border-primary/30 neon-glow">
+        <CardHeader className="border-b border-primary/20">
+          <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+              <Input
+                aria-label="ابحث باسم الحلقة"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="ابحث باسم الحلقة"
+                className="bg-background border-primary/30 text-foreground"
+              />
+              <Button onClick={openAddDialog} disabled={!isOnline} className="min-w-20 px-4">
+                إضافة
+              </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-6">
+          {_resolveFamiliesSection()}
         </CardContent>
       </Card>
 

@@ -80,7 +80,13 @@ const getWeekDaysBetween = (startDay, endDay) => {
 
 const countReviewDays = (startDay, endDay, holidays, allowedHolidayTasks = []) => {
   const reviewAllowedOnHoliday = Array.isArray(allowedHolidayTasks) && allowedHolidayTasks.includes('review');
-  const holidaySet = new Set(reviewAllowedOnHoliday ? [] : (Array.isArray(holidays) ? holidays : [5, 6]).map(Number));
+  const _resolveHolidaySet = () => {
+    if (reviewAllowedOnHoliday) {
+      return [];
+    }
+    return (Array.isArray(holidays) ? holidays : [5, 6]).map(Number);
+  };
+  const holidaySet = new Set(_resolveHolidaySet());
   return getWeekDaysBetween(startDay, endDay).filter((day) => !holidaySet.has(day)).length;
 };
 
@@ -357,7 +363,18 @@ const StudentPlansSection = ({ hideCommitteeFilter = false }) => {
     const plan = row.plan;
     setSelectedRow(row);
     setIsCreatingNewPlan(createNew);
-    setForm(plan && !createNew ? {
+    const _resolveReviewPreset = () => {
+      if (plan.reviewSplitWeekly) {
+        return 'weekly';
+      }
+      if (['20', '40', '60'].includes(String(plan.reviewPages))) {
+        return String(plan.reviewPages);
+      }
+      return 'custom';
+    };
+    const _resolveOpenPlanDialog = () => {
+      if (plan && !createNew) {
+        return {
       track: plan.track || 'memorization',
       startDate: plan.startDate || minimumPlanStartDate,
       startSurah: String(plan.startSurah),
@@ -370,14 +387,18 @@ const StudentPlansSection = ({ hideCommitteeFilter = false }) => {
       dailyPages: plan.dailyPages,
       linkPreset: ['10', '20'].includes(String(plan.linkPages)) ? String(plan.linkPages) : 'custom',
       linkPages: plan.linkPages,
-      reviewPreset: plan.reviewSplitWeekly ? 'weekly' : (['20', '40', '60'].includes(String(plan.reviewPages)) ? String(plan.reviewPages) : 'custom'),
+      reviewPreset: _resolveReviewPreset(),
       reviewPages: plan.reviewPages,
       reviewSplitWeekly: Boolean(plan.reviewSplitWeekly),
       reviewWeekStartDay: String(plan.reviewWeekStartDay ?? 0),
       reviewWeekEndDay: String(plan.reviewWeekEndDay ?? 6),
       reviewMinDailyPages: plan.reviewMinDailyPages || 1,
       priorMemorization: Array.isArray(plan.priorMemorization) ? plan.priorMemorization : [],
-    } : { ...emptyForm, startDate: minimumPlanStartDate });
+    };
+      }
+      return { ...emptyForm, startDate: minimumPlanStartDate };
+    };
+    setForm(_resolveOpenPlanDialog());
   };
 
   useEffect(() => {
@@ -509,15 +530,20 @@ const StudentPlansSection = ({ hideCommitteeFilter = false }) => {
       const isComplete = pages.size >= Number(juz.endPage) - Number(juz.startPage) + 1;
       const segmentFromPage = Math.min(...pages);
       const segmentToPage = Math.max(...pages);
+      const _resolveLabel = () => {
+        if (isComplete) {
+          return `الجزء ${numberText(juz.juz)} كامل`;
+        }
+        if (quranReferenceMode === 'page') {
+          return `الجزء ${numberText(juz.juz)}: صفحة ${numberText(segmentFromPage)} إلى ${numberText(segmentToPage)}`;
+        }
+        return `الجزء ${numberText(juz.juz)}: من ${juz.startSurahName} ${numberText(juz.startAyah)} إلى ${endRef.surahName} ${numberText(endRef.ayah)}`;
+      };
       return {
         juz: juz.juz,
         fromPage: segmentFromPage,
         toPage: segmentToPage,
-        label: isComplete
-          ? `الجزء ${numberText(juz.juz)} كامل`
-          : quranReferenceMode === 'page'
-          ? `الجزء ${numberText(juz.juz)}: صفحة ${numberText(segmentFromPage)} إلى ${numberText(segmentToPage)}`
-          : `الجزء ${numberText(juz.juz)}: من ${juz.startSurahName} ${numberText(juz.startAyah)} إلى ${endRef.surahName} ${numberText(endRef.ayah)}`,
+        label: _resolveLabel(),
       };
     }).filter(Boolean);
   }, [chapterName, juzRanges, memorizedRow, quranReferenceMode]);
@@ -651,6 +677,78 @@ const StudentPlansSection = ({ hideCommitteeFilter = false }) => {
     }));
   };
 
+  const _resolveStudentPlansSection = () => {
+    if (isLoading) {
+      return <DashboardLoader />;
+    }
+    if (rows.length === 0) {
+      return <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">لا يوجد طلاب حالياً.</div>;
+    }
+    return <div className="space-y-2">
+              {rows.map((row) => { const _resolve_resolveStudentPlansSection = () => {
+                                     if (row.nazemManaged) {
+                                       return <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/5 text-primary" title="الخطة مقفلة" aria-label="الخطة مقفلة">
+                        <LockKeyhole className="h-4 w-4" aria-hidden="true" />
+                      </span>;
+                                     }
+                                     if (row.plan) {
+                                       return <>
+                      {Number(row.plan.progressPercent || 0) >= 100 && (
+                        <ManagementIconButton
+                          onClick={() => openPlanDialog(row, { createNew: true })}
+                          tone="primary"
+                          title="خطة جديدة"
+                          aria-label={`إضافة خطة جديدة لـ ${row.studentName}`}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </ManagementIconButton>
+                      )}
+                      <ManagementIconButton
+                        onClick={() => openPlanDialog(row)}
+                        tone="primary"
+                        title="تعديل الخطة"
+                        aria-label={`تعديل خطة ${row.studentName}`}
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </ManagementIconButton>
+                    </>;
+                                     }
+                                     return <Button onClick={() => openPlanDialog(row)} className="gap-2" title="إضافة خطة">
+                      <Plus className="h-4 w-4" />إضافة خطة
+                    </Button>;
+                                   };
+                                   return (<div key={row.studentId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 rounded-lg border border-primary/20 bg-card/70 p-3 shadow-sm shadow-primary/5 lg:grid-cols-[minmax(300px,auto)_minmax(180px,1fr)_auto]">
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 lg:col-start-1">
+                    <div className="text-base font-black leading-tight text-foreground">{row.studentName}</div>
+                    <div className="text-[10px] font-bold leading-tight text-muted-foreground sm:text-xs">{row.committeeName || 'بدون حلقة'}</div>
+                    {row.nazemManaged && <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary" title="الخطة مقفلة" aria-label="الخطة مقفلة"><LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /></span>}
+                  </div>
+                  {row.plan && (
+                    <div className="col-span-2 min-w-0 lg:col-span-1 lg:col-start-2 lg:row-start-1">
+                      <div className="h-2.5 w-full overflow-hidden rounded-full border border-primary/10 bg-muted/60 shadow-inner shadow-primary/10" title={`${numberText(row.plan.progressPercent)}٪`}>
+                        <div className="h-full rounded-full bg-primary shadow-sm shadow-primary/30" style={{ width: `${Math.max(0, Math.min(100, Number(row.plan.progressPercent || 0)))}%` }} />
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-black text-muted-foreground sm:text-xs">
+                        <span>نسبة الإنجاز {numberText(row.plan.progressPercent)}٪</span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="col-start-2 row-start-1 flex items-center gap-2 lg:col-start-3 lg:justify-self-end">
+                    {_resolve_resolveStudentPlansSection()}
+                    {row.plan && !row.nazemManaged && (
+                      <ManagementIconButton
+                        onClick={() => openMemorizedDialog(row)}
+                        tone="destructive"
+                        title="إدارة الحذف"
+                        aria-label={`إدارة حذف خطة ومحفوظات ${row.studentName}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </ManagementIconButton>
+                    )}
+                  </div>
+                </div>); })}
+            </div>;
+  };
   return (
     <div className="space-y-5">
       <Card className="border-primary/30 bg-card/95 shadow-sm shadow-primary/10">
@@ -670,69 +768,7 @@ const StudentPlansSection = ({ hideCommitteeFilter = false }) => {
           </CardHeader>
         )}
         <CardContent className="p-4">
-          {isLoading ? <DashboardLoader /> : rows.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">لا يوجد طلاب حالياً.</div>
-          ) : (
-            <div className="space-y-2">
-              {rows.map((row) => (
-                <div key={row.studentId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 rounded-lg border border-primary/20 bg-card/70 p-3 shadow-sm shadow-primary/5 lg:grid-cols-[minmax(300px,auto)_minmax(180px,1fr)_auto]">
-                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 lg:col-start-1">
-                    <div className="text-base font-black leading-tight text-foreground">{row.studentName}</div>
-                    <div className="text-[10px] font-bold leading-tight text-muted-foreground sm:text-xs">{row.committeeName || 'بدون حلقة'}</div>
-                    {row.nazemManaged && <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary" title="الخطة مقفلة" aria-label="الخطة مقفلة"><LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /></span>}
-                  </div>
-                  {row.plan && (
-                    <div className="col-span-2 min-w-0 lg:col-span-1 lg:col-start-2 lg:row-start-1">
-                      <div className="h-2.5 w-full overflow-hidden rounded-full border border-primary/10 bg-muted/60 shadow-inner shadow-primary/10" title={`${numberText(row.plan.progressPercent)}٪`}>
-                        <div className="h-full rounded-full bg-primary shadow-sm shadow-primary/30" style={{ width: `${Math.max(0, Math.min(100, Number(row.plan.progressPercent || 0)))}%` }} />
-                      </div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-black text-muted-foreground sm:text-xs">
-                        <span>نسبة الإنجاز {numberText(row.plan.progressPercent)}٪</span>
-                      </div>
-                    </div>
-                  )}
-                  <div className="col-start-2 row-start-1 flex items-center gap-2 lg:col-start-3 lg:justify-self-end">
-                    {row.nazemManaged ? (
-                      <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/5 text-primary" title="الخطة مقفلة" aria-label="الخطة مقفلة">
-                        <LockKeyhole className="h-4 w-4" aria-hidden="true" />
-                      </span>
-                    ) : row.plan ? <>
-                      {Number(row.plan.progressPercent || 0) >= 100 && (
-                        <ManagementIconButton
-                          onClick={() => openPlanDialog(row, { createNew: true })}
-                          tone="primary"
-                          title="خطة جديدة"
-                          aria-label={`إضافة خطة جديدة لـ ${row.studentName}`}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </ManagementIconButton>
-                      )}
-                      <ManagementIconButton
-                        onClick={() => openPlanDialog(row)}
-                        tone="primary"
-                        title="تعديل الخطة"
-                        aria-label={`تعديل خطة ${row.studentName}`}
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </ManagementIconButton>
-                    </> : <Button onClick={() => openPlanDialog(row)} className="gap-2" title="إضافة خطة">
-                      <Plus className="h-4 w-4" />إضافة خطة
-                    </Button>}
-                    {row.plan && !row.nazemManaged && (
-                      <ManagementIconButton
-                        onClick={() => openMemorizedDialog(row)}
-                        tone="destructive"
-                        title="إدارة الحذف"
-                        aria-label={`إدارة حذف خطة ومحفوظات ${row.studentName}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </ManagementIconButton>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {_resolveStudentPlansSection()}
         </CardContent>
       </Card>
 

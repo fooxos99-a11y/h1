@@ -464,13 +464,22 @@ export function syncOfflineRecitations(supervisorId, { force = false } = {}) {
             resolvedSessionIds.add(session.sessionId);
             continue;
           }
-          const status = outcome.result === 'rejected_duplicate'
-            ? 'rejected_duplicate'
-            : outcome.result === 'rejected_permission'
-              ? 'rejected_permission'
-              : outcome.result === 'invalid_sequence'
-                ? 'invalid_sequence'
-                : outcome.result === 'conflict' ? 'conflict' : 'failed';
+          const _resolveStatus = () => {
+            if (outcome.result === 'rejected_duplicate') {
+              return 'rejected_duplicate';
+            }
+            if (outcome.result === 'rejected_permission') {
+              return 'rejected_permission';
+            }
+            if (outcome.result === 'invalid_sequence') {
+              return 'invalid_sequence';
+            }
+            if (outcome.result === 'conflict') {
+              return 'conflict';
+            }
+            return 'failed';
+          };
+          const status = _resolveStatus();
           const retryCount = Number(session.retryCount || 0) + 1;
           const resolved = await offlineRecitationStore.updateSession(actorKey, session.sessionId, {
             status,

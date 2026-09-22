@@ -6,8 +6,26 @@ const calculateTrend = (data, key) => {
   if (!data.length) return { change: 0, direction: 'same' };
   const first = Number(data[0]?.[key] || 0);
   const last = Number(data.at(-1)?.[key] || 0);
-  const change = first ? ((last - first) / Math.abs(first)) * 100 : last ? 100 : 0;
-  return { change, direction: change > 0 ? 'up' : change < 0 ? 'down' : 'same' };
+  const _resolveChange = () => {
+    if (first) {
+      return ((last - first) / Math.abs(first)) * 100;
+    }
+    if (last) {
+      return 100;
+    }
+    return 0;
+  };
+  const change = _resolveChange();
+  const _resolveDirection = () => {
+    if (change > 0) {
+      return 'up';
+    }
+    if (change < 0) {
+      return 'down';
+    }
+    return 'same';
+  };
+  return { change, direction: _resolveDirection() };
 };
 
 const OwnerTrendChart = ({ title, data, series }) => {
@@ -31,8 +49,26 @@ const OwnerTrendChart = ({ title, data, series }) => {
             <div className="flex flex-wrap gap-1.5 text-[10px] font-bold sm:text-[11px]">
               {series.map((item) => {
                 const trend = calculateTrend(data, item.key);
-                const TrendIcon = trend.direction === 'up' ? ArrowUp : trend.direction === 'down' ? ArrowDown : Minus;
-                const tone = trend.direction === 'up' ? 'text-emerald-600' : trend.direction === 'down' ? 'text-red-600' : 'text-muted-foreground';
+                const _resolveTrendIcon = () => {
+                  if (trend.direction === 'up') {
+                    return ArrowUp;
+                  }
+                  if (trend.direction === 'down') {
+                    return ArrowDown;
+                  }
+                  return Minus;
+                };
+                const TrendIcon = _resolveTrendIcon();
+                const _resolveTone = () => {
+                  if (trend.direction === 'up') {
+                    return 'text-emerald-600';
+                  }
+                  if (trend.direction === 'down') {
+                    return 'text-red-600';
+                  }
+                  return 'text-muted-foreground';
+                };
+                const tone = _resolveTone();
                 return (
                   <span key={item.key} className={`flex min-h-7 items-center gap-1 rounded-md border border-border/70 px-1.5 ${tone}`}>
                     <i className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />

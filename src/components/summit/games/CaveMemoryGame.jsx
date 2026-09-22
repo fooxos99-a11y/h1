@@ -57,7 +57,16 @@ const CaveMemoryGame = ({ challenge, isSubmitting, onComplete }) => {
         </div>
       </div>
       <div className="summit-game-progress" aria-label={`${selected.length} من ${sequence.length}`}>
-        {sequence.map((cell, index) => <span key={`${cell}-${index}`} className={index < selected.length ? 'is-complete' : index === selected.length && !previewing ? 'is-current' : ''} />)}
+        {sequence.map((cell, index) => { const _resolveClassName = () => {
+                                           if (index < selected.length) {
+                                             return 'is-complete';
+                                           }
+                                           if (index === selected.length && !previewing) {
+                                             return 'is-current';
+                                           }
+                                           return '';
+                                         };
+                                         return (<span key={`${cell}-${index}`} className={_resolveClassName()} />); })}
       </div>
       {!previewing && selected.length < sequence.length && replayCount.current < 1 ? <Button type="button" variant="ghost" className="mx-auto min-h-11 text-white/70" onClick={replay}><RotateCcw className="me-2 h-4 w-4" /> مشاهدة مرة أخرى</Button> : null}
       <Button className="summit-game-action" disabled={selected.length !== sequence.length || isSubmitting} onClick={() => onComplete({ selected })}>تأكيد الطريق</Button>

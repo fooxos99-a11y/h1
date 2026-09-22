@@ -44,7 +44,7 @@ export function measureQuranFaces(start,end) {
 }
 
 export function quranRangeFacesSql(alias='t',end='expected') {
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(alias) || !['actual','expected'].includes(end)) throw new Error('Invalid Quran range SQL selector');
+  if (!/^[a-zA-Z_]\w*$/.test(alias) || !['actual','expected'].includes(end)) throw new Error('Invalid Quran range SQL selector');
   const endColumn=key => end==='actual' ? `COALESCE(${alias}.actual_to_${key},${alias}.to_${key})` : `${alias}.to_${key}`;
   return `COALESCE((SELECT GREATEST(0.25, ROUND(GREATEST(0, CASE
     WHEN first_pos.surah > last_pos.surah THEN last_pos.reverse_end - first_pos.reverse_start + 1
@@ -56,7 +56,7 @@ export function quranRangeFacesSql(alias='t',end='expected') {
 }
 
 export function acceptedQuranExecutionSql(alias='t') {
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(alias)) throw new Error('Invalid Quran status SQL selector');
+  if (!/^[a-zA-Z_]\w*$/.test(alias)) throw new Error('Invalid Quran status SQL selector');
   return `(${alias}.teacher_completed = 1 OR (${alias}.teacher_completed IS NULL
     AND ${alias}.student_status = 'done' AND COALESCE(${alias}.execution_state, '') IN ('complete','partial','extra')))`;
 }

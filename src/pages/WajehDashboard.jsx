@@ -225,9 +225,16 @@ const WajehDashboard = () => {
 
   useEffect(() => {
     const routeKey = dashboardSectionRoutes.getKey(sectionSlug);
-    const preloadKey = routeKey === 'executionFollowup'
-      ? 'reports'
-      : (isSettingsNavigationKey(routeKey) ? 'settings' : routeKey);
+    const _resolvePreloadKey = () => {
+      if (routeKey === 'executionFollowup') {
+        return 'reports';
+      }
+      if (isSettingsNavigationKey(routeKey)) {
+        return 'settings';
+      }
+      return routeKey;
+    };
+    const preloadKey = _resolvePreloadKey();
     dashboardSectionPreloaders[preloadKey]?.();
   }, [sectionSlug]);
 
@@ -239,7 +246,7 @@ const WajehDashboard = () => {
     if (isManager || isSupervisor || isAdmin || isReciter) {
       studentsApi.getDashboardBootstrap()
         .then((data) => {
-          setSettings({ ...defaultSettings, ...(data.settings || {}) });
+          setSettings({ ...defaultSettings, ...(data.settings) });
           const permissions = data.permissions || [];
           storeDashboardPermissions(permissions);
           setDashboardPermissions(permissions);
@@ -315,11 +322,16 @@ const WajehDashboard = () => {
   }, [alreadyPresentToday, dashboardPermissions, isAdmin, isManager, isOnline, isReciter, isSupervisor, rewardUnits, settings, site.features]);
 
   const routeSection = dashboardSectionRoutes.getKey(sectionSlug);
-  const requestedSection = routeSection === 'executionFollowup'
-    ? 'reports'
-    : routeSection === 'settings'
-      ? defaultSettingsNavigationKey
-      : routeSection;
+  const _resolveRequestedSection = () => {
+    if (routeSection === 'executionFollowup') {
+      return 'reports';
+    }
+    if (routeSection === 'settings') {
+      return defaultSettingsNavigationKey;
+    }
+    return routeSection;
+  };
+  const requestedSection = _resolveRequestedSection();
   const isVisibleSection = sections.some((section) => (
     section.key === requestedSection
     || section.children?.some((child) => child.key === requestedSection)

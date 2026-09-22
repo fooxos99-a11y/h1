@@ -16,7 +16,16 @@ try {
   await page.goto('http://127.0.0.1:3003/tests/fixtures/student-execution-range.html');
   await page.getByRole('button',{name:'حفظ',exact:true}).waitFor();
   for(const task of tasks) assert.equal(await page.getByText(task.preview,{exact:true}).count(),hidden==='all'||hidden===task.taskType?0:1);
-  const button=hidden==='review'?'مراجعة':hidden==='link'?'ربط':'حفظ';
+  const _resolveButton = () => {
+    if (hidden==='review') {
+      return 'مراجعة';
+    }
+    if (hidden==='link') {
+      return 'ربط';
+    }
+    return 'حفظ';
+  };
+  const button=_resolveButton();
   const refreshed = page.waitForResponse(r=>r.request().method()==='GET'&&r.url().includes('/api/'));
   await page.getByRole('button',{name:button,exact:true}).click();
   await refreshed;

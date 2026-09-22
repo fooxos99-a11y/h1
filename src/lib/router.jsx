@@ -3,7 +3,6 @@ import {
   Link as WouterLink,
   Router,
   useLocation as useWouterLocation,
-  useParams,
   useSearch,
 } from 'wouter';
 
@@ -37,4 +36,4 @@ export const useSearchParams = () => {
   return useMemo(() => [new URLSearchParams(search)], [search]);
 };
 
-export { useParams };
+export { useParams } from 'wouter';

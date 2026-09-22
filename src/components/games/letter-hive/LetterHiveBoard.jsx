@@ -1,5 +1,4 @@
-const LetterHiveBoard = ({ hexes, letters, onHexClick }) => (
-  <svg viewBox="-70 -70 690 605" className="letter-hive-svg">
+const LetterHiveBoard = ({ hexes, letters, onHexClick }) => { return (<svg viewBox="-70 -70 690 605" className="letter-hive-svg">
     <foreignObject x="-80" y="-80" width="710" height="624">
       <div className="letter-hive-board-glow" />
     </foreignObject>
@@ -9,22 +8,50 @@ const LetterHiveBoard = ({ hexes, letters, onHexClick }) => (
       const x = col * 100 + (row % 2 === 0 ? 0 : 50);
       const y = row * 87;
       const isClaimed = status !== null;
-      const fillColor = status === 'red' ? '#df103a' : status === 'green' ? '#10dfb5' : '#ffffff';
+      const _resolveFillColor = () => {
+        if (status === 'red') {
+          return '#df103a';
+        }
+        if (status === 'green') {
+          return '#10dfb5';
+        }
+        return '#ffffff';
+      };
+      const fillColor = _resolveFillColor();
       const textColor = status ? '#ffffff' : '#2c3e50';
-      const borderColor = status === 'red'
-        ? 'rgba(120, 14, 36, 0.95)'
-        : status === 'green'
-          ? 'rgba(5, 116, 94, 0.95)'
-          : 'rgba(77, 55, 125, 0.82)';
-      const outerBorderColor = status === 'red'
-        ? 'rgba(255, 205, 214, 0.42)'
-        : status === 'green'
-          ? 'rgba(209, 250, 229, 0.42)'
-          : 'rgba(124, 58, 237, 0.18)';
-      const shadowFill = status === 'red' ? 'rgba(223,16,58,0.22)' : status === 'green' ? 'rgba(16,223,181,0.22)' : 'rgba(44,62,80,0.08)';
+      const _resolveBorderColor = () => {
+        if (status === 'red') {
+          return 'rgba(120, 14, 36, 0.95)';
+        }
+        if (status === 'green') {
+          return 'rgba(5, 116, 94, 0.95)';
+        }
+        return 'rgba(77, 55, 125, 0.82)';
+      };
+      const borderColor = _resolveBorderColor();
+      const _resolveOuterBorderColor = () => {
+        if (status === 'red') {
+          return 'rgba(255, 205, 214, 0.42)';
+        }
+        if (status === 'green') {
+          return 'rgba(209, 250, 229, 0.42)';
+        }
+        return 'rgba(124, 58, 237, 0.18)';
+      };
+      const outerBorderColor = _resolveOuterBorderColor();
+      const _resolveShadowFill = () => {
+        if (status === 'red') {
+          return 'rgba(223,16,58,0.22)';
+        }
+        if (status === 'green') {
+          return 'rgba(16,223,181,0.22)';
+        }
+        return 'rgba(44,62,80,0.08)';
+      };
+      const shadowFill = _resolveShadowFill();
 
       return (
-        <g key={index} transform={`translate(${x},${y})`} onClick={() => onHexClick(index)} style={{ cursor: status ? 'default' : 'pointer' }}>
+        <g key={`${x}:${y}`} transform={`translate(${x},${y})`} onClick={() => onHexClick(index)} style={{ cursor: status ? 'default' : 'pointer' }}>
           <polygon points="50,7 103,36 103,90 50,120 -3,90 -3,36" fill={shadowFill} />
           <polygon points="50,0 100,29 100,87 50,116 0,87 0,29" fill={fillColor} stroke={outerBorderColor} strokeWidth={6} />
           <polygon points="50,0 100,29 100,87 50,116 0,87 0,29" fill={fillColor} stroke={borderColor} strokeWidth={2.4} style={{ transition: 'fill 0.3s ease' }} />
@@ -39,7 +66,6 @@ const LetterHiveBoard = ({ hexes, letters, onHexClick }) => (
         </g>
       );
     })}
-  </svg>
-);
+  </svg>); };
 
 export default LetterHiveBoard;

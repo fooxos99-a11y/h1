@@ -27,7 +27,7 @@ async function platformRequest(path, options = {}) {
       'Content-Type': 'application/json',
       Authorization: token ? `Bearer ${token}` : '',
       'X-Madarij-Native': isNative() ? '1' : '0',
-      ...(options.headers || {}),
+      ...(options.headers),
     },
   }).finally(timedRequest.cleanup);
   const data = await response.json().catch(() => null);

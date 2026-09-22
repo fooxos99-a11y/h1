@@ -57,17 +57,27 @@ const mergeTaskGroup = (tasks) => {
     .map((task) => task.actualPreview || task.preview)
     .filter(Boolean)
     .join(', ');
-  const statuses = tasks.map(taskExecutionStatus);
-  const executionState = statuses.includes('extra')
-    ? 'extra'
-    : statuses.includes('partial')
-      ? 'partial'
-      : first.executionState;
-  const studentStatus = tasks.every((task) => task.studentStatus === 'done')
-    ? 'done'
-    : tasks.some((task) => task.studentStatus === 'not_done')
-      ? 'not_done'
-      : first.studentStatus;
+  const statuses = new Set(tasks.map(taskExecutionStatus));
+  const _resolveExecutionState = () => {
+    if (statuses.has('extra')) {
+      return 'extra';
+    }
+    if (statuses.has('partial')) {
+      return 'partial';
+    }
+    return first.executionState;
+  };
+  const executionState = _resolveExecutionState();
+  const _resolveStudentStatus = () => {
+    if (tasks.every((task) => task.studentStatus === 'done')) {
+      return 'done';
+    }
+    if (tasks.some((task) => task.studentStatus === 'not_done')) {
+      return 'not_done';
+    }
+    return first.studentStatus;
+  };
+  const studentStatus = _resolveStudentStatus();
 
   return {
     ...first,
@@ -189,6 +199,68 @@ const ExecutionFollowupSection = ({ teacherScoped = false }) => {
     });
   }, [orderedTasks]);
 
+  const _resolveExecutionFollowupSection = () => {
+    if (isLoading) {
+      return <DashboardLoader className="py-12" />;
+    }
+    if (studentCards.length === 0) {
+      return <div className="rounded-2xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">
+              لا توجد مهام تنفيذ ضمن النطاق المحدد.
+            </div>;
+    }
+    return <div className="grid gap-3">
+              {studentCards.map((card) => { const _resolveClassName = () => {
+                                              if (card.hasNotDone) {
+                                                return 'border-red-500/35 bg-red-500/10 shadow-red-500/5';
+                                              }
+                                              if (card.hasPartial) {
+                                                return 'border-amber-500/30 bg-amber-500/10 shadow-amber-500/5';
+                                              }
+                                              return 'border-primary/15 bg-background/80 shadow-primary/5';
+                                            };
+                                            return (<article
+                  key={card.id}
+                  className={`rounded-2xl border p-3 shadow-sm ${
+                    _resolveClassName()
+                  }`}
+                >
+                  <div className="mb-3 flex min-w-0 items-baseline gap-2 text-right">
+                    <div className="min-w-0 truncate text-base font-black text-foreground">{card.studentName}</div>
+                    <div className="min-w-0 truncate text-[10px] font-bold text-muted-foreground sm:text-xs">{card.committeeName || 'بدون حلقة'}</div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {visibleTaskTypes.map((taskType) => {
+                      const task = card.tasks.find((item) => taskDisplayType(item) === taskType);
+                      const _resolve_resolveExecutionFollowupSection = () => {
+                        if (!task) {
+                          return <span>-</span>;
+                        }
+                        if (taskType === 'repeat') {
+                          return <span>
+                                {Math.max(0, Number(task.actualRepeatCount || 0))} مرة، السماع {Number(task.actualListeningCount || 0) > 0 ? 'نعم' : 'لا'}
+                              </span>;
+                        }
+                        return <span>{task.actualPreview || task.preview || '-'}</span>;
+                      };
+                      return (
+                        <div
+                          key={taskType}
+                          className={`min-h-9 rounded-lg px-2 py-1.5 text-right text-xs font-black sm:text-sm ${taskLineClassName(task)}`}
+                        >
+                          <div className="whitespace-normal break-words leading-6">
+                            <span>{taskTypeLabel[taskType]}</span>
+                            <span className="mx-1 opacity-70">:</span>
+                            {_resolve_resolveExecutionFollowupSection()}
+                            {task?.executionState === 'partial' && <span className="ms-1 text-[11px]">(ناقص)</span>}
+                            {task?.executionState === 'extra' && !task?.nazemManaged && <span className="ms-1 text-[11px]">(زيادة خارج الخطة)</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </article>); })}
+            </div>;
+  };
   return (
     <>
       {controlsTarget && createPortal(
@@ -232,60 +304,7 @@ const ExecutionFollowupSection = ({ teacherScoped = false }) => {
         controlsTarget,
       )}
       <div className="space-y-4">
-          {isLoading ? (
-            <DashboardLoader className="py-12" />
-          ) : studentCards.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">
-              لا توجد مهام تنفيذ ضمن النطاق المحدد.
-            </div>
-          ) : (
-            <div className="grid gap-3">
-              {studentCards.map((card) => (
-                <article
-                  key={card.id}
-                  className={`rounded-2xl border p-3 shadow-sm ${
-                    card.hasNotDone
-                      ? 'border-red-500/35 bg-red-500/10 shadow-red-500/5'
-                      : card.hasPartial
-                        ? 'border-amber-500/30 bg-amber-500/10 shadow-amber-500/5'
-                        : 'border-primary/15 bg-background/80 shadow-primary/5'
-                  }`}
-                >
-                  <div className="mb-3 flex min-w-0 items-baseline gap-2 text-right">
-                    <div className="min-w-0 truncate text-base font-black text-foreground">{card.studentName}</div>
-                    <div className="min-w-0 truncate text-[10px] font-bold text-muted-foreground sm:text-xs">{card.committeeName || 'بدون حلقة'}</div>
-                  </div>
-                  <div className="grid grid-cols-1 gap-1.5">
-                    {visibleTaskTypes.map((taskType) => {
-                      const task = card.tasks.find((item) => taskDisplayType(item) === taskType);
-                      return (
-                        <div
-                          key={taskType}
-                          className={`min-h-9 rounded-lg px-2 py-1.5 text-right text-xs font-black sm:text-sm ${taskLineClassName(task)}`}
-                        >
-                          <div className="whitespace-normal break-words leading-6">
-                            <span>{taskTypeLabel[taskType]}</span>
-                            <span className="mx-1 opacity-70">:</span>
-                            {!task ? (
-                              <span>-</span>
-                            ) : taskType === 'repeat' ? (
-                              <span>
-                                {Math.max(0, Number(task.actualRepeatCount || 0))} مرة، السماع {Number(task.actualListeningCount || 0) > 0 ? 'نعم' : 'لا'}
-                              </span>
-                            ) : (
-                              <span>{task.actualPreview || task.preview || '-'}</span>
-                            )}
-                            {task?.executionState === 'partial' && <span className="ms-1 text-[11px]">(ناقص)</span>}
-                            {task?.executionState === 'extra' && !task?.nazemManaged && <span className="ms-1 text-[11px]">(زيادة خارج الخطة)</span>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
+          {_resolveExecutionFollowupSection()}
       </div>
     </>
   );

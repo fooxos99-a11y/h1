@@ -39,7 +39,7 @@ import { siteName } from './siteConfig.js';
 const router = express.Router();
 const registrationPattern = /^\d{2,12}$/;
 const loginNumberPattern = /^\d{1,80}$/;
-const databaseNamePattern = /^[a-zA-Z0-9_]+$/;
+const databaseNamePattern = /^\w+$/;
 
 const normalizeText = (value, maxLength = 180) => String(value || '').trim().slice(0, maxLength);
 const normalizeUrl = (value) => trimTrailingCharacter(String(value || '').trim(), '/');

@@ -31,13 +31,26 @@ export function mergeRecitationDeliveryReceipts(evaluation, sessions = []) {
         || (item.planVersion && task.planVersion && Number(item.planVersion) !== Number(task.planVersion)))) continue;
       const accepted = hasAcceptedRecitationTask(session, item);
       const student = students.get(Number(session.studentId));
+      const _resolveStatus = () => {
+        if (accepted) {
+          if (item.nazemManaged || task?.nazemManaged || student?.nazemManaged) {
+            return 'nazem_pending';
+          }
+          return 'server_saved';
+        }
+        if (session.status === 'failed') {
+          return 'local_failed';
+        }
+        if (['conflict', 'invalid_sequence', 'rejected_permission', 'rejected_duplicate'].includes(session.status)) {
+          return 'local_rejected';
+        }
+        return 'local_saved';
+      };
       receipts.set(Number(item.taskId), {
         taskId: item.taskId, studentId: session.studentId, studentName: student?.studentName || 'الطالب',
         taskType: item.taskType || task?.taskType, taskDate: item.taskDate || task?.taskDate || session.sessionDate,
         track: item.track || task?.track,
-        status: accepted ? (item.nazemManaged || task?.nazemManaged || student?.nazemManaged ? 'nazem_pending' : 'server_saved')
-          : session.status === 'failed' ? 'local_failed'
-            : ['conflict', 'invalid_sequence', 'rejected_permission', 'rejected_duplicate'].includes(session.status) ? 'local_rejected' : 'local_saved',
+        status: _resolveStatus(),
         error: accepted ? '' : session.lastError || '',
       });
     }

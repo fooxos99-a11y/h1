@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { loadSummitImage } from '@/services/summitImageService';
 
-export default function SummitSceneImage({ imageId, fallback, ...props }) {
+export default function SummitSceneImage({ imageId, fallback, alt = '', ...props }) {
   const [image, setImage] = useState(null);
   useEffect(() => {
     let active = true;
@@ -12,7 +12,7 @@ export default function SummitSceneImage({ imageId, fallback, ...props }) {
     });
     return () => { active = false; };
   }, [imageId, fallback]);
-  return <img {...props} src={image && image.id === imageId ? image.src : fallback} onError={(event) => {
+  return <img {...props} alt={alt} src={image && image.id === imageId ? image.src : fallback} onError={(event) => {
     if (event.currentTarget.getAttribute('src') !== fallback) event.currentTarget.src = fallback;
   }} />;
 }

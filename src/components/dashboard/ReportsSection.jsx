@@ -314,17 +314,28 @@ const ReportsSection = ({
         archiveId,
         format,
       };
-      const file = isOverviewReport
-        ? await studentsApi.exportOverviewReport(exportPayload)
-        : isSupervisorsReport
-        ? await studentsApi.exportSupervisorReport(exportPayload)
-        : isArchiveReport
-        ? await studentsApi.exportArchiveReport(exportPayload)
-        : isRecitationSessionsReport
-        ? await studentsApi.exportRecitationSessionsReport(exportPayload)
-        : isStudentSavedReport
-        ? await studentsApi.exportStudentSavedReport(exportPayload)
-        : await studentsApi.exportProgressReport(exportPayload);
+      let file;
+      if (isOverviewReport) {
+        file = await studentsApi.exportOverviewReport(exportPayload);
+      } else {
+        if (isSupervisorsReport) {
+          file = await studentsApi.exportSupervisorReport(exportPayload);
+        } else {
+          if (isArchiveReport) {
+            file = await studentsApi.exportArchiveReport(exportPayload);
+          } else {
+            if (isRecitationSessionsReport) {
+              file = await studentsApi.exportRecitationSessionsReport(exportPayload);
+            } else {
+              if (isStudentSavedReport) {
+                file = await studentsApi.exportStudentSavedReport(exportPayload);
+              } else {
+                file = await studentsApi.exportProgressReport(exportPayload);
+              }
+            }
+          }
+        }
+      }
       downloadFile(file.blob, file.filename);
       toast({ title: 'تم التصدير', description: format === 'xlsx' ? 'تم تجهيز ملف Excel.' : 'تم تجهيز ملف PDF.' });
     } catch (error) {
@@ -431,6 +442,102 @@ const ReportsSection = ({
     </div>
   ) : null;
 
+  const _resolveReportsSection = () => {
+    if (isExecutionFollowup) {
+      return <ExecutionFollowupSection teacherScoped={teacherScoped} />;
+    }
+    if (isOverviewReport) {
+      if (isLoading) {
+        return <DashboardLoader className="p-8" />;
+      }
+      return <ReportsOverview data={overview} />;
+    }
+    if (isArchiveReport) {
+      if (isLoading) {
+        return <DashboardLoader className="p-8" />;
+      }
+      if (archive) {
+        return <div className="space-y-6">
+                <div className="flex flex-col gap-3 rounded-lg border border-primary/15 bg-background/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm font-black text-muted-foreground">{archive.title} - من {archive.periodFrom} إلى {archive.periodTo}</div>
+                  <Button type="button" variant="outline" disabled={!isOnline || isDeletingArchive} onClick={deleteArchive} className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive">
+                    حذف الأرشيف
+                  </Button>
+                </div>
+                <ReportsOverview data={archive.overviewReport} />
+                <ReportsProgress rows={archiveRows} period={archive.progressReport?.period} />
+              </div>;
+      }
+      return <div className="rounded-lg border border-dashed border-primary/20 p-8 text-center text-muted-foreground">
+                {archives.length ? 'اختر أرشيفًا لعرضه.' : 'لا توجد أرشيفات حاليًا.'}
+              </div>;
+    }
+    if (isRecitationSessionsReport) {
+      if (isLoading) {
+        return <DashboardLoader className="p-8" />;
+      }
+      return <ReportsRecitationSessions rows={visibleRecitationRows} />;
+    }
+    if (isStudentSavedReport) {
+      if (isLoading) {
+        return <DashboardLoader className="p-8" />;
+      }
+      return <ReportsStudentSaved rows={rows} />;
+    }
+    if (isStudentsReport) {
+      if (isLoading) {
+        return <DashboardLoader className="p-8" />;
+      }
+      return <ReportsProgress rows={rows} period={reportPeriod} />;
+    }
+    if (isNazemReconciliationReport) {
+      return <NazemReconciliationReport from={reportFromDate} to={reportToDate} committeeId={committeeId} />;
+    }
+    if (isStudentPointsReport) {
+      if (isLoading) {
+        return <DashboardLoader className="p-8" />;
+      }
+      if (studentPointsError) {
+        return <ErrorState message={studentPointsError} onRetry={() => setReportRetry((value) => value + 1)} />;
+      }
+      return <StudentPointsReport rows={studentPointRows} />;
+    }
+    if (isTeacherPointsReport) {
+      if (isLoading) {
+        return <DashboardLoader className="p-8" />;
+      }
+      return <TeacherPointsReport rows={rows} showTeacher={!teacherScoped} />;
+    }
+    const _resolve_resolveReportsSection = () => {
+      if (isLoading) {
+        return <DashboardLoader className="p-8" />;
+      }
+      if (rows.length === 0) {
+        return <div className="p-8 text-center text-muted-foreground">لا توجد بيانات لهذا التاريخ.</div>;
+      }
+      return rows.map((row) => (
+                  <div key={row.id} className="grid grid-cols-[1.4fr_1fr_1fr] border-t border-primary/10 p-3 text-sm md:grid-cols-[1.5fr_1fr_1fr_1fr]">
+                    <span className="font-medium text-foreground">{row.name}</span>
+                    <span className="text-muted-foreground">{row.jobTitle}</span>
+                    <span className={statusClassName(row.status)}>{statusLabel(row.status)}</span>
+                    <span className="hidden items-center gap-2 text-muted-foreground md:flex">
+                      <CalendarDays className="h-4 w-4" />
+                      {formatClockTime(row.checkInTime)}
+                    </span>
+                  </div>
+                ));
+    };
+    return <div className="overflow-hidden rounded-2xl border border-primary/20">
+              <div className="grid grid-cols-[1.4fr_1fr_1fr] bg-background/80 p-3 text-sm font-bold text-muted-foreground md:grid-cols-[1.5fr_1fr_1fr_1fr]">
+                <span>الاسم</span>
+                <span>المسمى</span>
+                <span>الحالة</span>
+                <span className="hidden md:block">الوقت</span>
+              </div>
+
+              {_resolve_resolveReportsSection()}
+            </div>;
+  };
   return (
     <div className="space-y-6">
       {!isOnline && !isNazemReconciliationReport && (
@@ -539,69 +646,7 @@ const ReportsSection = ({
         </CardHeader>
 
         <CardContent className="space-y-5 !pt-6">
-          {isExecutionFollowup ? (
-            <ExecutionFollowupSection teacherScoped={teacherScoped} />
-          ) : isOverviewReport ? (
-            isLoading ? <DashboardLoader className="p-8" /> : <ReportsOverview data={overview} />
-          ) : isArchiveReport ? (
-            isLoading ? <DashboardLoader className="p-8" /> : archive ? (
-              <div className="space-y-6">
-                <div className="flex flex-col gap-3 rounded-lg border border-primary/15 bg-background/70 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-sm font-black text-muted-foreground">{archive.title} - من {archive.periodFrom} إلى {archive.periodTo}</div>
-                  <Button type="button" variant="outline" disabled={!isOnline || isDeletingArchive} onClick={deleteArchive} className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive">
-                    حذف الأرشيف
-                  </Button>
-                </div>
-                <ReportsOverview data={archive.overviewReport} />
-                <ReportsProgress rows={archiveRows} period={archive.progressReport?.period} />
-              </div>
-            ) : (
-              <div className="rounded-lg border border-dashed border-primary/20 p-8 text-center text-muted-foreground">
-                {archives.length ? 'اختر أرشيفًا لعرضه.' : 'لا توجد أرشيفات حاليًا.'}
-              </div>
-            )
-          ) : isRecitationSessionsReport ? (
-            isLoading ? <DashboardLoader className="p-8" /> : <ReportsRecitationSessions rows={visibleRecitationRows} />
-          ) : isStudentSavedReport ? (
-            isLoading ? <DashboardLoader className="p-8" /> : <ReportsStudentSaved rows={rows} />
-          ) : isStudentsReport ? (
-            isLoading ? <DashboardLoader className="p-8" /> : <ReportsProgress rows={rows} period={reportPeriod} />
-          ) : isNazemReconciliationReport ? (
-            <NazemReconciliationReport from={reportFromDate} to={reportToDate} committeeId={committeeId} />
-          ) : isStudentPointsReport ? (
-            isLoading ? <DashboardLoader className="p-8" /> : studentPointsError
-              ? <ErrorState message={studentPointsError} onRetry={() => setReportRetry((value) => value + 1)} />
-              : <StudentPointsReport rows={studentPointRows} />
-          ) : isTeacherPointsReport ? (
-            isLoading ? <DashboardLoader className="p-8" /> : <TeacherPointsReport rows={rows} showTeacher={!teacherScoped} />
-          ) : (
-            <div className="overflow-hidden rounded-2xl border border-primary/20">
-              <div className="grid grid-cols-[1.4fr_1fr_1fr] bg-background/80 p-3 text-sm font-bold text-muted-foreground md:grid-cols-[1.5fr_1fr_1fr_1fr]">
-                <span>الاسم</span>
-                <span>المسمى</span>
-                <span>الحالة</span>
-                <span className="hidden md:block">الوقت</span>
-              </div>
-
-              {isLoading ? (
-                <DashboardLoader className="p-8" />
-              ) : rows.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground">لا توجد بيانات لهذا التاريخ.</div>
-              ) : (
-                rows.map((row) => (
-                  <div key={row.id} className="grid grid-cols-[1.4fr_1fr_1fr] border-t border-primary/10 p-3 text-sm md:grid-cols-[1.5fr_1fr_1fr_1fr]">
-                    <span className="font-medium text-foreground">{row.name}</span>
-                    <span className="text-muted-foreground">{row.jobTitle}</span>
-                    <span className={statusClassName(row.status)}>{statusLabel(row.status)}</span>
-                    <span className="hidden items-center gap-2 text-muted-foreground md:flex">
-                      <CalendarDays className="h-4 w-4" />
-                      {formatClockTime(row.checkInTime)}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
+          {_resolveReportsSection()}
         </CardContent>
       </Card>
 

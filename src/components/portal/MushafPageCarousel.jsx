@@ -9,11 +9,16 @@ const MushafPageCarousel = ({ index, total, pageNumber, pageNumbers = [], isSavi
   const pointer = useRef(null);
   const previousPageNumber = useRef(Number(pageNumber));
   const currentPageNumber = Number(pageNumber);
-  const turnDirection = currentPageNumber > previousPageNumber.current
-    ? 'forward'
-    : currentPageNumber < previousPageNumber.current
-      ? 'backward'
-      : '';
+  const _resolveTurnDirection = () => {
+    if (currentPageNumber > previousPageNumber.current) {
+      return 'forward';
+    }
+    if (currentPageNumber < previousPageNumber.current) {
+      return 'backward';
+    }
+    return '';
+  };
+  const turnDirection = _resolveTurnDirection();
 
   useEffect(() => {
     previousPageNumber.current = currentPageNumber;

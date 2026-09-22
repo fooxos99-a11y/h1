@@ -164,8 +164,8 @@
 }
 
 .categories-choice.is-selected .categories-choice-mark {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
+  background: #f1edf9;
+  color: #31204f;
 }
 
 .categories-choice-name {
@@ -183,8 +183,8 @@
 }
 
 .categories-choice.is-selected .categories-choice-meta {
-  background: rgba(255, 255, 255, 0.18);
-  color: white;
+  background: #f1edf9;
+  color: #31204f;
 }
 
 .categories-select-error {

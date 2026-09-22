@@ -24,7 +24,7 @@ export function reviewStartFromHistory(rows, fallbackPage) {
         ? incomplete.actualToPage || incomplete.fromPage : incomplete.fromPage);
       if (incomplete.teacherCompleted == null && incomplete.executionState === 'partial' && incomplete.actualCompletesPage) cursor += 1;
     } else {
-      const last = ordered[ordered.length - 1];
+      const last = ordered.at(-1);
       cursor = Number(last.toPage) + 1;
     }
   }

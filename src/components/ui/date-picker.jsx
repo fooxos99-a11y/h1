@@ -16,7 +16,7 @@ const weekDays = [
 ];
 
 const parseDate = (value) => {
-  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
   return match ? new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))) : null;
 };
 
@@ -27,7 +27,7 @@ const monthKey = (date) => dateOnly(monthStart(date)).slice(0, 7);
 const monthEndValue = (date) => dateOnly(new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)));
 
 const formatSelectedDate = (value, placeholder) => {
-  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
   if (!match) return placeholder;
   return `${Number(match[3])} / ${Number(match[2])} / ${match[1]}`;
 };
@@ -137,10 +137,10 @@ const DatePicker = ({
             <div key={day.value} className="py-1 text-xs font-bold text-muted-foreground">{day.label}</div>
           ))}
           {cells.map((date, index) => {
-            if (!date) return <span key={`blank-${index}`} />;
+            if (!date) return <span key={weekDays[index].value} />;
             const dateValue = dateOnly(date);
             const isSelected = dateValue === value;
-            const isUnavailable = loadAvailableDates && (!availableDates || !availableDates.has(dateValue));
+            const isUnavailable = loadAvailableDates && !availableDates?.has(dateValue);
             const isOutsideRange = (min && dateValue < min) || (max && dateValue > max);
             const disabled = isUnavailable || isOutsideRange;
             return (

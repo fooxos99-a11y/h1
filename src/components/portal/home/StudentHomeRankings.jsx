@@ -23,12 +23,26 @@ export default function StudentHomeRankings({ studentId, onReady }) {
   if (state && !items.length) return null;
   const selected = items.some((item) => item.value === tab) ? tab : items[0]?.value;
   const retry = <StudentHomeStatus message="تعذر تحديث الترتيب." onRetry={() => setVersion((value) => value + 1)} />;
-  const panel = (key) => state[key === 'students' ? 'studentError' : 'familyError'] ? retry : <StudentRankingList limit={expanded ? Infinity : 5} rows={state[key]} family={key === 'families'} studentId={studentId} showPoints={state.settings.rankingPointsVisible !== false} />;
-  return <section className="student-home-rankings" aria-label="لوحة التميز"><h2><Trophy size={21} />لوحة التميز</h2>
-    {error ? retry : !state ? <div className="student-home-loading"><LoadingSpinner /></div> : <>
+  const panel = (key) => {
+  if (state[key === 'students' ? 'studentError' : 'familyError']) {
+    return retry;
+  }
+  return <StudentRankingList limit={expanded ? Infinity : 5} rows={state[key]} family={key === 'families'} studentId={studentId} showPoints={state.settings.rankingPointsVisible !== false} />;
+};
+  const _resolveConditional = () => {
+    if (error) {
+      return retry;
+    }
+    if (!state) {
+      return <div className="student-home-loading"><LoadingSpinner /></div>;
+    }
+    return <>
       <SectionTabs className="student-home-rank-mobile" items={items} value={selected} onChange={setTab} label="الترتيب">{panel(selected)}</SectionTabs>
       <div className="student-home-rank-desktop">{items.map((item) => <article key={item.value}><h3>{item.label}</h3>{panel(item.value)}</article>)}</div>
       {items.some((item) => state[item.value].length > 5) && <Button variant="ghost" className="student-ranking-expand" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>{expanded ? 'عرض أقل' : 'عرض الكل'}</Button>}
-    </>}
+    </>;
+  };
+  return <section className="student-home-rankings" aria-label="لوحة التميز"><h2><Trophy size={21} />لوحة التميز</h2>
+    {_resolveConditional()}
   </section>;
 }

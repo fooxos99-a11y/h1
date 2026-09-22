@@ -69,11 +69,19 @@ const PlatformOwner = () => {
 
   const detailsMatch = /^complex-(\d+)$/.exec(section);
   const detailsId = detailsMatch ? Number(detailsMatch[1]) : null;
-  const activeSection = detailsId ? 'overview' : (['complexes', 'settings'].includes(section) ? section : 'overview');
+  const _resolveActiveSection = () => {
+    if (detailsId) {
+      return 'overview';
+    }
+    if (['complexes', 'settings'].includes(section)) {
+      return section;
+    }
+    return 'overview';
+  };
+  const activeSection = _resolveActiveSection();
 
   useEffect(() => {
-    if (!section) navigate('/dashboard/platform/overview', { replace: true });
-    else if (!detailsId && !['overview', 'complexes', 'settings'].includes(section)) navigate('/dashboard/platform/overview', { replace: true });
+    if (!section || (!detailsId && !['overview', 'complexes', 'settings'].includes(section))) navigate('/dashboard/platform/overview', { replace: true });
   }, [detailsId, navigate, section]);
 
   useEffect(() => {
@@ -161,13 +169,15 @@ const PlatformOwner = () => {
 
   const changeSection = (key) => navigate(`/dashboard/platform/${key}`);
 
-  const content = detailsId ? (
-    <OwnerComplexDetailsSection
+  const _resolveContent = () => {
+    if (detailsId) {
+      return <OwnerComplexDetailsSection
       complexId={detailsId}
       onBack={() => navigate('/dashboard/platform/overview')}
-    />
-  ) : activeSection === 'complexes' ? (
-    <OwnerComplexesSection
+    />;
+    }
+    if (activeSection === 'complexes') {
+      return <OwnerComplexesSection
       complexes={complexes}
       visibleComplexes={visibleComplexes}
       search={search}
@@ -179,12 +189,14 @@ const PlatformOwner = () => {
       error={complexesError}
       onRetry={() => loadComplexes().catch(() => {})}
       onOpenComplex={(id) => navigate(`/dashboard/platform/complex-${id}`)}
-    />
-  ) : activeSection === 'settings' ? (
-    <OwnerSettingsSection complexes={complexes} />
-  ) : (
-    <OwnerAnalyticsSection complexes={complexes} onOpenSettings={() => navigate('/dashboard/platform/settings')} onOpenComplex={(id) => navigate(`/dashboard/platform/complex-${id}`)} />
-  );
+    />;
+    }
+    if (activeSection === 'settings') {
+      return <OwnerSettingsSection complexes={complexes} />;
+    }
+    return <OwnerAnalyticsSection complexes={complexes} onOpenSettings={() => navigate('/dashboard/platform/settings')} onOpenComplex={(id) => navigate(`/dashboard/platform/complex-${id}`)} />;
+  };
+  const content = _resolveContent();
 
   return (
     <DashboardShell

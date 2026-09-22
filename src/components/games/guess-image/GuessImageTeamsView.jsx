@@ -14,7 +14,7 @@ const GuessImageTeamsView = ({ teamNames, selectedStage, isLoading, onTeamChange
         <h1 className="guess-image-title">أسماء الفرق</h1>
         <form onSubmit={onSubmit} className="guess-image-form">
           {teamNames.map((name, index) => (
-            <label key={index}>
+            <label key={index === 0 ? 'first-team' : 'second-team'}>
               {index === 0 ? 'اسم الفريق الأول' : 'اسم الفريق الثاني'}
               <input
                 value={name}

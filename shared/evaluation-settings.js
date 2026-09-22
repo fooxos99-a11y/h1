@@ -60,13 +60,29 @@ export function calculateRecitationScore(policy, rawFaces, rawWarnings, rawMista
 
 
 export function getRecitationEvaluationPolicy(settings, task = {}) {
-  const type = task.taskType === 'memorization' && task.track === 'mastery' ? 'mastery'
-    : ['memorization', 'review', 'link'].includes(task.taskType) ? task.taskType : 'memorization';
+  const _resolveType = () => {
+    if (task.taskType === 'memorization' && task.track === 'mastery') {
+      return 'mastery';
+    }
+    if (['memorization', 'review', 'link'].includes(task.taskType)) {
+      return task.taskType;
+    }
+    return 'memorization';
+  };
+  const type = _resolveType();
   const rawFaces = Math.max(0, Number(task.evaluatedFaces ?? task.targetPages ?? 0));
   const faces = rawFaces > 0 ? Math.max(0.25, Math.round(rawFaces * 4) / 4) : 0;
   const unit = resolveRecitationEvaluationUnit(type, faces, task.targetPages);
-  const prefix = unit === 'quarterFace' ? `${type}QuarterFaceEvaluation`
-    : unit === 'halfFace' ? `${type}HalfFaceEvaluation` : `${type}Evaluation`;
+  const _resolvePrefix = () => {
+    if (unit === 'quarterFace') {
+      return `${type}QuarterFaceEvaluation`;
+    }
+    if (unit === 'halfFace') {
+      return `${type}HalfFaceEvaluation`;
+    }
+    return `${type}Evaluation`;
+  };
+  const prefix = _resolvePrefix();
   return { type, unit, maxScore: Number(settings[`${prefix}MaxScore`] || 100),
     warningDeduction: Number(settings[`${prefix}WarningDeduction`] || 0),
     mistakeDeduction: Number(settings[`${prefix}MistakeDeduction`] || 0),

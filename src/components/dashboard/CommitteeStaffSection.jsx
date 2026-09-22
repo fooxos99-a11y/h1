@@ -141,28 +141,16 @@ const CommitteeStaffSection = ({
 
   const committeeLabels = selectedCommitteeLabels(form.committeeIds, committees);
 
-  return (
-    <div className="space-y-6 [font-family:var(--font-ui)]" dir="rtl">
-      <Card className="border-primary/30 bg-card neon-glow">
-        <CardHeader className="border-b border-primary/20">
-          <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-            <Input
-              aria-label={`ابحث باسم ${singularLabel}`}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={`ابحث باسم ${singularLabel}`}
-              className="h-11 border-primary/30 bg-background text-foreground"
-            />
-            <Button onClick={() => openForm()} className="h-11 min-w-20 px-4">إضافة</Button>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-6">
-          {isLoading ? <DashboardLoader /> : rows.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">
+  const _resolveCommitteeStaffSection = () => {
+    if (isLoading) {
+      return <DashboardLoader />;
+    }
+    if (rows.length === 0) {
+      return <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">
               لا يوجد {pluralLabel} حاليًا.
-            </div>
-          ) : (
-            <div className="space-y-3">
+            </div>;
+    }
+    return <div className="space-y-3">
               {rows.map((staff) => (
                 <div key={staff.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-xl border border-primary/20 bg-background p-4">
                   <div className="min-w-0 space-y-1">
@@ -206,8 +194,25 @@ const CommitteeStaffSection = ({
                   </div>
                 </div>
               ))}
-            </div>
-          )}
+            </div>;
+  };
+  return (
+    <div className="space-y-6 [font-family:var(--font-ui)]" dir="rtl">
+      <Card className="border-primary/30 bg-card neon-glow">
+        <CardHeader className="border-b border-primary/20">
+          <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+            <Input
+              aria-label={`ابحث باسم ${singularLabel}`}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={`ابحث باسم ${singularLabel}`}
+              className="h-11 border-primary/30 bg-background text-foreground"
+            />
+            <Button onClick={() => openForm()} className="h-11 min-w-20 px-4">إضافة</Button>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-6">
+          {_resolveCommitteeStaffSection()}
         </CardContent>
       </Card>
 

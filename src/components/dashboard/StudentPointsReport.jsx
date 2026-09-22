@@ -11,7 +11,7 @@ export default function StudentPointsReport({ rows = [] }) {
   const lastPage = Math.max(0, Math.ceil(filtered.length / pageSize) - 1);
   const currentPage = Math.min(page, lastPage);
   return <section className="min-w-0 space-y-3 [font-family:var(--font-ui)]" dir="rtl" aria-label="نقاط الطلاب">
-    {!filtered.length && <p role="status" className="p-6 text-center text-muted-foreground">لا يوجد طلاب.</p>}
+    {!filtered.length && <output  className="p-6 text-center text-muted-foreground">لا يوجد طلاب.</output>}
     {filtered.slice(currentPage * pageSize, (currentPage + 1) * pageSize).map((student) => <details key={student.studentId} className="min-w-0 rounded-xl border border-primary/20 p-3">
       <summary className="min-h-11 cursor-pointer rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
         <span className="break-words font-bold">{student.studentName}</span>

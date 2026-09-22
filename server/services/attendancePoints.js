@@ -17,10 +17,19 @@ export async function loadAttendancePointSettings(connection) {
 }
 
 // Caller owns the transaction. Lock the student first to serialize grants for the same day.
+const resolveAttendanceReason = (status) => {
+  if (status === 'late') {
+    return 'نقاط التأخر';
+  }
+  if (status === 'excused') {
+    return 'كيلومترات الاستئذان';
+  }
+  return 'نقاط الحضور';
+};
 export async function saveAttendanceWithPoints(connection, {
   studentId, date, status, checkInTime = null, requestedPoints, awardNewPoints = true,
   actorRole = 'system', actorName = 'مزامنة ناظم',
-  reason = status === 'late' ? 'نقاط التأخر' : status === 'excused' ? 'كيلومترات الاستئذان' : 'نقاط الحضور',
+  reason = resolveAttendanceReason(status),
 }, settings) {
   await connection.query('SELECT id FROM students WHERE id = ? FOR UPDATE', [studentId]);
   const [[previous]] = await connection.query(

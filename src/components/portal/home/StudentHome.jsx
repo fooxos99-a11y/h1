@@ -49,7 +49,8 @@ export default function StudentHome({ studentId, showPath, showDailyChallenge, e
   }, [showPath, showDailyChallenge, today, version]);
   const features = studentHomeFeatures(extras?.settings, site.features, { showPath, showDailyChallenge });
   const view = features[requestedView] ? requestedView : null;
-  const open = (key) => { if (key === 'sessions') setSessionVisited(true); navigate(key); };
+  const open = (key) => { if (key === 'sessions') { setSessionVisited(true); }
+    navigate(key); };
   const close = () => {
     back();
     if (['challenge', 'journey', 'sessions'].includes(view)) { setVersion((value) => value + 1); void plan.retry(); }
@@ -72,7 +73,8 @@ export default function StudentHome({ studentId, showPath, showDailyChallenge, e
       {showDailyChallenge && <StudentHomeChallenge challenge={extras?.challenge} error={extras?.challengeError} onRetry={() => setVersion((value) => value + 1)} onOpen={() => open('challenge')} />}
       <StudentHomeRankings studentId={studentId} />
     </main></div>
-    {!entering && !fullPage && <StudentBottomNavigation programsEnabled={features.programs} storeEnabled={storeEnabled} view={view} onNavigate={(key) => { if (key === view) return; if (key === 'mushaf') read(null); else open(key); }} />}
+    {!entering && !fullPage && <StudentBottomNavigation programsEnabled={features.programs} storeEnabled={storeEnabled} view={view} onNavigate={(key) => { if (key === view) { return; }
+      if (key === 'mushaf') { read(null); } else { open(key); } }} />}
     {!entering && view && <StudentHomeWindow surfaceKey={view} title={titles[view]} onClose={view === 'mushaf' ? leaveReader : close} wide={['mushaf', 'journey', 'challenge', 'programs'].includes(view)} compact={view === 'calls'}>
       <Suspense fallback={<div className="student-home-loading"><LoadingSpinner /></div>}>
         {(view === 'sessions' || (view === 'mushaf' && sessionVisited)) && <div hidden={view !== 'sessions'}><Sessions studentId={studentId} plan={plan} today={today} onRead={read} tab={sessionTab} onTabChange={setSessionTab} openJuzs={openJuzs} onJuzToggle={setOpenJuzs} /></div>}

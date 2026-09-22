@@ -5,6 +5,7 @@ import GameThemeToggle from '@/components/games/shared/GameThemeToggle';
 
 const AuctionTeamsView = ({
   teamNames,
+  teamKeys,
   minTeams,
   maxTeams,
   isLoading,
@@ -24,7 +25,7 @@ const AuctionTeamsView = ({
         <form className="auction-form" onSubmit={onSubmit}>
           <div className="auction-team-fields">
             {teamNames.map((name, index) => (
-              <div className="auction-team-row" key={index}>
+              <div className="auction-team-row" key={teamKeys[index]}>
                 <input
                   value={name}
                   placeholder={`اكتب اسم الفريق ${index + 1}`}

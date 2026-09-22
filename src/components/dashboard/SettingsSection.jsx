@@ -184,7 +184,7 @@ const teacherEvaluationTypes = [
   { key: 'link', label: 'الربط', showsScalingHelp: true },
 ];
 
-const normalizeList = (value = []) => (Array.isArray(value) ? value : []).map((item) => String(item));
+const normalizeList = (value = []) => (Array.isArray(value) ? value : []).map(String);
 
 const mergeStudentTaskEditingControls = (value) => {
   return {
@@ -327,18 +327,36 @@ const SettingsSection = ({
   const selectedEvaluationType = teacherEvaluationTypes.find(({ key }) => key === evaluationType)
     || teacherEvaluationTypes[0];
   const supportsFractionalFaces = ['memorization', 'mastery'].includes(selectedEvaluationType.key);
-  const evaluationSettingPrefix = supportsFractionalFaces && evaluationUnit !== 'face'
-    ? `${selectedEvaluationType.key}${evaluationUnit === 'quarterFace' ? 'QuarterFace' : 'HalfFace'}Evaluation`
-    : `${selectedEvaluationType.key}Evaluation`;
-  const evaluationUnitLabel = evaluationUnit === 'quarterFace'
-    ? 'لربع وجه'
-    : evaluationUnit === 'halfFace'
-      ? 'لنصف وجه'
-      : selectedEvaluationType.unitLabel;
+  const _resolveEvaluationSettingPrefix = () => {
+    if (supportsFractionalFaces && evaluationUnit !== 'face') {
+      return `${selectedEvaluationType.key}${evaluationUnit === 'quarterFace' ? 'QuarterFace' : 'HalfFace'}Evaluation`;
+    }
+    return `${selectedEvaluationType.key}Evaluation`;
+  };
+  const evaluationSettingPrefix = _resolveEvaluationSettingPrefix();
+  const _resolveEvaluationUnitLabel = () => {
+    if (evaluationUnit === 'quarterFace') {
+      return 'لربع وجه';
+    }
+    if (evaluationUnit === 'halfFace') {
+      return 'لنصف وجه';
+    }
+    return selectedEvaluationType.unitLabel;
+  };
+  const evaluationUnitLabel = _resolveEvaluationUnitLabel();
   const termClosureSummary = settings.nazemIntegrationEnabled
     ? 'ينشئ أرشيفًا للتقارير، ويحوّل الحفظ المعتمد إلى محفوظ سابق، ويصفّر النقاط وأرصدة المتجر والخريطة وتحدياتها. تبقى خطط ناظم المرتبطة نشطة، وتُحذف المقادير المستقبلية غير المنفذة لتعود من ناظم في الفصل الجديد. زامن جلسات الأجهزة قبل الإنهاء.'
     : 'ينشئ أرشيفًا للتقارير، ويحوّل الحفظ المعتمد إلى محفوظ سابق، ويوقف الخطط الحالية، ويصفّر النقاط وأرصدة المتجر والخريطة وتحدياتها. يبدأ الفصل الجديد في اليوم التالي، ولا تُحذف الحسابات أو المحفوظ.';
 
+  const _resolveSettingsSection = () => {
+    if (saveStatus === 'error') {
+      return 'تعذر الحفظ التلقائي';
+    }
+    if (isSaving) {
+      return 'جاري الحفظ...';
+    }
+    return 'محفوظ تلقائياً';
+  };
   return (
     <div className="space-y-7">
       <Card className="mx-auto w-full max-w-5xl overflow-visible border-primary/25 bg-card/90 shadow-lg shadow-primary/5">
@@ -584,7 +602,7 @@ const SettingsSection = ({
               </Select>
             </div>
             {supportsFractionalFaces && (
-              <div className="grid grid-cols-3 gap-2 rounded-lg border border-primary/15 bg-card p-1" role="group" aria-label="مقدار ضوابط التسميع">
+              <fieldset className="min-w-0 m-0 grid grid-cols-3 gap-2 rounded-lg border border-primary/15 bg-card p-1"  aria-label="مقدار ضوابط التسميع">
                 <Button
                   type="button"
                   size="sm"
@@ -615,7 +633,7 @@ const SettingsSection = ({
                 >
                   لنصف وجه
                 </Button>
-              </div>
+              </fieldset>
             )}
             <div className="grid grid-cols-2 gap-3 rounded-lg border border-primary/15 bg-card p-4 sm:grid-cols-4">
               <div className="col-span-2 flex justify-end sm:col-span-4">
@@ -1046,14 +1064,14 @@ const SettingsSection = ({
       />
 
       <div className="pointer-events-none fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] z-40">
-        <div role="status" aria-live="polite" className={`inline-flex h-11 items-center gap-2 rounded-lg border px-4 text-sm font-bold shadow-xl ${
+        <output  aria-live="polite" className={`inline-flex h-11 items-center gap-2 rounded-lg border px-4 text-sm font-bold shadow-xl ${
           saveStatus === 'error'
             ? 'border-destructive/40 bg-destructive/10 text-destructive'
             : 'border-primary/20 bg-card text-muted-foreground'
         }`}>
           {isSaving ? <LoadingSpinner className="text-primary" /> : <CheckCircle2 className="h-4 w-4 text-primary" />}
-          {saveStatus === 'error' ? 'تعذر الحفظ التلقائي' : isSaving ? 'جاري الحفظ...' : 'محفوظ تلقائياً'}
-        </div>
+          {_resolveSettingsSection()}
+        </output>
       </div>
 
       <Dialog open={endTermOpen} onOpenChange={setEndTermOpen}>

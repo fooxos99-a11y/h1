@@ -162,14 +162,30 @@ const QuranTestsSection = () => {
         ? null
         : (await syncOfflineActions(getAccountId(), { force: true })).find((item) => item.actionId === action.actionId);
       if (synced?.status?.startsWith('rejected_')) throw new Error(synced.lastError || 'رفض السيرفر نتيجة الاختبار.');
+      const _resolveResultType = () => {
+        if (isPassing) {
+          return 'passed';
+        }
+        if (requiresRetest) {
+          return 'retest';
+        }
+        return 'repeat_memorization';
+      };
       const result = synced?.status === 'synced' ? synced.result : {
         score,
-        resultType: isPassing ? 'passed' : (requiresRetest ? 'retest' : 'repeat_memorization'),
+        resultType: _resolveResultType(),
         pendingSync: true,
       };
-      const resultTitle = result.resultType === 'passed'
-        ? 'الطالب ناجح'
-        : (result.resultType === 'retest' ? 'تم تحديد إعادة الاختبار' : 'تمت إعادة الحفظ');
+      const _resolveResultTitle = () => {
+        if (result.resultType === 'passed') {
+          return 'الطالب ناجح';
+        }
+        if (result.resultType === 'retest') {
+          return 'تم تحديد إعادة الاختبار';
+        }
+        return 'تمت إعادة الحفظ';
+      };
+      const resultTitle = _resolveResultTitle();
       toast({
         title: result.pendingSync ? 'حُفظت نتيجة الاختبار محليًا' : resultTitle,
         description: `الدرجة: ${result.score}${result.pendingSync ? ' — تنتظر المزامنة' : ''}`,
@@ -260,6 +276,15 @@ const QuranTestsSection = () => {
   if (isLoading) return <DashboardLoader className="min-h-[420px]" />;
   if (loadError && !students.length) return <ErrorState message={loadError} onRetry={() => load({ preferCache: false })} />;
 
+  const _resolveQuranTestsSection = () => {
+    if (isPassing) {
+      return 'ناجح';
+    }
+    if (requiresRetest) {
+      return 'إعادة اختبار';
+    }
+    return 'إعادة حفظ';
+  };
   return (
     <Card className="border-primary/30 bg-card neon-glow">
       <CardHeader className="border-b border-primary/15 p-4">
@@ -368,7 +393,7 @@ const QuranTestsSection = () => {
               </div>
             </div>
             <div className={`rounded-lg border p-3 text-sm font-black ${isPassing ? 'border-primary/20 bg-primary/10 text-primary' : 'border-destructive/30 bg-destructive/10 text-destructive'}`}>
-              الدرجة: {score} / {maxScore} - {isPassing ? 'ناجح' : (requiresRetest ? 'إعادة اختبار' : 'إعادة حفظ')}
+              الدرجة: {score} / {maxScore} - {_resolveQuranTestsSection()}
             </div>
             {requiresRetest && (
               <div className="space-y-2">

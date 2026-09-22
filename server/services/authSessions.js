@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 import { db } from '../db.js';
 import { getSessionCookie, setSessionCookie, TENANT_SESSION_COOKIE } from './sessionCookies.js';
 

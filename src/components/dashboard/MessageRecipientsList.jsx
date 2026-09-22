@@ -4,15 +4,14 @@ import { Button } from '@/components/ui/button';
 import DashboardLoader from '@/components/dashboard/DashboardLoader';
 
 export default function MessageRecipientsList({ recipients, selectedCount, allSelected, onToggleAll, onToggle, isSelected, getKey, renderDetails, renderBadge, loading = false }) {
-  return <div className="space-y-5 [font-family:var(--font-ui)]">
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-background/70 p-3">
-      <Button type="button" variant="outline" onClick={onToggleAll} className="min-h-11 gap-2" disabled={loading || !recipients.length}>
-        {allSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}تحديد الكل ({recipients.length})
-      </Button>
-      <div className="text-sm font-semibold text-muted-foreground" aria-live="polite">المحدد: <span className="text-primary">{selectedCount}</span></div>
-    </div>
-    <div className="max-h-[620px] overflow-y-auto pe-1">
-      {loading ? <DashboardLoader /> : !recipients.length ? <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">لا يوجد مستلمون لعرضهم.</div> : <div className="grid gap-3">
+  const _resolveConditional = () => {
+    if (loading) {
+      return <DashboardLoader />;
+    }
+    if (!recipients.length) {
+      return <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">لا يوجد مستلمون لعرضهم.</div>;
+    }
+    return <div className="grid gap-3">
         {recipients.map((recipient) => {
           const selected = isSelected(recipient);
           return <div key={getKey(recipient)} className={`grid gap-3 rounded-2xl border p-4 transition md:grid-cols-[1fr_auto] md:items-center ${selected ? 'border-primary/60 bg-primary/10' : 'border-primary/20 bg-background'}`}>
@@ -25,7 +24,17 @@ export default function MessageRecipientsList({ recipients, selectedCount, allSe
             <div className="flex items-center gap-2 text-sm font-bold text-primary">{renderBadge?.(recipient)}</div>
           </div>;
         })}
-      </div>}
+      </div>;
+  };
+  return <div className="space-y-5 [font-family:var(--font-ui)]">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-background/70 p-3">
+      <Button type="button" variant="outline" onClick={onToggleAll} className="min-h-11 gap-2" disabled={loading || !recipients.length}>
+        {allSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}تحديد الكل ({recipients.length})
+      </Button>
+      <div className="text-sm font-semibold text-muted-foreground" aria-live="polite">المحدد: <span className="text-primary">{selectedCount}</span></div>
+    </div>
+    <div className="max-h-[620px] overflow-y-auto pe-1">
+      {_resolveConditional()}
     </div>
   </div>;
 }

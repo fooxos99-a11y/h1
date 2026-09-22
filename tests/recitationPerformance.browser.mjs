@@ -72,12 +72,25 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
     await entryContext.route('**/api/**', (route) => {
       const url = route.request().url();
       const settings = { staffAttendanceSource: 'teacher', hasStudentQuranExecution: true };
-      const json = url.includes('public-settings') ? settings
-        : url.includes('quran-evaluation') ? { date: '2026-09-06', students: [], tasks: [] }
-        : url.includes('bootstrap') ? { settings, permissions: [], students: [], tasks: [] }
-        : url.includes('notifications') ? { notifications: [], unreadCount: 0 }
-        : url.includes('staff-attendance') ? { enabled: true, date: '2026-09-06', alreadyPresent: false, canAttend: true }
-        : {};
+      const _resolveJson = () => {
+        if (url.includes('public-settings')) {
+          return settings;
+        }
+        if (url.includes('quran-evaluation')) {
+          return { date: '2026-09-06', students: [], tasks: [] };
+        }
+        if (url.includes('bootstrap')) {
+          return { settings, permissions: [], students: [], tasks: [] };
+        }
+        if (url.includes('notifications')) {
+          return { notifications: [], unreadCount: 0 };
+        }
+        if (url.includes('staff-attendance')) {
+          return { enabled: true, date: '2026-09-06', alreadyPresent: false, canAttend: true };
+        }
+        return {};
+      };
+      const json = _resolveJson();
       return route.fulfill({ json });
     });
     const entryPage = await entryContext.newPage();

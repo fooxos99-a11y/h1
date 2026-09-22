@@ -4,7 +4,7 @@ export function memorizedSegments(ayahs, isMemorized) {
   let current = null;
   for (const item of ayahs) {
     if (!isMemorized(item)) { current = null; continue; }
-    if (!current || current.toSurah !== Number(item.surah) || current.toAyah + 1 !== Number(item.ayah)) {
+    if (current?.toSurah !== Number(item.surah) || current.toAyah + 1 !== Number(item.ayah)) {
       current = {
         fromPage: Number(item.page), toPage: Number(item.page),
         fromSurah: Number(item.surah), toSurah: Number(item.surah),

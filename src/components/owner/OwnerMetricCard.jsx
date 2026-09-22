@@ -5,15 +5,42 @@ import { Card, CardContent } from '@/components/ui/card';
 const comparison = (current, previous) => {
   const currentValue = Number(current || 0);
   const previousValue = Number(previous || 0);
-  const change = previousValue ? ((currentValue - previousValue) / Math.abs(previousValue)) * 100 : currentValue ? 100 : 0;
-  return { change, direction: change > 0 ? 'up' : change < 0 ? 'down' : 'same' };
+  const _resolveChange = () => {
+    if (previousValue) {
+      return ((currentValue - previousValue) / Math.abs(previousValue)) * 100;
+    }
+    if (currentValue) {
+      return 100;
+    }
+    return 0;
+  };
+  const change = _resolveChange();
+  const _resolveDirection = () => {
+    if (change > 0) {
+      return 'up';
+    }
+    if (change < 0) {
+      return 'down';
+    }
+    return 'same';
+  };
+  return { change, direction: _resolveDirection() };
 };
 
 const OwnerMetricCard = ({ icon: Icon, label, value, rawValue, previousValue, positiveWhenDown = false, tone = 'text-primary' }) => {
   const hasComparison = previousValue !== null && previousValue !== undefined;
   const change = comparison(rawValue, previousValue);
   const positive = change.direction === 'same' || (positiveWhenDown ? change.direction === 'down' : change.direction === 'up');
-  const ChangeIcon = change.direction === 'up' ? ArrowUp : change.direction === 'down' ? ArrowDown : Minus;
+  const _resolveChangeIcon = () => {
+    if (change.direction === 'up') {
+      return ArrowUp;
+    }
+    if (change.direction === 'down') {
+      return ArrowDown;
+    }
+    return Minus;
+  };
+  const ChangeIcon = _resolveChangeIcon();
   return (
     <Card className="border-border/70 bg-card shadow-sm">
       <CardContent className="min-h-32 p-3 [font-family:var(--font-ui)] sm:p-4">

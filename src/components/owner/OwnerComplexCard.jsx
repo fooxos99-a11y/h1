@@ -44,10 +44,10 @@ const OwnerComplexCard = ({
             {complex.managerName ? ` · المدير: ${complex.managerName}` : ''}
           </p>
           {complex.provisioningError ? (
-            <p className="mt-2 flex items-start gap-1.5 text-xs font-bold leading-5 text-red-600" role="status">
+            <output className="mt-2 flex items-start gap-1.5 text-xs font-bold leading-5 text-red-600" >
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               تعذر تجهيز قاعدة بيانات المجمع.
-            </p>
+            </output>
           ) : null}
         </div>
         <div className="grid grid-cols-3 gap-2 sm:flex sm:shrink-0">

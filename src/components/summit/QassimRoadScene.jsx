@@ -54,9 +54,16 @@ const QassimRoadScene = ({ journey }) => {
   const customScene = getSummitScene(journey.mapConfig, progress.distanceKm);
   const activeStation = getSummitActiveStation(journey.mapConfig);
   const stationProximity = activeStation ? 1 : 0;
-  const scenePhase = arrivedCity
-    ? 'city-interior'
-    : (activeStation && Number(activeStation.kilometer) === progress.distanceKm ? 'station' : getRoadScenePhase(progress.segmentProgress));
+  const _resolveScenePhase = () => {
+    if (arrivedCity) {
+      return 'city-interior';
+    }
+    if (activeStation && Number(activeStation.kilometer) === progress.distanceKm) {
+      return 'station';
+    }
+    return getRoadScenePhase(progress.segmentProgress);
+  };
+  const scenePhase = _resolveScenePhase();
   const atmosphere = customScene?.imageId || progress.segmentIndex % 2 === 0 ? 'day' : 'night';
   const movingKey = `${progress.segmentIndex}-${scenePhase}-${atmosphere}`;
 

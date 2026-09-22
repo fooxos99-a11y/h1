@@ -1,6 +1,7 @@
 import { hideStudentTaskAmount, isStudentAmountHidden } from '../../shared/student-amount-visibility.js';
 import { getBusinessDate, shiftDateOnly } from '../../shared/business-date.js';
 import { formatQuranRangeText } from './quranRangeText.js';
+import { compactQuranAmount } from '../../shared/quran-display-text.js';
 
 export const PLAN_TASK_TYPES = ['memorization', 'link', 'review'];
 export const PLAN_TASK_LABELS = { memorization: 'الحفظ', link: 'الربط', review: 'المراجعة' };
@@ -15,10 +16,7 @@ export const planTaskAmount = (task) => task.amountHidden ? '' : task.ayahPrevie
   startPage: task.fromPage, endPage: task.toPage,
 });
 
-export const planCompactAmount = (task) => planTaskAmount(task)
-  .replace(/،?\s*من آية\s*/g, ' ')
-  .replace(/\s*آية\s*/g, ' ')
-  .replace(/\s*إلى\s*/g, '–');
+export const planCompactAmount = (task) => compactQuranAmount(planTaskAmount(task));
 
 export const planProgressPercent = (plan) => {
   const value = Number(plan?.progressPercent ?? plan?.progress?.progressPercent ?? 0);

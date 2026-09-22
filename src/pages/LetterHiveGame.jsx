@@ -37,7 +37,7 @@ const LetterHiveGame = () => {
   const [questions, setQuestions] = useState(loadQuestionBank);
   const [scoreRed, setScoreRed] = useState(0);
   const [scoreGreen, setScoreGreen] = useState(0);
-  const [hexes, setHexes] = useState(Array(25).fill(null));
+  const [hexes, setHexes] = useState(new Array(25).fill(null));
   const [letters, setLetters] = useState(() => buildBoardLetters());
   const [targetHex, setTargetHex] = useState(null);
   const [currentQuestion, setCurrentQuestion] = useState(null);
@@ -78,7 +78,7 @@ const LetterHiveGame = () => {
     teamNames: displayTeamNames,
     scoreRed: 0,
     scoreGreen: 0,
-    hexes: Array(25).fill(null),
+    hexes: new Array(25).fill(null),
     letters,
     winMessage: '',
     ...overrides,
@@ -90,7 +90,7 @@ const LetterHiveGame = () => {
     setTeamNames(nextTeamNames);
     setScoreRed(Number(state.scoreRed || 0));
     setScoreGreen(Number(state.scoreGreen || 0));
-    setHexes(Array.isArray(state.hexes) && state.hexes.length === 25 ? state.hexes : Array(25).fill(null));
+    setHexes(Array.isArray(state.hexes) && state.hexes.length === 25 ? state.hexes : new Array(25).fill(null));
     setLetters(Array.isArray(state.letters) && state.letters.length === 25 ? state.letters : buildBoardLetters());
     setWinMessage(state.winMessage || '');
   };
@@ -184,7 +184,7 @@ const LetterHiveGame = () => {
       teamNames: displayTeamNames,
       scoreRed: 0,
       scoreGreen: 0,
-      hexes: Array(25).fill(null),
+      hexes: new Array(25).fill(null),
       letters: nextLetters,
       winMessage: '',
     };
@@ -217,7 +217,7 @@ const LetterHiveGame = () => {
 
   const resetRound = () => {
     const nextLetters = buildBoardLetters();
-    setHexes(Array(25).fill(null));
+    setHexes(new Array(25).fill(null));
     setLetters(nextLetters);
     setTargetHex(null);
     setCurrentQuestion(null);
@@ -226,7 +226,7 @@ const LetterHiveGame = () => {
     setQuestions(loadQuestionBank());
     void saveSession({
       ...publicState,
-      hexes: Array(25).fill(null),
+      hexes: new Array(25).fill(null),
       letters: nextLetters,
       winMessage: '',
     });

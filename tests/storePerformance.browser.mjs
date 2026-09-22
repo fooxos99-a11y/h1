@@ -14,7 +14,16 @@ try {
     const isStore = path.endsWith('/store/products');
     await new Promise(resolve => setTimeout(resolve, isStore ? 100 : 700));
     const store = {enabled:true,products:[{id:1,name:'منتج اختبار',pointsPrice:10,stock:5}],storeBalance:100};
-    const body = isStore ? store : path.endsWith('/bootstrap') ? {store} : {rows:[],tasks:[],plan:null};
+    const _resolveBody = () => {
+      if (isStore) {
+        return store;
+      }
+      if (path.endsWith('/bootstrap')) {
+        return {store};
+      }
+      return {rows:[],tasks:[],plan:null};
+    };
+    const body = _resolveBody();
     await route.fulfill({json:body});
   });
   await page.goto('http://localhost:3000/__store-performance');

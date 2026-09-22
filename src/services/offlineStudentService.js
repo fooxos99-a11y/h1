@@ -39,9 +39,16 @@ const projectWorkspaceForToday = (workspace) => {
   const date = getSaudiDate();
   const dailyChallenge = workspace.dailyChallenges?.find((item) => item.date === date)
     || (workspace.dailyChallenge?.date === date ? workspace.dailyChallenge : null);
-  const purchasedDates = Array.isArray(workspace.store?.purchasedDates)
-    ? workspace.store.purchasedDates
-    : (workspace.store?.purchasedToday && workspace.date ? [workspace.date] : []);
+  const _resolvePurchasedDates = () => {
+    if (Array.isArray(workspace.store?.purchasedDates)) {
+      return workspace.store.purchasedDates;
+    }
+    if (workspace.store?.purchasedToday && workspace.date) {
+      return [workspace.date];
+    }
+    return [];
+  };
+  const purchasedDates = _resolvePurchasedDates();
   return {
     ...workspace,
     date,
@@ -255,9 +262,12 @@ async function purchaseProduct(studentId, product) {
       pendingPurchaseDate: purchaseDate,
       pendingSync: true,
       storeBalance: Number(store.storeBalance || 0) - price,
-      products: store.products.map((item) => Number(item.id) === Number(currentProduct.id)
-        ? { ...item, stock: item.stock === null ? null : Math.max(0, Number(item.stock || 0) - 1) }
-        : item),
+      products: store.products.map((item) => {
+  if (Number(item.id) === Number(currentProduct.id)) {
+    return { ...item, stock: item.stock === null ? null : Math.max(0, Number(item.stock || 0) - 1) };
+  }
+  return item;
+}),
     },
   };
   await saveWorkspace(studentId, pendingWorkspace);

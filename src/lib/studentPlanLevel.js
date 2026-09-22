@@ -10,7 +10,10 @@ export function studentPlanLevel(plan) {
   }
   // Older offline snapshots contain only a rounded percentage: they cannot prove completion.
   const percent = Number(plan.progressPercent ?? plan.progress?.progressPercent ?? 0);
-  return Number.isFinite(percent) ? Math.max(0, Math.min(plan.status === 'completed' ? 100 : 99, Math.floor(percent))) : 0;
+  if (Number.isFinite(percent)) {
+    return Math.max(0, Math.min(plan.status === 'completed' ? 100 : 99, Math.floor(percent)));
+  }
+  return 0;
 }
 
 

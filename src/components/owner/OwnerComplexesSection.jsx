@@ -5,11 +5,12 @@ import OwnerComplexToolbar from '@/components/owner/OwnerComplexToolbar';
 import OwnerErrorState from '@/components/owner/OwnerErrorState';
 import { Button } from '@/components/ui/button';
 
-const OwnerComplexesSection = ({ complexes, visibleComplexes, search, setSearch, onCreate, onEdit, onToggleStatus, onOpenComplex, onRetry, error, busy }) => (
-  <section className="space-y-4 [font-family:var(--font-ui)]">
-    <h2 className="text-xl font-black text-foreground sm:text-2xl">المجمعات</h2>
-    {error ? <OwnerErrorState message={error} onRetry={onRetry} /> : complexes.length ? (
-      <>
+const OwnerComplexesSection = ({ complexes, visibleComplexes, search, setSearch, onCreate, onEdit, onToggleStatus, onOpenComplex, onRetry, error, busy }) => { const _resolveOwnerComplexesSection = () => {
+                                                                                                                                                                 if (error) {
+                                                                                                                                                                   return <OwnerErrorState message={error} onRetry={onRetry} />;
+                                                                                                                                                                 }
+                                                                                                                                                                 if (complexes.length) {
+                                                                                                                                                                   return <>
         <OwnerComplexToolbar query={search} onQueryChange={setSearch} onAdd={onCreate} />
         {visibleComplexes.length ? (
           <div className="grid gap-3">
@@ -32,9 +33,9 @@ const OwnerComplexesSection = ({ complexes, visibleComplexes, search, setSearch,
             </div>
           </div>
         )}
-      </>
-    ) : (
-      <div className="grid min-h-56 place-items-center rounded-2xl border border-dashed border-border bg-card p-6 text-center">
+      </>;
+                                                                                                                                                                 }
+                                                                                                                                                                 return <div className="grid min-h-56 place-items-center rounded-2xl border border-dashed border-border bg-card p-6 text-center">
         <div>
           <h3 className="font-black text-foreground">لا توجد مجمعات</h3>
           <Button type="button" className="mt-3 h-11 gap-2" onClick={onCreate}>
@@ -42,9 +43,11 @@ const OwnerComplexesSection = ({ complexes, visibleComplexes, search, setSearch,
             إضافة مجمع
           </Button>
         </div>
-      </div>
-    )}
-  </section>
-);
+      </div>;
+                                                                                                                                                               };
+                                                                                                                                                               return (<section className="space-y-4 [font-family:var(--font-ui)]">
+    <h2 className="text-xl font-black text-foreground sm:text-2xl">المجمعات</h2>
+    {_resolveOwnerComplexesSection()}
+  </section>); };
 
 export default OwnerComplexesSection;

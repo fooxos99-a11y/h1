@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 import express from 'express';
 import { db } from '../db.js';
 import {
@@ -129,9 +129,16 @@ router.post('/', async (req, res, next) => {
     const supervisorCommittees = req.auth?.role === 'supervisor'
       ? await getCommitteeOptions(req.auth)
       : [];
-    const committeeId = req.auth?.role === 'supervisor'
-      ? Number(supervisorCommittees[0]?.id || 0)
-      : (req.body.committeeId ? Number(req.body.committeeId) : null);
+    const _resolveCommitteeId = () => {
+      if (req.auth?.role === 'supervisor') {
+        return Number(supervisorCommittees[0]?.id || 0);
+      }
+      if (req.body.committeeId) {
+        return Number(req.body.committeeId);
+      }
+      return null;
+    };
+    const committeeId = _resolveCommitteeId();
     if (!name || (req.auth?.role === 'supervisor' && !committeeId)) {
       return res.status(422).json({ message: 'اسم الغرفة مطلوب، ويجب ربط غرفة المعلم بحلقة.' });
     }
@@ -160,7 +167,7 @@ router.post('/:id/token', async (req, res, next) => {
       'SELECT id, name, livekit_room_name AS livekitRoomName, committee_id AS committeeId, status FROM call_rooms WHERE id = ? LIMIT 1',
       [roomId]
     );
-    if (!room || room.status !== 'open') {
+    if (room?.status !== 'open') {
       return res.status(404).json({ message: 'الغرفة غير متاحة.' });
     }
     if (!await canAccessCommittee(req.auth, room.committeeId)) {

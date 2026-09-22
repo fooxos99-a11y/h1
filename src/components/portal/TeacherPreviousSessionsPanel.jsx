@@ -40,14 +40,21 @@ export default function TeacherPreviousSessionsPanel() {
   return <div className="student-plan student-plan-history" dir="rtl">
     {error && !studentId && <div role="alert" className="student-plan-error"><span>{error}</span><Button variant="outline" onClick={() => setRetry((value) => value + 1)}>إعادة المحاولة</Button></div>}
     {loading && !students.length ? <DashboardLoader /> : <div className="grid items-start gap-3">
-      {students.map(student => <TeacherStudentHistoryCard key={student.id} student={student} expanded={studentId === String(student.id)} onToggle={() => {
+      {students.map(student => { const _resolveConditional = () => {
+                                   if (loading) {
+                                     return <DashboardLoader />;
+                                   }
+                                   if (weeks.length > 0) {
+                                     return weeks.flatMap(week => week.days).filter(day => day.date <= getBusinessDate()).map(day => <TeacherSessionCard key={`${studentId}:${day.date}`} day={day} studentName={student.name} />);
+                                   }
+                                   return !error && <p className="student-plan-empty">لا توجد جلسات تسميع سابقة.</p>;
+                                 };
+                                 return (<TeacherStudentHistoryCard key={student.id} student={student} expanded={studentId === String(student.id)} onToggle={() => {
         setRows([]); setError(''); setLoading(true); setStudentId(studentId === String(student.id) ? '' : String(student.id));
       }}>
         {error && <div role="alert" className="student-plan-error"><span>{error}</span><Button variant="outline" onClick={() => setRetry(value => value + 1)}>إعادة المحاولة</Button></div>}
-        {loading ? <DashboardLoader /> : weeks.length > 0
-          ? weeks.flatMap(week => week.days).filter(day => day.date <= getBusinessDate()).map(day => <TeacherSessionCard key={`${studentId}:${day.date}`} day={day} studentName={student.name} />)
-          : !error && <p className="student-plan-empty">لا توجد جلسات تسميع سابقة.</p>}
-      </TeacherStudentHistoryCard>)}
+        {_resolveConditional()}
+      </TeacherStudentHistoryCard>); })}
       {!students.length && !error && <p className="student-plan-empty">لا يوجد طلاب في حلقاتك.</p>}
     </div>}
   </div>;

@@ -258,13 +258,18 @@ const AudioCallRoom = ({ roomInfo, isOwner, minimized = false, onRestore, onLeav
     } catch (error) {
       const permissionDenied = /permission|denied|notallowed/i.test(`${error?.name || ''} ${error?.message || ''}`);
       const unavailable = /notfound|devicesnotfound|overconstrained/i.test(`${error?.name || ''} ${error?.message || ''}`);
+      const _resolveDescription = () => {
+        if (permissionDenied) {
+          return 'اسمح للمتصفح باستخدام الكاميرا من إعدادات الموقع ثم حاول مرة أخرى.';
+        }
+        if (unavailable) {
+          return 'لم يتم العثور على كاميرا متاحة في هذا الجهاز.';
+        }
+        return error.message || 'تعذر تشغيل الكاميرا. حاول مرة أخرى.';
+      };
       toast({
         title: 'تعذر فتح الكاميرا',
-        description: permissionDenied
-          ? 'اسمح للمتصفح باستخدام الكاميرا من إعدادات الموقع ثم حاول مرة أخرى.'
-          : unavailable
-            ? 'لم يتم العثور على كاميرا متاحة في هذا الجهاز.'
-            : (error.message || 'تعذر تشغيل الكاميرا. حاول مرة أخرى.'),
+        description: _resolveDescription(),
         variant: 'destructive',
       });
     } finally {

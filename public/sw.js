@@ -212,11 +212,21 @@ async function syncStoredActions(database) {
     } catch (error) {
       const terminal = Number(error.status) >= 400 && Number(error.status) < 500
         && ![408, 429].includes(Number(error.status));
+      const _resolveStatus = () => {
+        if (error.status === 403) {
+          return 'rejected_permission';
+        }
+        if (error.status === 409) {
+          return 'rejected_conflict';
+        }
+        if (terminal) {
+          return 'rejected_validation';
+        }
+        return 'failed';
+      };
       await writeOfflineRow(database, 'actions', {
         ...action,
-        status: error.status === 403
-          ? 'rejected_permission'
-          : (error.status === 409 ? 'rejected_conflict' : (terminal ? 'rejected_validation' : 'failed')),
+        status: _resolveStatus(),
         lastError: error.message,
       });
       if (!terminal) retryableFailure = error;

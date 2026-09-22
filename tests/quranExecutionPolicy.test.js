@@ -161,7 +161,7 @@ test('Nazem review keeps its remote day while memorization remains editable', as
   assert.match(server, /selectionEnd: allowedEnd/);
   assert.match(server, /fixedRange && !isSameQuranPosition\(requestedEnd, expectedEnd\)/);
   assert.match(server, /: planEnd;[\s\S]*resolveExecutionEndPosition/);
-  assert.match(server, /partial \|\| extended \? requestedEnd\.surah/);
-  assert.match(server, /extended \? 'extra' : 'complete'/);
+  assert.match(server, /if \(partial \|\| extended\) \{\s*return requestedEnd\.surah;/);
+  assert.match(server, /if \(extended\) \{\s*return 'extra';\s*\}\s*return 'complete';/);
   assert.match(server, /normalEnd: nazemScheduledEnd[\s\S]*extraEnd: nazemLate \? nazemScheduledEnd : nazemPlanEnd/);
 });

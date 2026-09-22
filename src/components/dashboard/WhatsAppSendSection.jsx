@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { FileImage, MessageCircle, QrCode, RefreshCw, Users } from 'lucide-react';
-import { useCallback } from 'react';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -45,7 +45,7 @@ const WhatsAppSendSection = () => {
   const [isSending, setIsSending] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [whatsAppStatus, setWhatsAppStatus] = useState(null);
-  const [_isStatusLoading, setIsStatusLoading] = useState(false);
+  const [, setIsStatusLoading] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const statusRequestRef = useRef(false);
 
@@ -136,7 +136,7 @@ const WhatsAppSendSection = () => {
       setAttachment({
         name: file.name,
         type: file.type || 'application/octet-stream',
-        data: String(reader.result || ''),
+        data: (typeof reader.result === 'string' ? reader.result : ''),
       });
     };
     reader.readAsDataURL(file);
@@ -242,6 +242,39 @@ const WhatsAppSendSection = () => {
     return () => clearInterval(timer);
   }, [loadWhatsAppStatus, qrOpen, whatsAppStatus?.ready, whatsAppStatus?.status]);
 
+  const _resolveWhatsAppSendSection = () => {
+    if (whatsAppStatus?.ready) {
+      return <div className="rounded-2xl border border-green-400/30 bg-green-400/10 px-5 py-4 text-center font-bold text-green-300">
+                واتساب متصل وجاهز للإرسال
+              </div>;
+    }
+    if (whatsAppStatus?.qr && whatsAppStatus.status === 'qr') {
+      return <img src={whatsAppStatus.qr} alt="WhatsApp QR" className="h-64 w-64 rounded-2xl bg-white p-3" />;
+    }
+    if (failedWhatsAppStatuses.has(whatsAppStatus?.status)) {
+      return <div className="grid place-items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 px-5 py-6 text-center">
+                <p className="text-sm font-bold leading-6 text-destructive">
+                  {whatsAppStatus?.message || 'تعذر تجهيز باركود واتساب.'}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11 gap-2 rounded-2xl"
+                  onClick={resetWhatsAppBarcode}
+                  loading={isDisconnecting}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  إنشاء باركود جديد
+                </Button>
+              </div>;
+    }
+    return <div className="grid place-items-center gap-3 py-10 text-center">
+                <DashboardLoader />
+                <p className="text-sm font-bold text-muted-foreground">
+                  {whatsAppStatus?.message || 'جاري تجهيز باركود واتساب...'}
+                </p>
+              </div>;
+  };
   return (
     <div className="space-y-6">
       <Card className="bg-card border-primary/30 neon-glow">
@@ -328,36 +361,7 @@ const WhatsAppSendSection = () => {
             <DialogTitle className="text-center text-2xl font-black text-primary neon-text">ربط واتساب</DialogTitle>
           </DialogHeader>
           <div className="grid place-items-center gap-4 py-4">
-            {whatsAppStatus?.ready ? (
-              <div className="rounded-2xl border border-green-400/30 bg-green-400/10 px-5 py-4 text-center font-bold text-green-300">
-                واتساب متصل وجاهز للإرسال
-              </div>
-            ) : whatsAppStatus?.qr && whatsAppStatus.status === 'qr' ? (
-              <img src={whatsAppStatus.qr} alt="WhatsApp QR" className="h-64 w-64 rounded-2xl bg-white p-3" />
-            ) : failedWhatsAppStatuses.has(whatsAppStatus?.status) ? (
-              <div className="grid place-items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 px-5 py-6 text-center">
-                <p className="text-sm font-bold leading-6 text-destructive">
-                  {whatsAppStatus?.message || 'تعذر تجهيز باركود واتساب.'}
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="min-h-11 gap-2 rounded-2xl"
-                  onClick={resetWhatsAppBarcode}
-                  loading={isDisconnecting}
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  إنشاء باركود جديد
-                </Button>
-              </div>
-            ) : (
-              <div className="grid place-items-center gap-3 py-10 text-center">
-                <DashboardLoader />
-                <p className="text-sm font-bold text-muted-foreground">
-                  {whatsAppStatus?.message || 'جاري تجهيز باركود واتساب...'}
-                </p>
-              </div>
-            )}
+            {_resolveWhatsAppSendSection()}
           </div>
           <DialogFooter className="gap-3 sm:justify-center">
             <Button variant="outline" className="rounded-2xl px-8" onClick={() => setQrOpen(false)}>إغلاق</Button>

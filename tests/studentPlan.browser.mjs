@@ -136,7 +136,7 @@ try {
     complete = true;
     await page.reload();
     await page.getByRole('article', { name: 'مقدار الغد' }).waitFor();
-    assert.equal(await page.getByRole('article', { name: 'مقدار الغد' }).evaluate(el => el.closest('.student-plan-week').getAttribute('data-week')), '2026-09-06');
+    assert.equal(await page.getByRole('article', { name: 'مقدار الغد' }).evaluate(el => el.closest('.student-plan-week').dataset.week), '2026-09-06');
     assert.equal(await page.locator('.student-plan-day').first().getAttribute('data-plan-date'), '2026-09-07');
     await page.getByRole('article', { name: 'مقدار الغد' }).getByText('غدًا', { exact: true }).waitFor();
     assert.ok(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth));
@@ -146,7 +146,7 @@ try {
     await page.clock.setSystemTime(new Date('2026-09-12T18:00:00Z'));
     await page.reload();
     await page.getByRole('article', { name: 'مقدار الغد' }).waitFor();
-    assert.equal(await page.getByRole('article', { name: 'مقدار الغد' }).evaluate(el => el.closest('.student-plan-week').getAttribute('data-week')), '2026-09-13');
+    assert.equal(await page.getByRole('article', { name: 'مقدار الغد' }).evaluate(el => el.closest('.student-plan-week').dataset.week), '2026-09-13');
     const nextWeekToggle = page.getByRole('button', { name: /^الأسبوع القادم/ });
     await nextWeekToggle.click();
     assert.equal(await page.getByRole('article', { name: 'مقدار الغد' }).isVisible(), false);
@@ -163,7 +163,7 @@ try {
     date = '2026-09-13';
     await page.clock.setSystemTime(new Date('2026-09-13T10:00:00Z'));
     await page.evaluate(() => globalThis.window.dispatchEvent(new globalThis.Event('focus')));
-    await page.waitForFunction(() => globalThis.document.querySelector('.student-plan-week')?.getAttribute('data-week') === '2026-09-13');
+    await page.waitForFunction(() => globalThis.document.querySelector('.student-plan-week')?.dataset.week === '2026-09-13');
     empty = true;
     await page.reload();
     await page.getByText('لا توجد خطة حالية.', { exact: true }).waitFor();
@@ -172,7 +172,7 @@ try {
     // Clear the account-scoped cache to exercise the first-load error path.
     if (width === 360) {
       await page.evaluate(async () => {
-        const { offlineRecitationStore } = await import('/src/services/offlineRecitationStore.js');
+        const { offlineRecitationStore } = await import(new globalThis.URL('src/services/offlineRecitationStore.js', globalThis.location.origin).href);
         await offlineRecitationStore.cacheSnapshot('default:student:991:resource:student:my-plan-v1', null);
       });
       fail = true;

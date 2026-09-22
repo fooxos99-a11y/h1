@@ -122,10 +122,20 @@ export async function syncOfflineActions(accountId, { force = false, actorRole =
       const terminal = Number(error?.status) >= 400
         && Number(error?.status) < 500
         && ![408, 429].includes(Number(error?.status));
+      const _resolveStatus = () => {
+        if (error?.status === 403) {
+          return 'rejected_permission';
+        }
+        if (error?.status === 409) {
+          return 'rejected_conflict';
+        }
+        if (terminal) {
+          return 'rejected_validation';
+        }
+        return 'failed';
+      };
       results.push(await offlineRecitationStore.updateAction(actorKey, action.actionId, {
-        status: error?.status === 403
-          ? 'rejected_permission'
-          : (error?.status === 409 ? 'rejected_conflict' : (terminal ? 'rejected_validation' : 'failed')),
+        status: _resolveStatus(),
         retryCount,
         nextRetryAt: terminal ? null : new Date(Date.now() + Math.min(60 * 60_000, 5_000 * (3 ** retryCount))).toISOString(),
         lastError: error.message || 'تعذرت المزامنة.',

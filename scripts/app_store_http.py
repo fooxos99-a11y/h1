@@ -9,7 +9,7 @@ API_ROOT = "https://api.appstoreconnect.apple.com/v1"
 
 
 def app_store_url(path):
-    if not isinstance(path, str) or re.search(r"[\s\\\x00-\x1f\x7f]", path):
+    if not isinstance(path, str) or any(char.isspace() or ord(char) < 32 or char in "\\\x7f" for char in path):
         raise ValueError("Invalid App Store Connect API path")
     parts = urllib.parse.urlsplit(path)
     if (parts.scheme or parts.netloc or parts.fragment

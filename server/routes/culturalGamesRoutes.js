@@ -41,7 +41,7 @@ const getPresenterOrigin = (req) => {
   if (['localhost', '127.0.0.1', '::1'].includes(hostname)) {
     const localAddress = getLocalNetworkAddress();
     const requestedPort = /^\d{2,5}$/.test(String(req.query.port || '')) ? String(req.query.port) : '';
-    const port = requestedPort || forwardedHost.match(/:(\d+)$/)?.[1] || '3000';
+    const port = requestedPort || /:(\d+)$/.exec(forwardedHost)?.[1] || '3000';
     if (localAddress) return `http://${localAddress}:${port}`;
   }
   const protocol = String(req.get('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim();

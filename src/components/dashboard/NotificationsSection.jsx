@@ -50,8 +50,8 @@ export default function NotificationsSection() {
   const changeRecipientType = (role) => { setRecipientType(role); setCommitteeId('all'); setSelection(emptySelection()); };
   const changeCommittee = (id) => {
     setCommitteeId(id);
-    const visibleKeys = audience.people.filter((person) => person.role === recipientType && (id === 'all' || String(person.committeeId) === id)).map((person) => `${person.role}:${person.id}`);
-    setSelection((current) => ({ ...current, people: current.people.filter((key) => visibleKeys.includes(key)) }));
+    const visibleKeys = new Set(audience.people.filter((person) => person.role === recipientType && (id === 'all' || String(person.committeeId) === id)).map((person) => `${person.role}:${person.id}`));
+    setSelection((current) => ({ ...current, people: current.people.filter((key) => visibleKeys.has(key)) }));
   };
   const send = async () => {
     if (busy.current || !count || !body.trim()) return;
@@ -73,9 +73,14 @@ export default function NotificationsSection() {
     try { setRecipients({ loading: false, rows: await studentsApi.getNotificationRecipients(id) }); }
     catch (e) { setRecipients(null); toast({ title: 'تعذر تحميل المستلمين', description: e.message, variant: 'destructive' }); }
   };
-  return (
-    <div className="space-y-6 [font-family:var(--font-ui)]" dir="rtl">
-      {loading ? <DashboardLoader /> : error ? <div role="alert" className="space-y-3"><p>{error}</p><Button onClick={load}>إعادة المحاولة</Button></div> : <>
+  const _resolveConditional = () => {
+    if (loading) {
+      return <DashboardLoader />;
+    }
+    if (error) {
+      return <div role="alert" className="space-y-3"><p>{error}</p><Button onClick={load}>إعادة المحاولة</Button></div>;
+    }
+    return <>
         <Card className="bg-card border-primary/30 neon-glow">
           <fieldset disabled={sending} className="min-w-0">
           <CardHeader className="border-b border-primary/20">
@@ -98,7 +103,11 @@ export default function NotificationsSection() {
             <div className="flex flex-wrap items-center gap-3 text-sm"><span>أُرسل داخل التطبيق: {item.recipientCount}</span><span>قُرئ: {item.readCount}</span><Button variant="outline" className="min-h-11" onClick={() => showRecipients(item.id)}>المستلمون</Button></div>
           </article>)}
         </div></DialogContent></Dialog>
-      </>}
+      </>;
+  };
+  return (
+    <div className="space-y-6 [font-family:var(--font-ui)]" dir="rtl">
+      {_resolveConditional()}
       <Dialog open={recipients !== null} onOpenChange={(open) => { if (!open) setRecipients(null); }}><DialogContent dir="rtl" className="max-h-[85dvh] overflow-y-auto [font-family:var(--font-ui)]"><DialogHeader><DialogTitle>المستلمون</DialogTitle></DialogHeader>
         {recipients?.loading ? <DashboardLoader /> : recipients?.rows.map((person) => <div key={`${person.role}:${person.id}`} className="flex flex-wrap justify-between gap-2 border-b border-border py-3 text-sm"><span>{person.name} · {recipientRoleLabels[person.role]}</span><span>{person.readAt ? 'قُرئ' : 'لم يُقرأ'}</span></div>)}
       </DialogContent></Dialog>

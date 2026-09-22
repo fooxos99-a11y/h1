@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-const normalizeList = (value = []) => (Array.isArray(value) ? value : []).map((item) => String(item));
+const normalizeList = (value = []) => (Array.isArray(value) ? value : []).map(String);
 
 const MultiSelectSetting = ({ value, options, placeholder, onToggle, disabled = false }) => {
   const [open, setOpen] = useState(false);

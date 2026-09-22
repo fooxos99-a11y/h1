@@ -58,7 +58,7 @@ const LetterHiveQuestionBank = ({ questions, onAdd, onUpdate, onDelete, onClose 
 
         <form className="letter-hive-bank-form" onSubmit={submit}>
           <label>
-            الحرف
+            <span>الحرف</span>
             <select value={form.letter} onChange={(event) => setForm((current) => ({ ...current, letter: event.target.value }))}>
               {BASE_LETTERS.map((letter) => (
                 <option key={letter} value={letter}>{letter}</option>
@@ -66,11 +66,11 @@ const LetterHiveQuestionBank = ({ questions, onAdd, onUpdate, onDelete, onClose 
             </select>
           </label>
           <label>
-            السؤال
+            <span>السؤال</span>
             <textarea value={form.question} onChange={(event) => setForm((current) => ({ ...current, question: event.target.value }))} />
           </label>
           <label>
-            الإجابة
+            <span>الإجابة</span>
             <input value={form.answer} onChange={(event) => setForm((current) => ({ ...current, answer: event.target.value }))} />
           </label>
           <div className="letter-hive-bank-actions">
@@ -88,7 +88,7 @@ const LetterHiveQuestionBank = ({ questions, onAdd, onUpdate, onDelete, onClose 
 
         <div className="letter-hive-bank-letter-select">
           <label>
-            عرض أسئلة حرف
+            <span>عرض أسئلة حرف</span>
             <select
               value={activeLetter}
               onChange={(event) => {

@@ -1,6 +1,6 @@
 import { secureRandomInt } from '../../shared/secure-random.js';
 
-export function pickRandomMushafEntry(total, visitedIndexes = [], currentIndex = -1, random) {
+export function pickRandomMushafEntry(total, visitedIndexes = [], currentIndex = -1, random = undefined) {
   const size = Math.max(0, Number(total || 0));
   if (!size) return { index: -1, visitedIndexes: [] };
   const visited = new Set((visitedIndexes || []).map(Number).filter((index) => index >= 0 && index < size));

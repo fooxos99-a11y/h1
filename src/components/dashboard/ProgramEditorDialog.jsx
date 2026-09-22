@@ -1,3 +1,4 @@
+import { secureRandomId } from '../../../shared/secure-random.js';
 import ProgramSectionsEditor from '@/components/programs/ProgramSectionsEditor';
 import React, { useEffect, useId, useState } from 'react';
 import { Paperclip, Plus, Trash2, X } from 'lucide-react';
@@ -10,8 +11,8 @@ import SettingToggle from '@/components/ui/setting-toggle';
 import { Textarea } from '@/components/ui/textarea';
 import useRewardUnits from '@/hooks/useRewardUnits';
 
-const emptyOption = () => ({ text: '', isCorrect: false });
-const emptyQuestion = () => ({ text: '', options: [{ ...emptyOption(), isCorrect: true }, emptyOption()] });
+const emptyOption = () => ({ editorKey: secureRandomId('option'), text: '', isCorrect: false });
+const emptyQuestion = () => ({ editorKey: secureRandomId('question'), text: '', options: [{ ...emptyOption(), isCorrect: true }, emptyOption()] });
 const emptyDraft = () => ({
   sectionsEnabled: false,
   sections: [],
@@ -27,7 +28,7 @@ const emptyDraft = () => ({
 
 const fileAsDataUrl = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader();
-  reader.onload = () => resolve(String(reader.result || '').replace(/^data:;base64,/, 'data:application/octet-stream;base64,'));
+  reader.onload = () => resolve((typeof reader.result === 'string' ? reader.result : '').replace(/^data:;base64,/, 'data:application/octet-stream;base64,'));
   reader.onerror = () => reject(new Error('تعذرت قراءة الملف.'));
   reader.readAsDataURL(file);
 });
@@ -61,8 +62,9 @@ export default function ProgramEditorDialog({ open, program, saving, onOpenChang
           mimeType: attachment.mimeType || 'application/octet-stream',
         } : null,
         questions: program.questions.map((question) => ({
+          editorKey: secureRandomId('question'),
           text: question.text,
-          options: question.options.map(({ text, isCorrect }) => ({ text, isCorrect })),
+          options: question.options.map(({ text, isCorrect }) => ({ editorKey: secureRandomId('option'), text, isCorrect })),
         })),
       });
     }
@@ -112,13 +114,25 @@ export default function ProgramEditorDialog({ open, program, saving, onOpenChang
       ...(draft.contentText.trim() ? [{ type: 'text', value: draft.contentText.trim() }] : []),
       ...(draft.attachment ? [draft.attachment] : []),
     ],
-    questions: draft.manual ? [] : draft.questions,
+    questions: draft.manual ? [] : draft.questions.map(({ text, options }) => ({ text, options: options.map(({ text: optionText, isCorrect }) => ({ text: optionText, isCorrect })) })),
   });
 
+  const _resolveConditional = () => {
+    if (sectionMode) {
+      if (program) {
+        return 'تعديل القسم';
+      }
+      return 'إضافة قسم';
+    }
+    if (program) {
+      return 'تعديل البرنامج';
+    }
+    return 'إضافة برنامج';
+  };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92dvh] max-w-3xl overflow-y-auto [font-family:var(--font-ui)]" dir="rtl">
-        <DialogHeader><DialogTitle>{sectionMode ? (program ? 'تعديل القسم' : 'إضافة قسم') : (program ? 'تعديل البرنامج' : 'إضافة برنامج')}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{_resolveConditional()}</DialogTitle></DialogHeader>
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="sm:col-span-2">
@@ -179,7 +193,7 @@ export default function ProgramEditorDialog({ open, program, saving, onOpenChang
               </Button>
             </div>
             {draft.questions.map((question, questionIndex) => (
-              <div key={questionIndex} className="space-y-3 rounded-2xl border border-primary/15 bg-background/50 p-3 sm:p-4">
+              <div key={question.editorKey} className="space-y-3 rounded-2xl border border-primary/15 bg-background/50 p-3 sm:p-4">
                 <div className="flex gap-2">
                   <Input className="h-11 min-w-0 flex-1" placeholder={`السؤال ${questionIndex + 1}`} value={question.text} onChange={(event) => updateQuestion(questionIndex, { text: event.target.value })} />
                   <Button type="button" size="icon" variant="ghost" aria-label="حذف السؤال" onClick={() => setDraft({ ...draft, questions: draft.questions.filter((_, index) => index !== questionIndex) })}>
@@ -187,7 +201,7 @@ export default function ProgramEditorDialog({ open, program, saving, onOpenChang
                   </Button>
                 </div>
                 {question.options.map((option, optionIndex) => (
-                  <div key={optionIndex} className="flex items-center gap-2">
+                  <div key={option.editorKey} className="flex items-center gap-2">
                     <label className="grid min-h-11 cursor-pointer place-items-center px-1" title="تحديد الإجابة الصحيحة">
                       <input className="sr-only" aria-label="الإجابة الصحيحة" type="radio" name={`${fieldId}-correct-${questionIndex}`} checked={option.isCorrect} onChange={() => chooseCorrect(questionIndex, optionIndex)} />
                       <ProgramChoiceIndicator selected={option.isCorrect} />

@@ -17,7 +17,7 @@ test('authorized correction shares its expanded bounds between reading and savin
  const source = readFileSync(new URL('../server/index.js', import.meta.url),'utf8');
  assert.match(source,/getAllowedExecutionEnd\(connection, correctionPlan, taskEndPosition\(last\), first.taskType\)/);
  assert.match(source,/!administrativeCorrection && !canStudentSetQuranTaskEnd/);
- assert.match(source,/administrativeCorrection\s*\? await getAllowedExecutionEnd\(connection, plan, expectedEnd, first.taskType\)/);
+ assert.match(source,/if \(administrativeCorrection\) \{\s*allowedEnd = await getAllowedExecutionEnd\(connection, plan, expectedEnd, first.taskType\)/);
  const component = readFileSync(new URL('../src/components/dashboard/ExecutionCorrectionEndSelector.jsx',import.meta.url),'utf8');
  assert.match(component,/referenceMode !== 'page'/);
  assert.match(component,/correctionPageOptions\(options\)/);

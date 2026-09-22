@@ -14,11 +14,11 @@ const CategoriesTeamsView = ({ teamNames, onTeamChange, onSubmit }) => (
         <h1 className="categories-title">لعبة الفئات</h1>
         <form className="categories-form" onSubmit={onSubmit}>
           <label>
-            اسم الفريق الأول
+            <span>اسم الفريق الأول</span>
             <input value={teamNames[0]} placeholder="الفريق الأول" onChange={(event) => onTeamChange(0, event.target.value)} />
           </label>
           <label>
-            اسم الفريق الثاني
+            <span>اسم الفريق الثاني</span>
             <input value={teamNames[1]} placeholder="الفريق الثاني" onChange={(event) => onTeamChange(1, event.target.value)} />
           </label>
           <button type="submit" className="categories-primary-button">

@@ -55,7 +55,7 @@ test('student-only Mushaf route uses local pages, local fonts, and cached daily 
   assert.match(section, /\{studentId && \(/);
   assert.match(section, /حفظ علامة الصفحة/);
   assert.match(section, /toolbarControlClass/);
-  assert.match(indexDialog, /createPortal/);
+  assert.match(indexDialog, /<DialogContent/);
   assert.match(indexDialog, /aria-labelledby="student-mushaf-index-title"/);
   assert.doesNotMatch(section, /highlightRange=/);
   assert.match(section, /<PageBackButton onClick=\{onBack\} iconOnly/);
@@ -68,7 +68,7 @@ test('student-only Mushaf route uses local pages, local fonts, and cached daily 
   assert.match(indexDialog, /الأجزاء/);
   assert.match(indexDialog, /الصفحات/);
   assert.match(indexDialog, /العلامات/);
-  assert.match(indexDialog, /numericQuery\.match/);
+  assert.match(indexDialog, /\.exec\(numericQuery\)/);
   assert.match(indexDialog, /directAyah\.page/);
   assert.match(storage, /madarij_student_mushaf_/);
   assert.match(offlineService, /quran\/hafs\/pages\/\$\{page\}\.json/);

@@ -117,7 +117,7 @@ try {
         assert.equal(await page.getByRole('dialog').count(), 0);
         await page.evaluate(async () => {
           globalThis.localStorage.removeItem('test_offline');
-          const { syncOfflineActions } = await import('/src/services/offlineOperationsService.js');
+          const { syncOfflineActions } = await import(new globalThis.URL('src/services/offlineOperationsService.js', globalThis.location.origin).href);
           await syncOfflineActions(777, { force: true });
           globalThis.localStorage.setItem('test_offline', '1');
         });

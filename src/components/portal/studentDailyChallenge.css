@@ -17,13 +17,13 @@
 .daily-challenge-hero h1, .daily-challenge-result h1 { margin-top: .6rem; font-size: clamp(2rem, 7vw, 3.8rem); font-weight: 950; line-height: 1.15; }
 .daily-challenge-hero p, .daily-challenge-result p { max-width: 38rem; margin-top: .8rem; color: rgb(255 255 255 / 66%); font-weight: 700; line-height: 1.8; }
 .daily-challenge-spark { position: absolute; top: 18%; left: 14%; color: #f2bd4f; filter: drop-shadow(0 0 14px rgb(215 164 59 / 70%)); }
-.daily-challenge-primary { min-width: 13rem; min-height: 3.35rem; gap: .6rem; border-radius: 1rem; background: #d7a43b !important; color: #fff !important; font-weight: 950; box-shadow: 0 16px 40px rgb(215 164 59 / 28%); }
-.daily-challenge-points { display: flex; align-items: center; gap: .45rem; padding: .65rem 1rem; border: 1px solid rgb(215 164 59 / 35%); border-radius: 999px; background: rgb(215 164 59 / 14%); color: #f2bd4f; font-weight: 950; }
+.daily-challenge-primary { min-width: 13rem; min-height: 3.35rem; gap: .6rem; border-radius: 1rem; background: #d7a43b !important; color: #18343e !important; font-weight: 950; box-shadow: 0 16px 40px rgb(215 164 59 / 28%); }
+.daily-challenge-points { display: flex; align-items: center; gap: .45rem; padding: .65rem 1rem; border: 1px solid rgb(215 164 59 / 35%); border-radius: 999px; background: #123f49; color: #f2bd4f; font-weight: 950; }
 .daily-challenge-game { width: min(100% - 1.5rem, 68rem); margin: 0 auto; padding: 1.25rem 0 3rem; }
 .daily-challenge-game-title { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
 .daily-challenge-game-title span { color: rgb(255 255 255 / 52%); font-size: .78rem; font-weight: 800; }
 .daily-challenge-game-title h1 { font-size: clamp(1.45rem, 5vw, 2.25rem); font-weight: 950; }
-.daily-challenge-timer { display: flex; min-width: 5rem; align-items: center; justify-content: center; gap: .4rem; padding: .65rem .85rem; border: 1px solid rgb(215 164 59 / 35%); border-radius: 999px; background: rgb(215 164 59 / 13%); color: #f2bd4f; }
+.daily-challenge-timer { display: flex; min-width: 5rem; align-items: center; justify-content: center; gap: .4rem; padding: .65rem .85rem; border: 1px solid rgb(215 164 59 / 35%); border-radius: 999px; background: #123f49; color: #f2bd4f; }
 .daily-challenge-timer svg { width: 1.15rem; }
 .daily-challenge-board { min-height: min(68dvh, 40rem); padding: 1rem; border: 1px solid rgb(215 164 59 / 28%); border-radius: 1.75rem; background: rgb(0 31 45 / 66%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%), 0 24px 70px rgb(0 20 30 / 30%); backdrop-filter: blur(12px); }
 .daily-challenge-shape { display: block; width: min(var(--shape-size), 20vw); height: min(var(--shape-size), 20vw); flex: 0 0 auto; background: var(--shape-color); border: 2px solid rgb(255 255 255 / 72%); border-radius: .75rem; box-shadow: 0 12px 28px rgb(0 0 0 / 25%); }
@@ -46,7 +46,7 @@
 .daily-challenge-selection { display: flex; min-height: 7.25rem; align-items: center; justify-content: center; gap: .65rem; overflow-x: auto; padding: .85rem; border: 2px dashed rgb(215 164 59 / 48%); border-radius: 1.2rem; background: rgb(255 255 255 / 6%); }
 .daily-challenge-selection > p { color: rgb(255 255 255 / 60%); font-weight: 800; }
 .daily-challenge-selection > button { position: relative; flex: 0 0 auto; padding: .25rem; touch-action: manipulation; }
-.daily-challenge-selection b { position: absolute; top: -.3rem; right: -.3rem; z-index: 2; display: grid; width: 1.25rem; height: 1.25rem; place-items: center; border-radius: 99px; background: #d7a43b; color: #fff; font-size: .68rem; }
+.daily-challenge-selection b { position: absolute; top: -.3rem; right: -.3rem; z-index: 2; display: grid; width: 1.25rem; height: 1.25rem; place-items: center; border-radius: 99px; background: #d7a43b; color: #18343e; font-size: .68rem; }
 .daily-challenge-reset { width: 100%; gap: .45rem; color: rgb(255 255 255 / 76%) !important; }
 .daily-challenge-order-actions { display: grid; grid-template-columns: 1fr; gap: .65rem; }
 .daily-challenge-order-actions .daily-challenge-primary { width: 100%; }
@@ -68,9 +68,9 @@
 .daily-challenge-color-grid button:hover { transform: scale(1.06); }
 .daily-challenge-math { max-width: 42rem; margin: 2rem auto; text-align: center; }
 .daily-challenge-math > p { color: rgb(255 255 255 / 60%); font-weight: 800; }
-.daily-challenge-equation { margin: 1.25rem 0; padding: 2rem 1rem; border: 1px solid rgb(215 164 59 / 30%); border-radius: 1.5rem; background: rgb(255 255 255 / 6%); color: #f2bd4f; font-size: clamp(2.4rem, 10vw, 4.5rem); font-weight: 950; }
+.daily-challenge-equation { margin: 1.25rem 0; padding: 2rem 1rem; border: 1px solid rgb(215 164 59 / 30%); border-radius: 1.5rem; background: #154553; color: #f2bd4f; font-size: clamp(2.4rem, 10vw, 4.5rem); font-weight: 950; }
 .daily-challenge-options { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
-.daily-challenge-options button { min-height: 4rem; border: 1px solid rgb(215 164 59 / 28%); border-radius: 1rem; background: rgb(255 255 255 / 7%); color: #fff !important; font-size: 1.15rem; font-weight: 950; }
+.daily-challenge-options button { min-height: 4rem; border: 1px solid rgb(215 164 59 / 28%); border-radius: 1rem; background: #154553; color: #fff !important; font-size: 1.15rem; font-weight: 950; }
 .daily-challenge-submitting { display: flex; align-items: center; justify-content: center; gap: .45rem; padding: 1rem; color: rgb(255 255 255 / 65%); font-weight: 800; }
 @keyframes daily-challenge-pulse { to { transform: scale(1.15); opacity: .65; } }
 @keyframes daily-challenge-float { 50% { transform: translateY(-7px); } }

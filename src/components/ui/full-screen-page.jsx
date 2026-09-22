@@ -19,8 +19,19 @@ export default function FullScreenPage({ open, onClose, label, className, childr
       if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, [open]);
+  useEffect(() => {
+    const element = page.current;
+    if (!open || !element) return;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && element.contains(event.target)) {
+        event.stopPropagation();
+        onClose?.();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, onClose]);
   if (!open) return null;
   return createPortal(<section ref={page} tabIndex={-1} aria-label={label} dir="rtl"
-    onKeyDown={(event) => { if (event.key === 'Escape' && !event.defaultPrevented) { event.stopPropagation(); onClose?.(); } }}
     className={cn('fixed inset-0 z-50 flex h-dvh w-full flex-col overflow-hidden bg-background outline-none [font-family:var(--font-ui)]', className)}>{children}</section>, document.body);
 }

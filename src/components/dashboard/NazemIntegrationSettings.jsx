@@ -110,7 +110,7 @@ const NazemIntegrationSettings = ({ onConfigChange }) => {
     }
     try {
       setToggleBusy(true);
-      setConfig((current) => ({ ...(current || {}), enabled }));
+      setConfig((current) => ({ ...(current), enabled }));
       const updatedConfig = await nazemIntegrationApi.updateConfig(enabled);
       await load();
       onConfigChange?.(enabled, updatedConfig?.recitationAmountDay);
@@ -172,6 +172,23 @@ const NazemIntegrationSettings = ({ onConfigChange }) => {
   if (loadError && !config) return <ErrorState message={loadError} onRetry={load} />;
   if (!config) return <DashboardLoader />;
 
+  const _resolveNazemIntegrationSettings = () => {
+    if (loadError && accounts) {
+      return <output className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-900" >
+          <span>
+            تعذر تحديث حالة ناظم الآن. تظهر آخر بيانات محفوظة
+            {accountsCacheAt ? ` من ${new Intl.DateTimeFormat('ar-SA', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(accountsCacheAt))}` : ''}.
+          </span>
+          <Button type="button" variant="outline" className="min-h-11 bg-white" onClick={() => load()}>
+            إعادة المحاولة
+          </Button>
+        </output>;
+    }
+    if (loadError) {
+      return <ErrorState className="min-h-0" message={loadError} onRetry={load} />;
+    }
+    return null;
+  };
   return (
     <section className="space-y-4 border-t border-primary/15 p-4 [font-family:var(--font-ui)] sm:p-6" dir="rtl">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -188,19 +205,7 @@ const NazemIntegrationSettings = ({ onConfigChange }) => {
         </div>
       </div>
 
-      {loadError && accounts ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-900" role="status">
-          <span>
-            تعذر تحديث حالة ناظم الآن. تظهر آخر بيانات محفوظة
-            {accountsCacheAt ? ` من ${new Intl.DateTimeFormat('ar-SA', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(accountsCacheAt))}` : ''}.
-          </span>
-          <Button type="button" variant="outline" className="min-h-11 bg-white" onClick={() => load()}>
-            إعادة المحاولة
-          </Button>
-        </div>
-      ) : loadError ? (
-        <ErrorState className="min-h-0" message={loadError} onRetry={load} />
-      ) : null}
+      {_resolveNazemIntegrationSettings()}
 
       <SettingToggle
         label="ناظم"

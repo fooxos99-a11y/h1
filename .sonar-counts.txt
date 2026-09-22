@@ -1,0 +1,12 @@
+{
+  "sonar/no-nested-template-literals": 22,
+  "sonar/cognitive-complexity": 94,
+  "sonar/no-unused-function-argument": 28,
+  "sonar/void-use": 2,
+  "sonar/no-nested-assignment": 1,
+  "sonar/no-identical-functions": 5,
+  "sonar/no-inverted-boolean-check": 8,
+  "sonar/no-unused-vars": 1,
+  "sonar/no-nested-functions": 7,
+  "sonar/no-unused-collection": 1
+}

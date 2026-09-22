@@ -2,6 +2,7 @@ import express from 'express';
 import { db } from '../db.js';
 import { requirePermission } from '../services/dashboardPermissions.js';
 import { isUuid } from '../../shared/offline-recitation.js';
+import { countTrailingCharacter } from '../../shared/string-suffix.js';
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const IMAGE_DATA_PATTERN = /^data:image\/(?:png|jpe?g|webp);base64,[a-zA-Z0-9+/=]+$/;
@@ -12,7 +13,7 @@ const daysBetween = (from, to) => Math.floor((Date.parse(`${to}T00:00:00Z`) - Da
 
 const imageByteLength = (imageData) => {
   const base64 = String(imageData || '').split(',')[1] || '';
-  const padding = (base64.match(/=+$/) || [''])[0].length;
+  const padding = countTrailingCharacter(base64, '=');
   return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
 };
 

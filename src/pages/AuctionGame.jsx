@@ -1,3 +1,4 @@
+import { secureRandomId } from '../../shared/secure-random.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@/lib/router';
 import AuctionBoardView from '@/components/games/auction/AuctionBoardView';
@@ -15,11 +16,14 @@ const MAX_TEAMS = 10;
 const INITIAL_SCORE = 1000;
 const WIN_SCORE = 10000;
 
+const createTeamDrafts = (names) => names.map((name) => ({ id: secureRandomId('auction-team'), name }));
+
 const AuctionGame = () => {
   const navigate = useNavigate();
   const { introVisible, playIntro } = useGameIntro(true);
   const [step, setStep] = useState('teams');
-  const [teamNames, setTeamNames] = useState(['', '']);
+  const [teamDrafts, setTeamDrafts] = useState(() => createTeamDrafts(['', '']));
+  const teamNames = useMemo(() => teamDrafts.map((team) => team.name), [teamDrafts]);
   const [teams, setTeams] = useState([]);
   const [question, setQuestion] = useState(null);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -30,7 +34,7 @@ const AuctionGame = () => {
 
   const applyRemoteState = (state) => {
     if (!state?.started) return;
-    setTeamNames(Array.isArray(state.teamNames) ? state.teamNames : ['', '']);
+    setTeamDrafts(createTeamDrafts(Array.isArray(state.teamNames) ? state.teamNames : ['', '']));
     setTeams(Array.isArray(state.teams) ? state.teams : []);
     setQuestion(state.question || null);
     setShowAnswer(Boolean(state.showAnswer));
@@ -58,15 +62,15 @@ const AuctionGame = () => {
   }, [rankings]);
 
   const updateTeamName = (index, value) => {
-    setTeamNames((current) => current.map((name, nameIndex) => (nameIndex === index ? value : name)));
+    setTeamDrafts((current) => current.map((team, teamIndex) => (teamIndex === index ? { ...team, name: value } : team)));
   };
 
   const addTeam = () => {
-    setTeamNames((current) => current.length >= MAX_TEAMS ? current : [...current, '']);
+    setTeamDrafts((current) => current.length >= MAX_TEAMS ? current : [...current, ...createTeamDrafts([''])]);
   };
 
   const removeTeam = (index) => {
-    setTeamNames((current) => current.length <= MIN_TEAMS ? current : current.filter((_, itemIndex) => itemIndex !== index));
+    setTeamDrafts((current) => current.length <= MIN_TEAMS ? current : current.filter((_, itemIndex) => itemIndex !== index));
   };
 
   const submitTeams = async (event) => {
@@ -114,9 +118,9 @@ const AuctionGame = () => {
       const pool = phase === 'category'
         ? AUCTION_QUESTIONS.filter((item) => item.category !== question.category)
         : AUCTION_QUESTIONS.filter((item) => item.category === question.category && item.id !== question.id);
-      const fallbackPool = AUCTION_QUESTIONS.filter((item) => item.id !== question.id);
+      const fallbackQuestion = AUCTION_QUESTIONS.find((item) => item.id !== question.id);
       const nextQuestion = await pickUnusedQuestion('auction', pool);
-      setQuestion(nextQuestion || fallbackPool[0]);
+      setQuestion(nextQuestion || fallbackQuestion);
       setShowAnswer(false);
     } catch {
       alert('لا يوجد سؤال آخر متاح.');
@@ -161,7 +165,7 @@ const AuctionGame = () => {
 
   const resetGame = () => {
     setStep('teams');
-    setTeamNames(['', '']);
+    setTeamDrafts(createTeamDrafts(['', '']));
     setTeams([]);
     setQuestion(null);
     setShowAnswer(false);
@@ -197,6 +201,7 @@ const AuctionGame = () => {
         <GameIntroOverlay visible={introVisible} title="لعبة المزاد" />
         <AuctionTeamsView
           teamNames={teamNames}
+          teamKeys={teamDrafts.map((team) => team.id)}
           maxTeams={MAX_TEAMS}
           minTeams={MIN_TEAMS}
           isLoading={isLoading}

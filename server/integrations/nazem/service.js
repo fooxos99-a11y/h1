@@ -746,7 +746,7 @@ async function applyRemotePlanToRuwasi(connection, {
        WHERE id = ? LIMIT 1 FOR UPDATE`,
       [link.planId],
     );
-    if (!lockedPlan || lockedPlan.status !== 'active') {
+    if (lockedPlan?.status !== 'active') {
       throw reviewNazemError('خطة المنصة المرتبطة ليست نشطة.', 'RUWASI_PLAN_INACTIVE');
     }
     await connection.query(
@@ -830,7 +830,7 @@ async function loadStudentLink(connection, teacherId, studentId) {
      FROM nazem_student_links WHERE teacher_id = ? AND ruwasi_student_id = ? LIMIT 1`,
     [teacherId, studentId],
   );
-  if (!link || link.status !== 'linked' || !isNazemExternalStudentId(link.nazemStudentId)) {
+  if (link?.status !== 'linked' || !isNazemExternalStudentId(link.nazemStudentId)) {
     throw reviewNazemError('الطالب يحتاج إلى مطابقة مؤكدة مع طالب ناظم.', 'NAZEM_STUDENT_NOT_LINKED');
   }
   return link;
@@ -1061,7 +1061,7 @@ async function syncRecitation(connection, job) {
       'NAZEM_PLAN_SYNC_PENDING',
     );
   }
-  if (!planLink || planLink.syncStatus !== 'synced') {
+  if (planLink?.syncStatus !== 'synced') {
     throw reviewNazemError('يجب مزامنة خطة الطالب مع ناظم قبل التسميع.', 'NAZEM_PLAN_NOT_SYNCED');
   }
   const verificationOnly = !job.payload?.submissionTarget;
@@ -1287,9 +1287,16 @@ async function syncAttendance(connection, job) {
      ORDER BY (sync_status = 'synced') DESC, (ruwasi_plan_id = ?) DESC, id DESC LIMIT 1`,
     [job.teacherId, studentId, planId || 0],
   );
-  let targetPlan = planLink?.syncStatus === 'synced'
-    ? planLink
-    : (nazemPlanId ? { nazemPlanId: String(nazemPlanId), syncStatus: 'discovered' } : null);
+  const _resolveTargetPlan = () => {
+    if (planLink?.syncStatus === 'synced') {
+      return planLink;
+    }
+    if (nazemPlanId) {
+      return { nazemPlanId: String(nazemPlanId), syncStatus: 'discovered' };
+    }
+    return null;
+  };
+  let targetPlan = _resolveTargetPlan();
   if (!targetPlan?.nazemPlanId) {
     const [[candidate]] = await connection.query(
       `SELECT nazem_plan_id AS nazemPlanId
@@ -1444,8 +1451,16 @@ const remoteFollowUpMatchesLocal = (day, local = {}) => {
   const expectedId = local.nazemLateId || local.nazemSourceDayId;
   if (expectedId && String(day.id) !== String(expectedId)) return false;
   if (local.date && String(day.date || '').slice(0, 10) !== local.date) return false;
-  const requiredMetrics = local.remoteType === 'conserve' ? ['mistake', 'hearing', 'repetition']
-    : local.remoteType === 'revision' ? ['mistake', 'tune'] : [];
+  const _resolveRequiredMetrics = () => {
+    if (local.remoteType === 'conserve') {
+      return ['mistake', 'hearing', 'repetition'];
+    }
+    if (local.remoteType === 'revision') {
+      return ['mistake', 'tune'];
+    }
+    return [];
+  };
+  const requiredMetrics = _resolveRequiredMetrics();
   if (requiredMetrics.some(key => !Object.hasOwn(day, key))) return false;
   if (local.linkCount != null && local.remoteType === 'conserve' && !Object.hasOwn(day, 'link')) return false;
   if (remoteFollowUpCompleted(day) !== Boolean(local.completed)) return false;
@@ -1616,12 +1631,26 @@ async function saveRemoteFollowUp(connection, link, day) {
     const taskEnd = { page: task.toPage, surah: task.toSurah, ayah: task.toAyah };
     const taskCompleted = completed
       && compareNazemTaskPosition(authoritativeEnd, taskStart, direction) >= 0;
-    const taskActual = taskCompleted
-      ? (compareNazemTaskPosition(authoritativeEnd, taskEnd, direction) < 0 ? authoritativeEnd : taskEnd)
-      : null;
-    const executionState = taskCompleted
-      ? (compareNazemTaskPosition(taskActual, taskEnd, direction) < 0 ? 'partial' : 'complete')
-      : null;
+    const _resolveTaskActual = () => {
+      if (taskCompleted) {
+        if (compareNazemTaskPosition(authoritativeEnd, taskEnd, direction) < 0) {
+          return authoritativeEnd;
+        }
+        return taskEnd;
+      }
+      return null;
+    };
+    const taskActual = _resolveTaskActual();
+    const _resolveExecutionState = () => {
+      if (taskCompleted) {
+        if (compareNazemTaskPosition(taskActual, taskEnd, direction) < 0) {
+          return 'partial';
+        }
+        return 'complete';
+      }
+      return null;
+    };
+    const executionState = _resolveExecutionState();
     const mistakes = index === 0 ? totalErrors : 0;
     const evaluatedFaces = recitationFacesFromLines(taskStart, taskActual || taskEnd) || Number(task.targetPages || 1);
     const policy = getRecitationEvaluationPolicy(rewardSettings, { taskType: day.taskType, track, targetPages: task.targetPages, evaluatedFaces });

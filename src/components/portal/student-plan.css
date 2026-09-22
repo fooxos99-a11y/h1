@@ -58,8 +58,8 @@
 .student-plan-feedback-counts { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px 6px; font-weight: 800; }
 .student-plan-feedback-mark { display: block; padding-block: 3px; }
 .student-plan-feedback-quran { font-size: 16px; font-weight: 400; line-height: 1.6; }
-.student-plan-feedback [data-tone='mistake'] { color: #b42338; background: #ef44440a; }
-.student-plan-feedback [data-tone='warning'] { color: #8a5300; background: #f59e0b0a; }
+.student-plan-feedback [data-tone='mistake'] { color: #b42338; background: #fff1f2; }
+.student-plan-feedback [data-tone='warning'] { color: #8a5300; background: #fff7e6; }
 .dark .student-plan-feedback [data-tone='mistake'] { color: #fda4af; }
 .dark .student-plan-feedback [data-tone='warning'] { color: #fcd34d; }
 @media (prefers-reduced-motion: reduce) { .student-plan-progress-fill::before { animation: none; } }

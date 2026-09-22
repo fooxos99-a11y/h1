@@ -18,9 +18,13 @@ export default defineConfig(({ mode }) => {
     {
       name: 'site-branding',
       transformIndexHtml(html) {
-        const heroPreload = site.showPublicHeroLogo === false
-          ? ''
-          : `<link data-brand-hero-preload rel="preload" href="${base}${site.logo}" as="image"${site.logoSmall ? ` imagesrcset="${base}${site.logoSmall} 320w, ${base}${site.logo} 640w" imagesizes="min(72vw, 320px)"` : ''} fetchpriority="high" />`;
+        const _resolveHeroPreload = () => {
+          if (site.showPublicHeroLogo === false) {
+            return '';
+          }
+          return `<link data-brand-hero-preload rel="preload" href="${base}${site.logo}" as="image"${site.logoSmall ? ` imagesrcset="${base}${site.logoSmall} 320w, ${base}${site.logo} 640w" imagesizes="min(72vw, 320px)"` : ''} fetchpriority="high" />`;
+        };
+        const heroPreload = _resolveHeroPreload();
         return html
           .replace(/<title>.*?<\/title>/, `<title>${site.name}</title>`)
           .replace(/<meta name="description" content="[^"]*"\s*\/>/, renderSiteMetadata(site))

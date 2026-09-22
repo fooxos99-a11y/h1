@@ -19,9 +19,15 @@ const preferenceFields = Object.freeze([
   { key: 'linkMode', label: 'الربط' },
 ]);
 
-const normalizePreferences = (value = {}) => Object.fromEntries(
-  [...preferenceFields, { key: 'masteryMode' }].map(({ key }) => [key, value[key === 'masteryMode' ? 'memorizationMode' : key] === 'count' ? 'count' : 'mushaf']),
-);
+const normalizePreferences = (value = {}) => { return (Object.fromEntries(
+  [...preferenceFields, { key: 'masteryMode' }].map(({ key }) => { const _resolveNormalizePreferences = () => {
+                                                                     if (value[key === 'masteryMode' ? 'memorizationMode' : key] === 'count') {
+                                                                       return 'count';
+                                                                     }
+                                                                     return 'mushaf';
+                                                                   };
+                                                                   return ([key, _resolveNormalizePreferences()]); }),
+)); };
 
 const readCachedPreferences = (staffId) => {
   try {

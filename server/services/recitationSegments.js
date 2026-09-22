@@ -40,9 +40,13 @@ export async function buildRecitationSegmentDetails(connection, context, actualE
         : getQuranLineCoordinate(startLayout.startPage, startLayout.startLine);
       const descending = Number(start.surah) > Number(segment.end.surah)
         || Number(segment.startAfter?.surah) > Number(segment.end.surah);
-      const coveredLines = descending
-        ? descendingRecitationLines(start, segment.end, segment.startAfter)
-        : Math.abs(endCoordinate - startCoordinate) + (previousLayout ? 0 : 1);
+      const _resolveCoveredLines = () => {
+        if (descending) {
+          return descendingRecitationLines(start, segment.end, segment.startAfter);
+        }
+        return Math.abs(endCoordinate - startCoordinate) + (previousLayout ? 0 : 1);
+      };
+      const coveredLines = _resolveCoveredLines();
       amount = Math.max(0.01, Number((coveredLines / QURAN_LINES_PER_PAGE).toFixed(2)));
     } else {
       amount = await rangeFaces(connection, {

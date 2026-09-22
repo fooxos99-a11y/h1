@@ -1,6 +1,7 @@
 import React from 'react';
 import { Check } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
+import CheckboxOption from '@/components/ui/checkbox-option';
 
 const CommitteeMultiSelect = ({ committees = [], value = [], onChange }) => {
   const selected = new Set((Array.isArray(value) ? value : []).map(String));
@@ -18,21 +19,21 @@ const CommitteeMultiSelect = ({ committees = [], value = [], onChange }) => {
   const optionClassName = (checked) => `min-h-11 justify-start gap-2 touch-manipulation [font-family:var(--font-ui)] ${checked ? 'border-primary bg-primary/10 text-primary' : 'border-primary/20 bg-background'}`;
 
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="group" aria-label="حلقات يوم السرد" dir="rtl">
-      <Button type="button" variant="outline" role="checkbox" aria-checked={allSelected} onClick={selectAll} className={optionClassName(allSelected)}>
+    <fieldset className="min-w-0 m-0 border-0 p-0 grid grid-cols-1 gap-2 sm:grid-cols-2"  aria-label="حلقات يوم السرد" dir="rtl">
+      <CheckboxOption checked={allSelected} onCheckedChange={selectAll} className={buttonVariants({ variant: 'outline', className: optionClassName(allSelected) })}>
         <span className="flex h-5 w-5 items-center justify-center rounded border border-current">{allSelected && <Check className="h-4 w-4" />}</span>
-        جميع الحلقات
-      </Button>
+        <span>جميع الحلقات</span>
+      </CheckboxOption>
       {committees.map((committee) => {
         const checked = !allSelected && selected.has(String(committee.id));
         return (
-          <Button key={committee.id} type="button" variant="outline" role="checkbox" aria-checked={checked} onClick={() => toggleCommittee(committee.id)} className={optionClassName(checked)}>
+          <CheckboxOption key={committee.id} checked={checked} onCheckedChange={() => toggleCommittee(committee.id)} className={buttonVariants({ variant: 'outline', className: optionClassName(checked) })}>
             <span className="flex h-5 w-5 items-center justify-center rounded border border-current">{checked && <Check className="h-4 w-4" />}</span>
             <span className="truncate">{committee.name}</span>
-          </Button>
+          </CheckboxOption>
         );
       })}
-    </div>
+    </fieldset>
   );
 };
 

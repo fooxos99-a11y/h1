@@ -163,6 +163,34 @@ const StudentMushafSection = ({ studentId, onBack, initialTarget = null }) => {
     );
   }
 
+  const _resolveStudentMushafSection = () => {
+    if (pageData) {
+      return <MushafPageCarousel
+            index={displayedPage - 1}
+            total={MUSHAF_PAGE_COUNT}
+            pageNumber={displayedPage}
+            pageNumbers={MUSHAF_PAGES}
+            theme={theme}
+            pageAction={<StudentMushafPageControls pageNumber={displayedPage} />}
+            onIndexChange={(nextIndex) => goToPage(nextIndex + 1)}
+          >
+            <MadaniMushafPage
+              key={page}
+              page={pageData}
+              surahName={activeChapter?.name}
+              theme={theme}
+              fontReady={fontReady}
+            />
+          </MushafPageCarousel>;
+    }
+    if (pageError) {
+      return <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center">
+            <p className="font-bold text-muted-foreground">{pageError}</p>
+            <Button type="button" variant="outline" onClick={() => setLoadVersion((value) => value + 1)} className="h-11"><RotateCcw className="h-4 w-4" />إعادة المحاولة</Button>
+          </div>;
+    }
+    return <DashboardLoader className="h-full min-h-0" />;
+  };
   return (
     <section className={`student-mushaf-reader flex h-dvh min-h-0 w-full flex-col overflow-hidden overscroll-none ${theme === 'light' ? 'bg-slate-100' : 'bg-[#111827]'}`} aria-label="مصحف الطالب" data-reader-theme={theme}>
       <div className={`student-mushaf-toolbar z-30 grid shrink-0 items-center gap-2 border-b px-2 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] sm:px-3 ${theme === 'light' ? 'border-slate-200 bg-white/90 text-slate-900' : 'border-slate-600/70 bg-[#172033]/95 text-slate-100'}`}>
@@ -170,7 +198,7 @@ const StudentMushafSection = ({ studentId, onBack, initialTarget = null }) => {
         <Button type="button" variant="outline" size="icon" onClick={() => setIndexOpen(true)} className={`h-11 w-11 shrink-0 ${toolbarControlClass}`} aria-label="فتح فهرس المصحف"><List className="h-5 w-5" /></Button></div>
         <div className="min-w-0 text-center">
           <p className="truncate text-sm font-black">{activeChapter?.name || 'المصحف'}</p>
-          {todayTarget && displayedPage === todayTarget.page && <p className="truncate text-[10px] font-bold text-primary">{todayTarget.label || 'حفظ اليوم'}</p>}
+          {displayedPage === todayTarget?.page && <p className="truncate text-[10px] font-bold text-primary">{todayTarget.label || 'حفظ اليوم'}</p>}
         </div>
         <div className="flex items-center gap-2 justify-self-end">{studentId && (
           <Button
@@ -189,36 +217,11 @@ const StudentMushafSection = ({ studentId, onBack, initialTarget = null }) => {
       </div>
 
       {todayTarget?.ranges?.length > 1 && <div className={`flex shrink-0 gap-2 overflow-x-auto p-2 ${theme === 'light' ? 'bg-white' : 'bg-[#172033]'}`} aria-label="مقاطع المقدار">
-        {todayTarget.ranges.map((target, targetIndex) => <Button key={targetIndex} type="button" variant="outline" className={`min-h-11 shrink-0 ${toolbarControlClass}`} onClick={() => goToPage(target.page)}>{target.preview}</Button>)}
+        {todayTarget.ranges.map((target) => <Button key={`${target.page}:${target.preview}`} type="button" variant="outline" className={`min-h-11 shrink-0 ${toolbarControlClass}`} onClick={() => goToPage(target.page)}>{target.preview}</Button>)}
       </div>}
 
       <div className="relative min-h-0 flex-1">
-        {pageData ? (
-          <MushafPageCarousel
-            index={displayedPage - 1}
-            total={MUSHAF_PAGE_COUNT}
-            pageNumber={displayedPage}
-            pageNumbers={MUSHAF_PAGES}
-            theme={theme}
-            pageAction={<StudentMushafPageControls pageNumber={displayedPage} />}
-            onIndexChange={(nextIndex) => goToPage(nextIndex + 1)}
-          >
-            <MadaniMushafPage
-              key={page}
-              page={pageData}
-              surahName={activeChapter?.name}
-              theme={theme}
-              fontReady={fontReady}
-            />
-          </MushafPageCarousel>
-        ) : pageError ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center">
-            <p className="font-bold text-muted-foreground">{pageError}</p>
-            <Button type="button" variant="outline" onClick={() => setLoadVersion((value) => value + 1)} className="h-11"><RotateCcw className="h-4 w-4" />إعادة المحاولة</Button>
-          </div>
-        ) : (
-          <DashboardLoader className="h-full min-h-0" />
-        )}
+        {_resolveStudentMushafSection()}
       </div>
 
       <StudentMushafIndexDialog

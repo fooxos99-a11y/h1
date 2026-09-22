@@ -26,7 +26,7 @@ export default function SummitCitySceneFields({ city, onChange }) {
     </div>
     <div className="flex items-center justify-between gap-2"><h5 className="font-bold">صور الطريق</h5><Button type="button" variant="outline" className="min-h-11" disabled={!last || last.toKilometer <= last.fromKilometer || city.roads.length >= SUMMIT_MAX_ROAD_SEGMENTS} onClick={addRoad}><Plus className="h-4 w-4" />إضافة طريق</Button></div>
     <div className="grid gap-3 sm:grid-cols-2">
-      {city.roads.map((road, index) => <div key={index} className="space-y-3 rounded-xl border border-primary/15 p-3">
+      {city.roads.map((road, index) => <div key={road.fromKilometer} className="space-y-3 rounded-xl border border-primary/15 p-3">
         <div className="flex items-center justify-between gap-2"><span className="text-sm font-bold">الطريق: {road.fromKilometer}–{road.toKilometer} كم</span>{city.roads.length > 1 && <Button type="button" size="icon" variant="ghost" className="h-11 w-11 text-destructive" aria-label={`حذف الطريق ${index + 1}`} onClick={() => onChange({ roads: city.roads.filter((_, i) => i !== index) })}><Trash2 className="h-4 w-4" /></Button>}</div>
         <Label htmlFor={`road-end-${city.id}-${index}`}>إلى كيلومتر</Label>
         <Input id={`road-end-${city.id}-${index}`} type="number" min={road.fromKilometer} max={city.endKilometer} disabled={index === city.roads.length - 1} value={road.toKilometer} onChange={(event) => updateRoad(index, { toKilometer: event.target.value })} />

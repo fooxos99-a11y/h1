@@ -10,7 +10,7 @@ import {
 } from './services/platformOwnerAuth.js';
 
 const platformDatabase = process.env.PLATFORM_MYSQL_DATABASE || 'wajeh_platform';
-const databaseNamePattern = /^[a-zA-Z0-9_]+$/;
+const databaseNamePattern = /^\w+$/;
 
 if (!databaseNamePattern.test(platformDatabase)) {
   throw new Error('PLATFORM_MYSQL_DATABASE is invalid.');

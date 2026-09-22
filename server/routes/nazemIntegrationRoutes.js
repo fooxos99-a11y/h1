@@ -335,15 +335,22 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
            WHERE status IN ('pending', 'retrying')`,
         );
       }
-      const recitationAmountDay = enabled
-        ? 'same_day'
-        : (wasEnabled
-          ? (['same_day', 'previous_day'].includes(currentSettings.recitationAmountDayBeforeNazem)
-            ? currentSettings.recitationAmountDayBeforeNazem
-            : 'previous_day')
-          : (['same_day', 'previous_day'].includes(currentSettings.recitationAmountDay)
-            ? currentSettings.recitationAmountDay
-            : 'previous_day'));
+      const _resolveRecitationAmountDay = () => {
+        if (enabled) {
+          return 'same_day';
+        }
+        if (wasEnabled) {
+          if (['same_day', 'previous_day'].includes(currentSettings.recitationAmountDayBeforeNazem)) {
+            return currentSettings.recitationAmountDayBeforeNazem;
+          }
+          return 'previous_day';
+        }
+        if (['same_day', 'previous_day'].includes(currentSettings.recitationAmountDay)) {
+          return currentSettings.recitationAmountDay;
+        }
+        return 'previous_day';
+      };
+      const recitationAmountDay = _resolveRecitationAmountDay();
       await connection.commit();
       res.json({ enabled, recitationAmountDay });
     } catch (error) {
@@ -894,9 +901,19 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
         const sameLinkedPlan = linkedPlans.find((linked) => String(linked.nazemPlanId) === String(plan.nazemPlanId));
         const synced = parseSnapshot(sameLinkedPlan?.lastSyncedSnapshot);
         const baseline = synced?.remote || parseSnapshot(sameLinkedPlan?.remoteSnapshot);
-        const changeType = sameLinkedPlan
-          ? (baseline && !nazemPlanBundleMatches(remote, baseline) ? 'changed' : 'current')
-          : (linkedPlans.length ? 'new' : 'unlinked');
+        const _resolveChangeType = () => {
+          if (sameLinkedPlan) {
+            if (baseline && !nazemPlanBundleMatches(remote, baseline)) {
+              return 'changed';
+            }
+            return 'current';
+          }
+          if (linkedPlans.length) {
+            return 'new';
+          }
+          return 'unlinked';
+        };
+        const changeType = _resolveChangeType();
         list.push({
           id: Number(plan.id),
           nazemPlanId: plan.nazemPlanId,
@@ -945,11 +962,16 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
             localStudents,
             candidate.nazemStudentName,
           )?.candidate || null;
-          const suggestedStudent = identityMatch.length === 1
-            ? identityMatch[0]
-            : exact.length === 1
-              ? exact[0]
-              : closeNameMatch;
+          const _resolveSuggestedStudent = () => {
+            if (identityMatch.length === 1) {
+              return identityMatch[0];
+            }
+            if (exact.length === 1) {
+              return exact[0];
+            }
+            return closeNameMatch;
+          };
+          const suggestedStudent = _resolveSuggestedStudent();
           const plans = plansByStudent.get(candidate.nazemStudentId) || [];
           return {
             ...candidate,

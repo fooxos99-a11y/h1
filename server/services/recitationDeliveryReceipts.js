@@ -23,12 +23,26 @@ export async function loadRecitationDeliveryReceipts(connection, teacherId, date
     WHERE a.evaluator_id = ? AND a.session_date = ? AND a.is_official = 1
       AND EXISTS (SELECT 1 FROM supervisor_committees sc WHERE sc.supervisor_id = ? AND sc.committee_id = s.committee_id)
     ORDER BY s.name, t.task_date, a.id DESC`, [teacherId, teacherId, date, teacherId]);
-  return rows.map(({ remoteSnapshot, importedFromNazem, linkId, syncStatus, confirmedAt, nazemManaged, ...row }) => ({
+  return rows.map(({ remoteSnapshot, importedFromNazem, linkId, syncStatus, confirmedAt, nazemManaged, ...row }) => { const _resolveStatus = () => {
+                                                                                                                        if (!linkId) {
+                                                                                                                          if (Number(nazemManaged)) {
+                                                                                                                            return 'nazem_pending';
+                                                                                                                          }
+                                                                                                                          return 'server_saved';
+                                                                                                                        }
+                                                                                                                        if (['failed', 'blocked', 'requires_review', 'conflict'].includes(syncStatus)) {
+                                                                                                                          return 'nazem_failed';
+                                                                                                                        }
+                                                                                                                        if (syncStatus === 'synced' && confirmedAt && hasRemoteReceipt(remoteSnapshot)) {
+                                                                                                                          if (String(importedFromNazem) === 'true') {
+                                                                                                                            return 'nazem_adopted';
+                                                                                                                          }
+                                                                                                                          return 'nazem_confirmed';
+                                                                                                                        }
+                                                                                                                        return 'nazem_pending';
+                                                                                                                      };
+                                                                                                                      return ({
     ...row,
-    status: !linkId ? Number(nazemManaged) ? 'nazem_pending' : 'server_saved'
-      : ['failed', 'blocked', 'requires_review', 'conflict'].includes(syncStatus) ? 'nazem_failed'
-        : syncStatus === 'synced' && confirmedAt && hasRemoteReceipt(remoteSnapshot)
-          ? String(importedFromNazem) === 'true' ? 'nazem_adopted' : 'nazem_confirmed'
-          : 'nazem_pending',
-  }));
+    status: _resolveStatus(),
+  }); });
 }

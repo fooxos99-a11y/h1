@@ -83,14 +83,17 @@ const NazemConflictsDialog = ({ open, onOpenChange, onChanged }) => {
 
   const recitationConflictCount = rows?.filter((row) => row.entityType === 'recitation_day').length || 0;
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] max-w-4xl overflow-y-auto [font-family:var(--font-ui)]" dir="rtl">
-        <DialogHeader><DialogTitle>تعارضات ناظم</DialogTitle></DialogHeader>
-        {loadError ? <ErrorState message={loadError} onRetry={load} /> : !rows ? <DashboardLoader /> : rows.length === 0 ? (
-          <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">لا توجد تعارضات.</div>
-        ) : (
-          <div className="space-y-3">
+  const _resolveNazemConflictsDialog = () => {
+    if (loadError) {
+      return <ErrorState message={loadError} onRetry={load} />;
+    }
+    if (!rows) {
+      return <DashboardLoader />;
+    }
+    if (rows.length === 0) {
+      return <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">لا توجد تعارضات.</div>;
+    }
+    return <div className="space-y-3">
             {recitationConflictCount > 0 && (
               <Button
                 type="button"
@@ -114,8 +117,13 @@ const NazemConflictsDialog = ({ open, onOpenChange, onChanged }) => {
                 />
               </div>
             ))}
-          </div>
-        )}
+          </div>;
+  };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[88vh] max-w-4xl overflow-y-auto [font-family:var(--font-ui)]" dir="rtl">
+        <DialogHeader><DialogTitle>تعارضات ناظم</DialogTitle></DialogHeader>
+        {_resolveNazemConflictsDialog()}
       </DialogContent>
       <Dialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
         <DialogContent className="max-w-md [font-family:var(--font-ui)]" dir="rtl">

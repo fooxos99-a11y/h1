@@ -125,7 +125,7 @@ test('attendance points and repetition controls respect their execution actor an
   assert.doesNotMatch(catalog, /toggle\('allowRepeatCountEditing'/);
   assert.match(database, /\('allowRepeatCountEditing', 'false'\)/);
   assert.match(repeatSelector, /label = 'تكرار'/);
-  assert.match(repeatSelector, /compact \? `\$\{label\}: \$\{selected\}`/);
+  assert.match(repeatSelector, /if \(compact\) \{\s*return `\$\{label\}: \$\{selected\}`;/);
   assert.doesNotMatch(repeatSelector, /\$\{label\} \(\$\{selected\}\)/);
   assert.match(taskList, /ariaLabel=\{`عدد تكرارات حفظ/);
   assert.match(taskList, /TeacherRecitationPractice/);
@@ -139,13 +139,13 @@ test('attendance points and repetition controls respect their execution actor an
   assert.match(settings, /selectedEvaluationType\.repeatKey && \([\s\S]*settings\.nazemIntegrationEnabled \? \([\s\S]*كيلومترات كل تكرار/);
   assert.match(settings, /selectedEvaluationType\.listeningKey && \([\s\S]*settings\.nazemIntegrationEnabled \? \([\s\S]*كيلومترات السماع عند اختيار نعم/);
   assert.doesNotMatch(settings, /key !== 'repeatExecutionSource'/);
-  assert.match(taskList, /nazemManaged \? <ListeningChoice/);
+  assert.match(taskList, /if \(nazemManaged\) \{\s*return <ListeningChoice/);
   assert.match(taskList, /nazemManaged \|\| \['teacher', 'both'\]\.includes\(executionSources\?\.repeat/);
   assert.match(taskList, /editable=\{repeatEditable && \(nazemManaged \|\| \(allowRepeatCountEditing/);
   assert.match(taskList, /optionMax=\{nazemManaged \? 30/);
   assert.doesNotMatch(taskList, /اكتمل الإتقان|nazemCompleted|selectedCompletions/);
   assert.match(taskList, /const repeatEditable = teacherExecutionMode[\s\S]*action\.key === 'saved'/);
-  assert.match(taskList, /const defaultListeningCount = nazemManaged[\s\S]*\? 1/);
+  assert.match(taskList, /const _resolveDefaultListeningCount = \(\) => \{\s*if \(nazemManaged\) \{\s*return 1;/);
   assert.doesNotMatch(taskList, /key: 'compensation'|label: 'التعويض'|task\.nazemCompensation/);
   assert.doesNotMatch(server, /nazemCompensation:/);
   assert.match(listeningChoice, /value = 1/);

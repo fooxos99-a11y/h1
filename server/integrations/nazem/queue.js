@@ -299,7 +299,7 @@ export async function enqueueNazemPlanDeletion(connection, { planId, studentId, 
   });
 }
 
-export function resolveNazemRecitationBarrier(rows = [], dailyTaskType) {
+export function resolveNazemRecitationBarrier(rows = [], dailyTaskType = undefined) {
   const primary = rows.filter((row) => row.taskType === dailyTaskType);
   const ready = primary.length > 0
     && primary.every((row) => Number(row.attemptId || 0) > 0);
@@ -667,7 +667,16 @@ export async function completeNazemJob(connection, job, metadata = null) {
 
 export async function failNazemJob(connection, job, error) {
   const retryable = Boolean(error?.retryable) && job.attemptCount < job.maxAttempts;
-  const status = retryable ? 'retrying' : (error?.retryable ? 'failed' : (error?.syncStatus || 'failed'));
+  const _resolveStatus = () => {
+    if (retryable) {
+      return 'retrying';
+    }
+    if (error?.retryable) {
+      return 'failed';
+    }
+    return error?.syncStatus || 'failed';
+  };
+  const status = _resolveStatus();
   const delaySeconds = retryable
     ? Math.min(45, 5 * (3 ** Math.max(0, job.attemptCount - 1)))
     : 0;

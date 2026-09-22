@@ -15,7 +15,7 @@ class NazemIntegrationError extends Error {
   }
 }
 
-export const transientNazemError = (message, code = 'NAZEM_TRANSIENT', cause) => (
+export const transientNazemError = (message, code = 'NAZEM_TRANSIENT', cause = undefined) => (
   new NazemIntegrationError(message, { code, retryable: true, status: 'retrying', cause })
 );
 
@@ -23,7 +23,7 @@ export const blockedNazemError = (message, code = 'NAZEM_BLOCKED') => (
   new NazemIntegrationError(message, { code, retryable: false, status: 'blocked' })
 );
 
-export const reviewNazemError = (message, code = 'NAZEM_REQUIRES_REVIEW', cause) => (
+export const reviewNazemError = (message, code = 'NAZEM_REQUIRES_REVIEW', cause = undefined) => (
   new NazemIntegrationError(message, { code, retryable: false, status: 'requires_review', cause })
 );
 

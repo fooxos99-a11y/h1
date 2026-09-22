@@ -27,11 +27,11 @@ const LetterHiveTeamsView = ({
           </div>
           <form onSubmit={onSubmit} className="letter-hive-entry-form">
             <label>
-              اسم الفريق الأول
+              <span>اسم الفريق الأول</span>
               <input value={teamNames[0]} placeholder="الأحمر" onChange={(event) => onTeamChange(0, event.target.value)} />
             </label>
             <label>
-              اسم الفريق الثاني
+              <span>اسم الفريق الثاني</span>
               <input value={teamNames[1]} placeholder="الأخضر" onChange={(event) => onTeamChange(1, event.target.value)} />
             </label>
 

@@ -30,11 +30,18 @@ const ScatterArena = ({ items, disabled, onPick, sizeByItem }) => (
   </div>
 );
 
-const RoundProgress = ({ current, total }) => (
-  <div className="daily-challenge-step-progress" aria-label={`الجولة ${current + 1} من ${total}`}>
-    {Array.from({ length: total }, (_, index) => <span key={index} className={index < current ? 'is-complete' : index === current ? 'is-current' : ''} />)}
-  </div>
-);
+const RoundProgress = ({ current, total }) => { return (<div className="daily-challenge-step-progress" aria-label={`الجولة ${current + 1} من ${total}`}>
+    {Array.from({ length: total }, (_, index) => { const _resolveClassName = () => {
+                                                     if (index < current) {
+                                                       return 'is-complete';
+                                                     }
+                                                     if (index === current) {
+                                                       return 'is-current';
+                                                     }
+                                                     return '';
+                                                   };
+                                                   return (<span key={index} className={_resolveClassName()} />); })}
+  </div>); };
 
 const ClassicDailyChallengeGame = ({ attempt, onSubmit, disabled }) => {
   const { gameType, challenge } = attempt;
@@ -82,7 +89,16 @@ const ClassicDailyChallengeGame = ({ attempt, onSubmit, disabled }) => {
   }, [memorizing]);
 
   if (gameType === 'color_difference') {
-    const columns = currentRound.colors.length <= 9 ? 3 : currentRound.colors.length <= 16 ? 4 : 5;
+    const _resolveColumns = () => {
+      if (currentRound.colors.length <= 9) {
+        return 3;
+      }
+      if (currentRound.colors.length <= 16) {
+        return 4;
+      }
+      return 5;
+    };
+    const columns = _resolveColumns();
     return (
       <div className={`daily-challenge-round daily-challenge-classic-game ${roundTransitioning ? 'is-leaving' : ''}`} key={roundIndex}>
         <div className="daily-challenge-round-heading"><b>الجولة {roundIndex + 1} من {rounds.length}</b><span>اعثر على المربع المختلف قليلًا</span></div>

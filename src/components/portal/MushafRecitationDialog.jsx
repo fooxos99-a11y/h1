@@ -296,7 +296,7 @@ const MushafRecitationDialog = ({
   };
   const activePageNumber = Number(activeEntry?.page?.page || 0);
   const activeFontResolved = activePageNumber > 0
-    && Object.prototype.hasOwnProperty.call(fontStatusByPage, activePageNumber);
+    && Object.hasOwn(fontStatusByPage, activePageNumber);
   const activeFontReady = fontStatusByPage[activePageNumber] === true;
 
   useEffect(() => {
@@ -325,20 +325,12 @@ const MushafRecitationDialog = ({
     && rangesOverlap(pendingEntry.page.words || [], mark, pendingMark)
   )));
 
-  return (
-    <>
-      <FullScreenPage open={open} onClose={() => onOpenChange?.(false)} label="جلسة التسميع" className={mushafTheme === 'light' ? 'bg-slate-100' : 'bg-[#111827]'}>
-          <div className={`flex min-h-0 flex-1 flex-col ${mushafTheme === 'light' ? 'bg-slate-100' : 'bg-[#111827]'}`}>
-            <div className="flex shrink-0 items-center justify-between px-2 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] sm:px-3">
-              <PageBackButton onClick={() => onOpenChange?.(false)} label="العودة" iconOnly />
-              {secondaryAction}
-              <MushafThemeSwitch theme={mushafTheme} onChange={changeMushafTheme} />
-            </div>
-            <div className="min-h-0 flex-1 sm:px-2 sm:pb-2">
-              {isLoading ? (
-                <div className="flex h-full items-center justify-center text-primary" role="status" aria-label="جاري التحميل"><LoadingSpinner size="lg" /></div>
-              ) : loadError ? (
-                <div className="flex h-full flex-col items-center justify-center gap-4 px-5 pb-[env(safe-area-inset-bottom)] text-center" role="alert">
+  const _resolveMushafRecitationDialog = () => {
+    if (isLoading) {
+      return <output className="flex h-full items-center justify-center text-primary"  aria-label="جاري التحميل"><LoadingSpinner size="lg" /></output>;
+    }
+    if (loadError) {
+      return <div className="flex h-full flex-col items-center justify-center gap-4 px-5 pb-[env(safe-area-inset-bottom)] text-center" role="alert">
                   <span className={`flex h-14 w-14 items-center justify-center rounded-2xl ${mushafTheme === 'light' ? 'bg-red-100 text-red-700' : 'bg-red-500/15 text-red-300'}`}>
                     <AlertTriangle className="h-7 w-7" />
                   </span>
@@ -346,9 +338,10 @@ const MushafRecitationDialog = ({
                   <Button type="button" onClick={() => setLoadVersion((value) => value + 1)} className="h-12 min-w-40 rounded-xl">
                     <RotateCcw className="h-4 w-4" />إعادة المحاولة
                   </Button>
-                </div>
-              ) : activeEntry && activeFontResolved ? (
-                <MushafPageCarousel
+                </div>;
+    }
+    if (activeEntry && activeFontResolved) {
+      return <MushafPageCarousel
                   index={activeEntryIndex}
                   total={entries.length}
                   pageNumber={activeEntry.page.page}
@@ -374,10 +367,21 @@ const MushafRecitationDialog = ({
                     onSelectionMove={(index) => setSelection((current) => current?.taskId === activeEntry.task.id && current?.page === activeEntry.page.page ? { ...current, endIndex: index } : current)}
                     onSelectionEnd={finishSelection}
                   />
-                </MushafPageCarousel>
-              ) : (
-                <div className="flex h-full items-center justify-center px-4 pb-[env(safe-area-inset-bottom)] text-center font-bold text-muted-foreground">لا توجد صفحات للتسميع.</div>
-              )}
+                </MushafPageCarousel>;
+    }
+    return <div className="flex h-full items-center justify-center px-4 pb-[env(safe-area-inset-bottom)] text-center font-bold text-muted-foreground">لا توجد صفحات للتسميع.</div>;
+  };
+  return (
+    <>
+      <FullScreenPage open={open} onClose={() => onOpenChange?.(false)} label="جلسة التسميع" className={mushafTheme === 'light' ? 'bg-slate-100' : 'bg-[#111827]'}>
+          <div className={`flex min-h-0 flex-1 flex-col ${mushafTheme === 'light' ? 'bg-slate-100' : 'bg-[#111827]'}`}>
+            <div className="flex shrink-0 items-center justify-between px-2 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] sm:px-3">
+              <PageBackButton onClick={() => onOpenChange?.(false)} label="العودة" iconOnly />
+              {secondaryAction}
+              <MushafThemeSwitch theme={mushafTheme} onChange={changeMushafTheme} />
+            </div>
+            <div className="min-h-0 flex-1 sm:px-2 sm:pb-2">
+              {_resolveMushafRecitationDialog()}
             </div>
           </div>
       </FullScreenPage>

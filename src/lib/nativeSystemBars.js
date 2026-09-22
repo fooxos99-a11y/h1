@@ -2,9 +2,16 @@ export function getNativeBarAppearance(root, backgroundColor) {
   const surface = root.dataset.nativeSurface;
   const dark = surface === 'dark' || (surface !== 'light' && root.classList.contains('dark'));
   const channels = backgroundColor.match(/^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
-  const color = channels
-    ? `#${channels.slice(1, 4).map((channel) => Math.min(255, Number(channel)).toString(16).padStart(2, '0')).join('')}`
-    : dark ? '#020617' : '#f1f5f9';
+  const _resolveColor = () => {
+    if (channels) {
+      return `#${channels.slice(1, 4).map((channel) => Math.min(255, Number(channel)).toString(16).padStart(2, '0')).join('')}`;
+    }
+    if (dark) {
+      return '#020617';
+    }
+    return '#f1f5f9';
+  };
+  const color = _resolveColor();
   return { style: dark ? 'DARK' : 'LIGHT', color };
 }
 

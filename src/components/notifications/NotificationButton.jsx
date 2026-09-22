@@ -62,16 +62,25 @@ const NotificationButton = ({ showTrigger = true, presentation = 'dialog', open:
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && !open && <span className="absolute -left-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-black text-white">{Math.min(99, unreadCount)}</span>}
       </Button>);
-  const content = <>          {isNativeNotificationsAvailable() && <Button variant="outline" className="min-h-11" onClick={() => void enableDeviceNotifications().catch((e) => setError(e.message))}>تفعيل إشعارات الجهاز</Button>}
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain">
-            {loading ? <LoadingIndicator className="py-3" /> : notifications.length ? notifications.map((notification) => (
+  const _resolveContent = () => {
+    if (loading) {
+      return <LoadingIndicator className="py-3" />;
+    }
+    if (notifications.length) {
+      return notifications.map((notification) => (
               <button key={notification.id} type="button" onClick={() => markRead(notification)} className={`w-full rounded-xl border p-3 text-right transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${notification.isRead ? 'border-primary/10 bg-background/60' : 'border-primary/35 bg-primary/10'}`}>
                 <div className="break-words font-black text-foreground">{notification.title}</div>
                 <p className="mt-1 whitespace-pre-wrap break-words text-sm font-bold leading-6 text-muted-foreground">{notification.body}</p>
                 <div className="mt-2 text-xs font-bold text-muted-foreground">{notification.createdAt}</div>
               </button>
-            )) : <div className="py-3 text-right text-xs font-bold text-muted-foreground">لا توجد إشعارات.</div>}
+            ));
+    }
+    return <div className="py-3 text-right text-xs font-bold text-muted-foreground">لا توجد إشعارات.</div>;
+  };
+  const content = <>          {isNativeNotificationsAvailable() && <Button variant="outline" className="min-h-11" onClick={() => void enableDeviceNotifications().catch((e) => setError(e.message))}>تفعيل إشعارات الجهاز</Button>}
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain">
+            {_resolveContent()}
           </div>
 </>;
   if (presentation === 'popover') return <Popover open={open} onOpenChange={setOpen}>

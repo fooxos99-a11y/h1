@@ -14,7 +14,7 @@ test('narration day uses header actions and compact completed student cards', as
   assert.match(section, /aria-label="إنهاء يوم السرد"/);
   assert.match(section, /aria-label="أرشيف أيام السرد"/);
   assert.doesNotMatch(section, /<CardHeader/);
-  assert.match(studentPanel, /student\.status === 'completed' \? 'تم الانتهاء'/);
+  assert.match(studentPanel, /if \(student\.status === 'completed'\) \{\s*return 'تم الانتهاء';/);
   assert.match(studentPanel, /bg-emerald-600/);
   assert.match(studentPanel, /part\.rangeLabel \|\| `الجزء \$\{part\.juzNumber\}`/);
   assert.doesNotMatch(studentPanel, /صفحة \{part\.startPage\}|تم تقييم \{evaluatedParts\.length\}/);

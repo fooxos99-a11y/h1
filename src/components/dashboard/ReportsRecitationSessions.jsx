@@ -5,20 +5,24 @@ import { getQuranTaskLabel } from '@/lib/quranTaskLabels';
 
 const formatNumber = (value = 0) => Number(value || 0).toLocaleString('ar-SA-u-nu-latn');
 
-const statusClassName = (row) => (
-  getRecitationStatusLabel(row) === 'لم يُستكمل'
-    ? 'text-amber-600 dark:text-amber-300'
-    : row.executionState === 'extra'
-    ? 'text-sky-600 dark:text-sky-300'
-    : row.executionState === 'partial'
-    ? 'text-amber-600 dark:text-amber-300'
-    :
-  row.teacherCompleted === true
-    ? 'text-emerald-600 dark:text-emerald-300'
-    : row.teacherCompleted === false
-    ? 'text-red-600 dark:text-red-300'
-    : 'text-muted-foreground'
-);
+const statusClassName = (row) => {
+  if (getRecitationStatusLabel(row) === 'لم يُستكمل') {
+    return 'text-amber-600 dark:text-amber-300';
+  }
+  if (row.executionState === 'extra') {
+    return 'text-sky-600 dark:text-sky-300';
+  }
+  if (row.executionState === 'partial') {
+    return 'text-amber-600 dark:text-amber-300';
+  }
+  if (row.teacherCompleted === true) {
+    return 'text-emerald-600 dark:text-emerald-300';
+  }
+  if (row.teacherCompleted === false) {
+    return 'text-red-600 dark:text-red-300';
+  }
+  return 'text-muted-foreground';
+};
 
 const ReportsRecitationSessions = ({ rows = [] }) => {
   const studentCards = useMemo(() => {

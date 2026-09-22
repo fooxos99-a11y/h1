@@ -29,23 +29,16 @@ const ContactMessagesSection = () => {
     });
   }, [toast]);
 
-  return (
-    <Card className="border-primary/30 bg-card [font-family:var(--font-ui)]">
-      <CardHeader className="border-b border-primary/20">
-        <h2 className="flex items-center gap-2 text-xl font-black text-foreground">
-          <MessageSquare className="h-5 w-5 text-primary" />
-          رسائل التواصل
-        </h2>
-      </CardHeader>
-      <CardContent className="pt-6">
-        {loading ? (
-          <DashboardLoader />
-        ) : rows.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-primary/20 py-12 text-center text-sm font-bold text-muted-foreground">
+  const _resolveContactMessagesSection = () => {
+    if (loading) {
+      return <DashboardLoader />;
+    }
+    if (rows.length === 0) {
+      return <div className="rounded-2xl border border-dashed border-primary/20 py-12 text-center text-sm font-bold text-muted-foreground">
             لا توجد رسائل تواصل حاليًا.
-          </div>
-        ) : (
-          <div className="space-y-3">
+          </div>;
+    }
+    return <div className="space-y-3">
             {rows.map((message) => (
               <article key={message.id} className="rounded-2xl border border-border bg-background p-4 sm:p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -70,8 +63,18 @@ const ContactMessagesSection = () => {
                 )}
               </article>
             ))}
-          </div>
-        )}
+          </div>;
+  };
+  return (
+    <Card className="border-primary/30 bg-card [font-family:var(--font-ui)]">
+      <CardHeader className="border-b border-primary/20">
+        <h2 className="flex items-center gap-2 text-xl font-black text-foreground">
+          <MessageSquare className="h-5 w-5 text-primary" />
+          رسائل التواصل
+        </h2>
+      </CardHeader>
+      <CardContent className="pt-6">
+        {_resolveContactMessagesSection()}
       </CardContent>
 
     </Card>

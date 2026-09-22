@@ -102,17 +102,23 @@ const StudentExecutionCorrectionsSection = () => {
     const form = forms[task.key] || initialForm(task);
     setSavingKey(task.key);
     try {
-      await studentsApi.saveStudentExecutionCorrection(studentId, {
-        taskIds: task.taskIds,
-        date,
-        status: form.status,
-        ...(form.status === 'done' ? {
+      const _resolveSave = () => {
+        if (form.status === 'done') {
+          return {
           actualEnd: form.actualEnd,
           ...(task.taskType === 'memorization' ? {
             repeatCount: form.repeatCount,
             listeningCount: form.listeningCount,
           } : {}),
-        } : {}),
+        };
+        }
+        return {};
+      };
+      await studentsApi.saveStudentExecutionCorrection(studentId, {
+        taskIds: task.taskIds,
+        date,
+        status: form.status,
+        ...(_resolveSave()),
       });
       toast({ title: 'حُفظ تصحيح التنفيذ' });
       await loadTasks();
@@ -125,52 +131,16 @@ const StudentExecutionCorrectionsSection = () => {
 
   if (isLoadingStudents) return <DashboardLoader className="min-h-[420px]" />;
 
-  return (
-    <Card className="border-primary/30 bg-card [font-family:var(--font-ui)]" dir="rtl">
-      <CardHeader className="border-b border-primary/15 p-4">
-        <h2 className="text-xl font-black text-primary">تصحيح تنفيذ الطلاب</h2>
-      </CardHeader>
-      <CardContent className="space-y-4 p-3 sm:p-4">
-        <div className="grid grid-cols-[minmax(0,1fr)_8.75rem] items-end gap-2 sm:grid-cols-[minmax(16rem,1fr)_10rem] sm:gap-3">
-          <div className="space-y-2">
-            <Label>الطالب</Label>
-            <Select value={studentId} onValueChange={setStudentId}>
-              <SelectTrigger
-                aria-label="الطالب"
-                className="h-10 min-w-0 px-2 text-xs sm:h-11 sm:px-3 sm:text-sm [&>span]:truncate"
-              >
-                <SelectValue placeholder="اختر الطالب" />
-              </SelectTrigger>
-              <SelectContent>
-                {students.map((student) => (
-                  <SelectItem key={student.id} value={String(student.id)}>
-                    {student.committeeName ? `${student.name} — ${student.committeeName}` : student.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="min-w-0 space-y-2">
-            <Label htmlFor="student-execution-correction-date">التاريخ</Label>
-            <Input
-              id="student-execution-correction-date"
-              type="date"
-              max={yesterday}
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
-              className="h-10 min-w-0 px-2 text-xs sm:h-11 sm:text-sm"
-            />
-          </div>
-        </div>
-
-        {isLoadingTasks ? (
-          <DashboardLoader className="min-h-48" />
-        ) : tasks.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-primary/20 p-8 text-center text-sm text-muted-foreground">
+  const _resolveStudentExecutionCorrectionsSection = () => {
+    if (isLoadingTasks) {
+      return <DashboardLoader className="min-h-48" />;
+    }
+    if (tasks.length === 0) {
+      return <div className="rounded-xl border border-dashed border-primary/20 p-8 text-center text-sm text-muted-foreground">
             لا يوجد تنفيذ لهذا الطالب في التاريخ المحدد.
-          </div>
-        ) : (
-          <div className="space-y-3">
+          </div>;
+    }
+    return <div className="space-y-3">
             {tasks.map((task) => {
               const form = forms[task.key] || initialForm(task);
               const label = taskLabel(task);
@@ -250,8 +220,47 @@ const StudentExecutionCorrectionsSection = () => {
                 </div>
               );
             })}
+          </div>;
+  };
+  return (
+    <Card className="border-primary/30 bg-card [font-family:var(--font-ui)]" dir="rtl">
+      <CardHeader className="border-b border-primary/15 p-4">
+        <h2 className="text-xl font-black text-primary">تصحيح تنفيذ الطلاب</h2>
+      </CardHeader>
+      <CardContent className="space-y-4 p-3 sm:p-4">
+        <div className="grid grid-cols-[minmax(0,1fr)_8.75rem] items-end gap-2 sm:grid-cols-[minmax(16rem,1fr)_10rem] sm:gap-3">
+          <div className="space-y-2">
+            <Label>الطالب</Label>
+            <Select value={studentId} onValueChange={setStudentId}>
+              <SelectTrigger
+                aria-label="الطالب"
+                className="h-10 min-w-0 px-2 text-xs sm:h-11 sm:px-3 sm:text-sm [&>span]:truncate"
+              >
+                <SelectValue placeholder="اختر الطالب" />
+              </SelectTrigger>
+              <SelectContent>
+                {students.map((student) => (
+                  <SelectItem key={student.id} value={String(student.id)}>
+                    {student.committeeName ? `${student.name} — ${student.committeeName}` : student.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        )}
+          <div className="min-w-0 space-y-2">
+            <Label htmlFor="student-execution-correction-date">التاريخ</Label>
+            <Input
+              id="student-execution-correction-date"
+              type="date"
+              max={yesterday}
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+              className="h-10 min-w-0 px-2 text-xs sm:h-11 sm:text-sm"
+            />
+          </div>
+        </div>
+
+        {_resolveStudentExecutionCorrectionsSection()}
       </CardContent>
     </Card>
   );

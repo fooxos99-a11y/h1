@@ -1,4 +1,3 @@
-import { getBusinessDate } from '../../shared/business-date.js';
 
 export function getManualAttendancePoints(settings, status) {
   if (status === 'present') return Math.max(0, Number(settings.attendancePoints || 0));

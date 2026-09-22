@@ -84,27 +84,18 @@ const TeacherPointsAdjustmentSection = () => {
 
   if (isLoading) return <DashboardLoader className="min-h-[360px]" />;
 
-  return (
-    <div className="space-y-4 [font-family:var(--font-ui)]" dir="rtl">
-      <Card className="border-primary/30 bg-card">
-        <CardHeader className="border-b border-primary/15 p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-bold text-muted-foreground">
-              المتبقي في الفصل: <span className="text-primary">{rewardUnits.format(term.remaining)}</span> من {rewardUnits.format(term.limit)}
-            </p>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4 p-4 sm:p-5">
-          {students.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-primary/20 p-8 text-center font-bold text-muted-foreground">
+  const _resolveTeacherPointsAdjustmentSection = () => {
+    if (students.length === 0) {
+      return <div className="rounded-xl border border-dashed border-primary/20 p-8 text-center font-bold text-muted-foreground">
               لا يوجد طلاب في حلقتك.
-            </div>
-          ) : types.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-primary/20 p-8 text-center font-bold text-muted-foreground">
+            </div>;
+    }
+    if (types.length === 0) {
+      return <div className="rounded-xl border border-dashed border-primary/20 p-8 text-center font-bold text-muted-foreground">
               لم تُضبط أنواع الإضافة والخصم من الإعدادات بعد.
-            </div>
-          ) : (
-            <>
+            </div>;
+    }
+    return <>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="teacher-points-student">اسم الطالب</Label>
@@ -160,8 +151,20 @@ const TeacherPointsAdjustmentSection = () => {
               <Button type="button" className="min-h-12 w-full touch-manipulation sm:w-auto sm:min-w-32" onClick={save} disabled={isSaving || !canSave} loading={isSaving}>
                 حفظ
               </Button>
-            </>
-          )}
+            </>;
+  };
+  return (
+    <div className="space-y-4 [font-family:var(--font-ui)]" dir="rtl">
+      <Card className="border-primary/30 bg-card">
+        <CardHeader className="border-b border-primary/15 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-bold text-muted-foreground">
+              المتبقي في الفصل: <span className="text-primary">{rewardUnits.format(term.remaining)}</span> من {rewardUnits.format(term.limit)}
+            </p>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 p-4 sm:p-5">
+          {_resolveTeacherPointsAdjustmentSection()}
         </CardContent>
       </Card>
     </div>

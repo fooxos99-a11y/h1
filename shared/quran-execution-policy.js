@@ -11,7 +11,7 @@ export function compareQuranPositionInDirection(first = {}, second = {}, directi
     || Number(first.page || 0) - Number(second.page || 0);
 }
 
-const rangePosition = (range = {}, prefix) => ({
+const rangePosition = (range = {}, prefix = undefined) => ({
   page: Number(range[`${prefix}Page`] || 0),
   surah: Number(range[`${prefix}Surah`] || 0),
   ayah: Number(range[`${prefix}Ayah`] || 0),
@@ -79,11 +79,16 @@ export function canStudentSetQuranTaskEnd(settings = {}, taskType = '', comparis
   const comparison = Math.sign(Number(comparisonToAssignedEnd || 0));
   if (comparison === 0) return true;
   if (comparison < 0) {
-    const editableKey = taskType === 'review'
-      ? 'studentReviewAmountEditable'
-      : taskType === 'link'
-        ? 'studentLinkAmountEditable'
-        : 'studentTaskAmountEditable';
+    const _resolveEditableKey = () => {
+      if (taskType === 'review') {
+        return 'studentReviewAmountEditable';
+      }
+      if (taskType === 'link') {
+        return 'studentLinkAmountEditable';
+      }
+      return 'studentTaskAmountEditable';
+    };
+    const editableKey = _resolveEditableKey();
     return isEnabled(settings[editableKey], true);
   }
   return taskType === 'memorization'

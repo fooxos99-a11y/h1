@@ -1,8 +1,8 @@
 // Persist classifications only. Browser errors can contain credentials, headers or URLs.
 export function nazemErrorDiagnostics(error) {
   const message = String(error?.cause?.message || '');
-  const httpStatus = Number(message.match(/\bHTTP (\d{3})\b/)?.[1]);
-  const networkCode = message.match(/\b(ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN)\b/)?.[1];
+  const httpStatus = Number(/\bHTTP (\d{3})\b/.exec(message)?.[1]);
+  const networkCode = /\b(ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN)\b/.exec(message)?.[1];
   const stage = ['session-check', 'login-form', 'login-submit', 'dashboard-ready', 'target-resolution', 'post-write-verification'].includes(error?.details?.stage)
     ? error.details.stage : null;
   return {

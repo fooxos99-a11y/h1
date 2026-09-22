@@ -6,7 +6,7 @@ export const PLATFORM_POLICY_VALUES = Object.freeze({
   tenant: 'tenant',
 });
 
-const number = (key, label, defaultValue, min = 0, max) => ({
+const number = (key, label, defaultValue, min = 0, max = undefined) => ({
   key, label, type: 'number', defaultValue, min, ...(max === undefined ? {} : { max }),
 });
 const text = (key, label, defaultValue = '', type = 'text') => ({ key, label, type, defaultValue });

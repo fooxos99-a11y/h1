@@ -66,7 +66,7 @@ for (const [engineName, engine] of [['chromium', chromium], ['webkit', webkit]])
         await page.getByRole('option', { name: 'الثاني' }).click();
         await page.getByRole('button', { name: 'إغلاق النافذة' }).click();
         await page.getByRole('dialog').waitFor({ state: 'hidden' });
-        await page.waitForFunction(() => !globalThis.document.body.hasAttribute('data-scroll-locked') && globalThis.getComputedStyle(globalThis.document.body).pointerEvents !== 'none');
+        await page.waitForFunction(() => globalThis.document.body.dataset.scrollLocked === undefined && globalThis.getComputedStyle(globalThis.document.body).pointerEvents !== 'none');
       }
       await page.getByRole('button', { name: 'نهاية الصفحة' }).focus();
       await page.keyboard.press('End');

@@ -265,9 +265,9 @@ const SummitJourneySection = ({ onBack }) => {
       <SummitJourneyMap journey={visibleJourney} onStageClick={openStation} />
 
       {visibleJourney.reachedSummit && (
-        <div className="absolute inset-0 z-[150] grid place-items-center overflow-hidden bg-[#102b3c]/88 p-5 text-center backdrop-blur" role="dialog" aria-label="الوصول إلى النهاية">
+        <dialog className="m-0 max-w-none h-full w-full border-0 absolute inset-0 z-[150] grid place-items-center overflow-hidden bg-[#102b3c]/88 p-5 text-center backdrop-blur" open aria-label="الوصول إلى النهاية">
           <div className="relative max-w-lg rounded-[2rem] border border-white/60 bg-white p-8 text-slate-900 shadow-2xl"><Flag className="mx-auto h-16 w-16 text-primary" /><h2 className="mt-4 text-3xl font-black">وصلت إلى {journey.mapConfig.goal.name}</h2><p className="mt-3 text-slate-600">أكملت الرحلة وقطعت {Number(journey.totalKilometers).toLocaleString('ar-SA-u-nu-latn')} كيلومتر.</p><Button className="mt-6" onClick={onBack}>العودة للرئيسية</Button></div>
-        </div>
+        </dialog>
       )}
 
       <Dialog open={notificationOpen} onOpenChange={() => {}}>

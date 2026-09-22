@@ -11,13 +11,16 @@ export async function listenForDeviceNotifications({ onNotification, onOpen, onE
   const { PushNotifications } = await import('@capacitor/push-notifications');
   const handles = [];
   try {
-    handles.push(await PushNotifications.addListener('registration', ({ value }) => {
+    const listeners = [['registration', ({ value }) => {
       device = { platform: Capacitor.getPlatform(), token: value };
       void studentsApi.registerNotificationDevice(device).catch(() => onError('تعذر تسجيل الجهاز للإشعارات.'));
-    }));
-    handles.push(await PushNotifications.addListener('registrationError', () => onError('تعذر تفعيل إشعارات الجهاز.')));
-    handles.push(await PushNotifications.addListener('pushNotificationReceived', onNotification));
-    handles.push(await PushNotifications.addListener('pushNotificationActionPerformed', onOpen));
+    }],
+    ['registrationError', () => onError('تعذر تفعيل إشعارات الجهاز.')],
+    ['pushNotificationReceived', onNotification],
+    ['pushNotificationActionPerformed', onOpen]];
+    for (const [event, listener] of listeners) {
+      handles.push(await PushNotifications.addListener(event, listener));
+    }
     const permission = await requestNativeNotificationPermission(PushNotifications);
     const status = await studentsApi.getPushStatus();
     if (status[Capacitor.getPlatform()] && permission.receive === 'granted') await PushNotifications.register();

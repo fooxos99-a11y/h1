@@ -33,7 +33,7 @@ export function requestDiagnostics(req, res, next) {
     const key = `${req.method} ${route}`;
     const metricKey = routeMetrics.has(key) || routeMetrics.size < 256 ? key : 'other';
     const metric = routeMetrics.get(metricKey) || { count: 0, errors: 0, aborted: 0, totalMs: 0,
-      maxMs: 0, sqlMs: 0, poolWaitMs: 0, histogram: Array(latencyBoundsMs.length + 1).fill(0) };
+      maxMs: 0, sqlMs: 0, poolWaitMs: 0, histogram: new Array(latencyBoundsMs.length + 1).fill(0) };
     metric.count += 1;
     metric.errors += Number(res.statusCode >= 500);
     metric.aborted += Number(!res.writableFinished);

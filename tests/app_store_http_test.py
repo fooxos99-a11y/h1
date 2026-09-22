@@ -38,8 +38,10 @@ class AppStoreHttpTests(unittest.TestCase):
             self.assertIsNone(request_json("/reviewSubmissionItems/abc-123", "fixture-token", "DELETE"))
 
     def test_redirects_are_rejected(self):
+        handler = NoRedirects()
+        response = io.BytesIO()
         with self.assertRaises(ValueError):
-            NoRedirects().redirect_request(None, io.BytesIO(), 302, "Found", {}, "https://evil.test")
+            handler.redirect_request(None, response, 302, "Found", {}, "https://evil.test")
 
 
 if __name__ == "__main__":

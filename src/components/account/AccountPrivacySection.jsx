@@ -73,6 +73,34 @@ const AccountPrivacySection = ({ compact = false, allowDeletion = true, embedded
   if (isLoading && (!compact || embeddedConfirmation)) return <DashboardLoader className={embeddedConfirmation ? 'min-h-32' : 'min-h-[360px]'} />;
 
   const isPending = request?.status === 'pending';
+  const _resolveActions = () => {
+    if (isPending) {
+      return <Button
+          type="button"
+          variant={compact ? 'link' : 'outline'}
+          className={compact
+            ? 'min-h-11 w-full px-2 py-1 text-xs font-bold text-muted-foreground underline-offset-4 hover:text-destructive hover:underline'
+            : 'min-h-11 gap-2 rounded-xl'}
+          onClick={cancelRequest}
+          loading={isSaving}
+        >
+          إلغاء طلب الحذف
+        </Button>;
+    }
+    if (compact) {
+      return <Button
+          type="button"
+          variant="link"
+          className="min-h-11 w-full px-2 py-1 text-xs font-bold text-muted-foreground underline-offset-4 hover:text-destructive hover:underline"
+          onClick={() => setConfirmOpen(true)}
+        >
+          طلب حذف الحساب
+        </Button>;
+    }
+    return <Button variant="destructive" className="min-h-11 w-full justify-center gap-2 rounded-xl" onClick={() => setConfirmOpen(true)}>
+          <Trash2 className="h-4 w-4" /> طلب حذف الحساب
+        </Button>;
+  };
   const actions = (
     <>
       {request && !compact && (
@@ -97,32 +125,7 @@ const AccountPrivacySection = ({ compact = false, allowDeletion = true, embedded
             <Button type="button" variant="destructive" className="min-h-11" onClick={createRequest} loading={isSaving}>تأكيد</Button>
           </DialogFooter>
         </>
-      ) : allowDeletion && (isPending ? (
-        <Button
-          type="button"
-          variant={compact ? 'link' : 'outline'}
-          className={compact
-            ? 'min-h-11 w-full px-2 py-1 text-xs font-bold text-muted-foreground underline-offset-4 hover:text-destructive hover:underline'
-            : 'min-h-11 gap-2 rounded-xl'}
-          onClick={cancelRequest}
-          loading={isSaving}
-        >
-          إلغاء طلب الحذف
-        </Button>
-      ) : compact ? (
-        <Button
-          type="button"
-          variant="link"
-          className="min-h-11 w-full px-2 py-1 text-xs font-bold text-muted-foreground underline-offset-4 hover:text-destructive hover:underline"
-          onClick={() => setConfirmOpen(true)}
-        >
-          طلب حذف الحساب
-        </Button>
-      ) : (
-        <Button variant="destructive" className="min-h-11 w-full justify-center gap-2 rounded-xl" onClick={() => setConfirmOpen(true)}>
-          <Trash2 className="h-4 w-4" /> طلب حذف الحساب
-        </Button>
-      ))}
+      ) : allowDeletion && (_resolveActions())}
     </>
   );
 

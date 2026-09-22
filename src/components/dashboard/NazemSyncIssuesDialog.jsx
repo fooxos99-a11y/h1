@@ -56,13 +56,14 @@ const NazemSyncIssuesDialog = ({ account, open, onOpenChange, onQueued, inline =
     }
   };
 
-  const content = (<>
-        {error ? (
-          <ErrorState message={error} onRetry={load} />
-        ) : !data ? (
-          <DashboardLoader />
-        ) : (
-          <div className="space-y-3 overflow-y-auto">
+  const _resolveContent = () => {
+    if (error) {
+      return <ErrorState message={error} onRetry={load} />;
+    }
+    if (!data) {
+      return <DashboardLoader />;
+    }
+    return <div className="space-y-3 overflow-y-auto">
             {data.accountIssue && (
               <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-sm font-bold leading-6 text-amber-800">
                 {data.accountIssue.message}
@@ -100,8 +101,10 @@ const NazemSyncIssuesDialog = ({ account, open, onOpenChange, onQueued, inline =
                 لا توجد أخطاء مزامنة تحتاج مراجعة.
               </div>
             )}
-          </div>
-        )}
+          </div>;
+  };
+  const content = (<>
+        {_resolveContent()}
   </>);
   if (inline) return content;
   return (

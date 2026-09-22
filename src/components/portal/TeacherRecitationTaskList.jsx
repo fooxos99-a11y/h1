@@ -69,7 +69,7 @@ const TeacherRecitationTaskList = ({
       if (teacherAttendanceMode && !studentById.has(studentId)) return;
       if (!map.has(studentId)) {
         map.set(studentId, {
-          ...(studentById.get(studentId) || {}),
+          ...(studentById.get(studentId)),
           studentId: task.studentId,
           studentName: task.studentName,
           tasks: [],
@@ -148,13 +148,17 @@ const TeacherRecitationTaskList = ({
               ? action.tasks[0]?.actualRepeatCount
               : action.tasks[0]?.expectedRepeatCount,
           ) || 1));
-          const defaultListeningCount = nazemManaged
-            ? 1
-            : Math.max(1, Number(
+          const _resolveDefaultListeningCount = () => {
+            if (nazemManaged) {
+              return 1;
+            }
+            return Math.max(1, Number(
               repeatClaimedByStudent
                 ? action.tasks[0]?.actualListeningCount
                 : action.tasks[0]?.expectedListeningCount || listeningCount,
             ) || 1);
+          };
+          const defaultListeningCount = _resolveDefaultListeningCount();
           const actionAmount = action.empty ? 'لا يوجد محفوظ للربط' : formatContinuousRecitationRange(action.tasks);
           const amountControl = teacherExecutionMode
             && !hasNazemFixedRange(action.tasks[0])
@@ -196,15 +200,21 @@ const TeacherRecitationTaskList = ({
               ariaLabel={`عدد تكرارات حفظ ${student.studentName}`} value={selectedRepeatCounts[actionKey] ?? defaultRepeatCount}
               onChange={(value) => setSelectedRepeatCounts((current) => ({ ...current, [actionKey]: value }))} compact />
           ) : null;
-          const listeningControl = action.key === 'saved' && listeningEnabled ? (
-            nazemManaged ? <ListeningChoice label="" value={selectedListeningCounts[actionKey] ?? defaultListeningCount}
+          const _resolveListeningControl = () => {
+            if (action.key === 'saved' && listeningEnabled) {
+              if (nazemManaged) {
+                return <ListeningChoice label="" value={selectedListeningCounts[actionKey] ?? defaultListeningCount}
               disabled={!repeatEditable} ariaLabel={`هل استمع ${student.studentName}؟`}
-              onChange={(value) => setSelectedListeningCounts((current) => ({ ...current, [actionKey]: value }))} compact />
-            : <RepeatCountSelector label="" editable={repeatEditable && allowListeningCountEditing && !repeatClaimedByStudent}
+              onChange={(value) => setSelectedListeningCounts((current) => ({ ...current, [actionKey]: value }))} compact />;
+              }
+              return <RepeatCountSelector label="" editable={repeatEditable && allowListeningCountEditing && !repeatClaimedByStudent}
               max={Number(action.tasks[0]?.expectedListeningCount || listeningCount || 3)} ariaLabel={`عدد مرات سماع ${student.studentName}`}
               value={selectedListeningCounts[actionKey] ?? defaultListeningCount}
-              onChange={(value) => setSelectedListeningCounts((current) => ({ ...current, [actionKey]: value }))} compact />
-          ) : null;
+              onChange={(value) => setSelectedListeningCounts((current) => ({ ...current, [actionKey]: value }))} compact />;
+            }
+            return null;
+          };
+          const listeningControl = _resolveListeningControl();
           return {
             action,
             actionKey,
@@ -226,6 +236,27 @@ const TeacherRecitationTaskList = ({
         const actionOrder = ['saved', 'link', 'review', 'mastery'];
         const position = (item) => actionOrder.indexOf(item.action.key === 'mastery' && !memorizationView ? 'saved' : item.action.key);
         const displayActionViews = [...actionViews].sort((a, b) => position(a) - position(b));
+        const _resolveTeacherRecitationTaskList = () => {
+          if (student.recitationPending || student.recitationSyncFailed) {
+            return 'حُفظت النتيجة';
+          }
+          if (student.recitationFinished || (student.tasks.length > 0 && pendingTasks.length === 0)) {
+            return 'اكتمل التسميع';
+          }
+          if (student.nazemManaged) {
+            if (student.amountRefreshPending) {
+              return 'جارٍ تحديث مقدار الجلسة من ناظم';
+            }
+            if (student.amountRefreshDelayed) {
+              return 'تأخر تحديث مقدار الجلسة من ناظم';
+            }
+            if (student.amountRefreshFailed) {
+              return 'تعذر تحديث مقدار الجلسة من ناظم';
+            }
+            return 'لم يصل مقدار الجلسة من ناظم بعد';
+          }
+          return 'لا يوجد مقدار للتسميع';
+        };
         return (
           <div key={student.studentId} className="recitation-reference-card">
             <div className="min-w-0">
@@ -305,23 +336,14 @@ const TeacherRecitationTaskList = ({
                 <TeacherRecitationPractice repeatControl={memorizationView?.repeatControl} listeningControl={memorizationView?.listeningControl} />
               )}
 
-              {missingLinkCount && <div className="mt-2 text-xs text-muted-foreground [font-family:var(--font-ui)]" role="status">
+              {missingLinkCount && <output className="mt-2 text-xs text-muted-foreground [font-family:var(--font-ui)]" >
                 تعذر جلب عدد الربط من ناظم.
                 {onRefresh && <Button type="button" variant="ghost" className="min-h-11" onClick={onRefresh}>إعادة المحاولة</Button>}
-              </div>}
+              </output>}
 
               {canRecite && !hasRecitationTasks && (
                 <span className="self-center text-xs font-bold text-muted-foreground">
-                  {student.recitationPending || student.recitationSyncFailed
-                    ? 'حُفظت النتيجة'
-                    : student.recitationFinished || (student.tasks.length > 0 && pendingTasks.length === 0)
-                    ? 'اكتمل التسميع'
-                    : student.nazemManaged
-                      ? student.amountRefreshPending ? 'جارٍ تحديث مقدار الجلسة من ناظم'
-                        : student.amountRefreshDelayed ? 'تأخر تحديث مقدار الجلسة من ناظم'
-                        : student.amountRefreshFailed ? 'تعذر تحديث مقدار الجلسة من ناظم'
-                          : 'لم يصل مقدار الجلسة من ناظم بعد'
-                      : 'لا يوجد مقدار للتسميع'}
+                  {_resolveTeacherRecitationTaskList()}
                 </span>
               )}
 
@@ -335,10 +357,17 @@ const TeacherRecitationTaskList = ({
                     const mistakeCount = groupTasks.reduce((total, task) => total + Number(task.mistakeCount || 0), 0);
                     const warningCount = groupTasks.reduce((total, task) => total + Number(task.warningCount || 0), 0);
                     const marks = groupTasks.flatMap((task) => task.ayahMarks || []);
+                    const _resolveTeacherCompleted = () => {
+                      if (groupTasks.some((task) => task.teacherCompleted === false)) {
+                        return false;
+                      }
+                      if (groupTasks.every((task) => task.teacherCompleted === true)) {
+                        return true;
+                      }
+                      return null;
+                    };
                     const statusLabel = getRecitationStatusLabel({
-                      teacherCompleted: groupTasks.some((task) => task.teacherCompleted === false)
-                        ? false
-                        : groupTasks.every((task) => task.teacherCompleted === true) ? true : null,
+                      teacherCompleted: _resolveTeacherCompleted(),
                       teacherRatingKey: groupTasks.find((task) => task.teacherRatingKey)?.teacherRatingKey,
                       nazemSource: groupTasks.some((task) => Boolean(task.nazemSource)),
                       mistakeCount,

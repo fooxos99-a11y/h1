@@ -33,12 +33,12 @@ import { getStudentNextDayPreview, nameStudentPreviewTasks } from './services/st
 import { filterPlanMarksByLatestAttempt } from './services/studentPlanMarks.js';
 import { notificationRouter, notificationManagementRouter } from './routes/notificationRoutes.js';
 import cors from 'cors';
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 import ExcelJS from 'exceljs';
 import express from 'express';
 import { memorizedSegments } from './services/memorizedSegments.js';
-import nodeFs from 'fs';
-import fs from 'fs/promises';
+import nodeFs from 'node:fs';
+import fs from 'node:fs/promises';
 import os from 'node:os';
 import nodePath from 'node:path';
 import PDFDocument from 'pdfkit';
@@ -77,7 +77,7 @@ import {
   normalizeDailyChallengeGames,
 } from '../shared/daily-challenge.js';
 import { BUSINESS_DAY_START_TIME, getBusinessDateTimeParts as getSaudiDateTimeParts } from '../shared/business-date.js';
-import { isUuid } from '../shared/offline-recitation.js';
+import { isUuid, OFFLINE_RECITATION_MAX_BATCH } from '../shared/offline-recitation.js';
 import { resolveNazemPlanResumeDate } from '../shared/nazem-integration.js';
 import { getRecitationStatusLabel } from '../shared/recitation-evaluation.js';
 import {
@@ -153,7 +153,7 @@ import { getNazemQuranPosition } from './integrations/nazem/quranPosition.js';
 import { buildNazemTenantScope } from './integrations/nazem/tenantScope.js';
 import { selectNazemFirstActionableTasks } from './integrations/nazem/taskSelection.js';
 import { nazemEvaluationEndDateSql } from './integrations/nazem/evaluationScope.js';
-import { OFFLINE_RECITATION_MAX_BATCH } from '../shared/offline-recitation.js';
+
 import {
   platformFeatureSettingKeys,
 } from '../shared/platform-settings-catalog.js';
@@ -162,24 +162,14 @@ import { normalizeTeacherPointTypes } from '../shared/teacher-point-types.js';
 import { normalizeFamilyRankingMode, rankFamilies } from '../shared/family-rankings.js';
 import { normalizeSummitMapConfig } from '../shared/summit-map.js';
 import { calculateRecitationScore, getRecitationEvaluationPolicy } from '../shared/evaluation-settings.js';
-import {
-  compareQuranPositionInDirection,
-  orderQuranRangesBeforePosition,
-} from '../shared/quran-execution-policy.js';
+import { compareQuranPositionInDirection, orderQuranRangesBeforePosition, canStudentExecuteQuranTask, canStudentSetQuranTaskEnd, canTeacherExecuteQuranTask, getQuranTaskExecutionSource, hasStudentQuranExecution, normalizeQuranExecutionSource } from '../shared/quran-execution-policy.js';
 import { normalizeOptionalAccountNumber } from '../shared/account-contact.js';
 import { buildForwardQuranFaceRange } from '../shared/quran-face-range.js';
 import {
   getRecitationAmountDayOffset,
   normalizeRecitationAmountDay,
 } from '../shared/recitation-amount-day.js';
-import {
-  canStudentExecuteQuranTask,
-  canStudentSetQuranTaskEnd,
-  canTeacherExecuteQuranTask,
-  getQuranTaskExecutionSource,
-  hasStudentQuranExecution,
-  normalizeQuranExecutionSource,
-} from '../shared/quran-execution-policy.js';
+
 import {
   applyPlatformPolicies,
   readPlatformPoliciesFromRows,
@@ -190,20 +180,21 @@ const port = Number(process.env.API_PORT || 3002);
 const siteConfig = getSiteConfig();
 function currentSiteConfig() {
   const tenant = getDatabaseContext().tenant;
-  return tenant
-    ? {
+  if (tenant) {
+    return {
       ...siteConfig,
       key: tenant.registrationNumber ? `tenant-${tenant.registrationNumber}` : siteConfig.key,
       registrationNumber: tenant.registrationNumber,
       complexName: tenant.name,
       whatsappUrl: siteConfig.whatsappUrl || '',
-    }
-    : siteConfig;
+    };
+  }
+  return siteConfig;
 }
 const WEEK_DAYS = [0, 1, 2, 3, 4, 5, 6];
 const DEFAULT_WEEKLY_HOLIDAY_DAYS = [5, 6];
 const DEFAULT_RECITATION_SESSION_DAYS = [0, 1, 2, 3, 4];
-const QURAN_DAILY_TASK_TYPES = ['memorization', 'repeat', 'review', 'link'];
+const QURAN_DAILY_TASK_TYPES = new Set(['memorization', 'repeat', 'review', 'link']);
 const QURAN_EXTRA_FORWARD_FACES = 50;
 const QURAN_LINES_PER_PAGE = 15;
 const qcfMushafPageCache = new Map();
@@ -750,6 +741,51 @@ function translateActivityDetails(details = {}) {
 function describeActivity(req) {
   const path = req.path;
   const method = req.method;
+  const _resolveRules = () => {
+    if (method === 'DELETE') {
+      return 'حذف إداري';
+    }
+    if (method === 'PUT') {
+      return 'تعديل إداري';
+    }
+    return 'إضافة إداري';
+  };
+  const _resolveRules2 = () => {
+    if (method === 'PATCH') {
+      return 'تغيير حالة مقرئ';
+    }
+    if (method === 'PUT') {
+      return 'تعديل مقرئ';
+    }
+    return 'إضافة مقرئ';
+  };
+  const _resolveRules3 = () => {
+    if (method === 'DELETE') {
+      return 'حذف حلقة';
+    }
+    if (method === 'PUT') {
+      return 'تعديل حلقة';
+    }
+    return 'إضافة حلقة';
+  };
+  const _resolveRules4 = () => {
+    if (method === 'DELETE') {
+      return 'حذف معلم';
+    }
+    if (method === 'PUT') {
+      return 'تعديل معلم';
+    }
+    return 'إضافة معلم';
+  };
+  const _resolveRules5 = () => {
+    if (method === 'DELETE') {
+      return 'حذف طالب';
+    }
+    if (method === 'PUT') {
+      return 'تعديل طالب';
+    }
+    return 'إضافة طالب';
+  };
   const rules = [
     [/\/dashboard-permissions\/\d+$/, 'تعديل صلاحيات معلم', 'supervisor'],
     [/\/students\/\d+\/attendance$/, 'تسجيل حضور طالب', 'student'],
@@ -766,15 +802,15 @@ function describeActivity(req) {
     [/\/students\/bulk$/, 'إضافة طلاب جماعياً', 'student'],
     [/\/students\/\d+\/committee$/, 'نقل طالب بين الحلقات', 'student'],
     [/\/homepage-stats$/, 'تعديل إحصاءات الواجهة', 'settings'],
-    [/\/administrators/, method === 'DELETE' ? 'حذف إداري' : method === 'PUT' ? 'تعديل إداري' : 'إضافة إداري', 'administrator'],
-    [/\/reciters/, method === 'PATCH' ? 'تغيير حالة مقرئ' : method === 'PUT' ? 'تعديل مقرئ' : 'إضافة مقرئ', 'reciter'],
-    [/\/families/, method === 'DELETE' ? 'حذف حلقة' : method === 'PUT' ? 'تعديل حلقة' : 'إضافة حلقة', 'family'],
-    [/\/supervisors/, method === 'DELETE' ? 'حذف معلم' : method === 'PUT' ? 'تعديل معلم' : 'إضافة معلم', 'supervisor'],
-    [/\/students/, method === 'DELETE' ? 'حذف طالب' : method === 'PUT' ? 'تعديل طالب' : 'إضافة طالب', 'student'],
+    [/\/administrators/, _resolveRules(), 'administrator'],
+    [/\/reciters/, _resolveRules2(), 'reciter'],
+    [/\/families/, _resolveRules3(), 'family'],
+    [/\/supervisors/, _resolveRules4(), 'supervisor'],
+    [/\/students/, _resolveRules5(), 'student'],
   ];
   const matched = rules.find(([pattern]) => pattern.test(path));
   if (!matched) return null;
-  const entityId = path.match(/\/(\d+)(?:\/|$)/)?.[1] || null;
+  const entityId = /\/(\d+)(?:\/|$)/.exec(path)?.[1] || null;
 
   return {
     action: matched[1],
@@ -786,12 +822,12 @@ function describeActivity(req) {
 async function resolveActivityTarget(req, activity) {
   const path = req.path.replace(/^\/api/, '');
   const queries = [];
-  const studentPath = path.match(/\/students\/(\d+)(?:\/|$)/);
-  const familyPath = path.match(/\/families\/(\d+)(?:\/|$)/);
-  const supervisorPath = path.match(/\/supervisors\/(\d+)(?:\/|$)/);
-  const reciterPath = path.match(/\/reciters\/(\d+)(?:\/|$)/);
-  const administratorPath = path.match(/\/administrators\/(\d+)(?:\/|$)/);
-  const permissionPath = path.match(/\/dashboard-permissions\/(\d+)$/);
+  const studentPath = /\/students\/(\d+)(?:\/|$)/.exec(path);
+  const familyPath = /\/families\/(\d+)(?:\/|$)/.exec(path);
+  const supervisorPath = /\/supervisors\/(\d+)(?:\/|$)/.exec(path);
+  const reciterPath = /\/reciters\/(\d+)(?:\/|$)/.exec(path);
+  const administratorPath = /\/administrators\/(\d+)(?:\/|$)/.exec(path);
+  const permissionPath = /\/dashboard-permissions\/(\d+)$/.exec(path);
 
   if (studentPath && activity.entityType === 'student') queries.push(['الطالب', 'SELECT name FROM students WHERE id = ? LIMIT 1', studentPath[1]]);
   else if (familyPath && activity.entityType === 'family') queries.push(['الحلقة', 'SELECT name FROM committees WHERE id = ? LIMIT 1', familyPath[1]]);
@@ -827,7 +863,7 @@ async function recordActivity({
     'SELECT setting_value AS value FROM app_settings WHERE setting_key = ? LIMIT 1',
     ['activityLogEnabled']
   );
-  if (setting && setting.value === 'false') return;
+  if (setting?.value === 'false') return;
 
   await db().query(
     `
@@ -902,7 +938,7 @@ app.use('/api', async (req, res, next) => {
       }, () => next());
     }
     const complex = await findComplexByRegistration(registrationNumber);
-    if (!complex || complex.status !== 'active' || !complex.databaseName) {
+    if (complex?.status !== 'active' || !complex.databaseName) {
       return res.status(404).json({ message: 'المجمع غير موجود أو غير مفعّل.' });
     }
     await initDatabase(complex.databaseName);
@@ -1457,13 +1493,19 @@ async function findLoginNumberOwner(connection, loginNumber, current = {}) {
     [cleanLoginNumber]
   );
   if (supervisors[0] && !(current.type === 'supervisor' && Number(current.id) === Number(supervisors[0].id))) {
-    const label = supervisors[0].role === 'admin'
-      ? 'إداري'
-      : supervisors[0].role === 'manager'
-        ? 'مدير'
-        : supervisors[0].role === 'reciter'
-          ? 'مقرئ'
-          : 'معلم';
+    const _resolveLabel = () => {
+      if (supervisors[0].role === 'admin') {
+        return 'إداري';
+      }
+      if (supervisors[0].role === 'manager') {
+        return 'مدير';
+      }
+      if (supervisors[0].role === 'reciter') {
+        return 'مقرئ';
+      }
+      return 'معلم';
+    };
+    const label = _resolveLabel();
     return { type: supervisors[0].role || 'supervisor', label, id: supervisors[0].id, name: supervisors[0].name };
   }
 
@@ -1621,7 +1663,13 @@ function getWeekDaysBetween(startDay, endDay) {
 
 function getPlanReviewDays(plan, settings) {
   const reviewAllowedOnHoliday = Array.isArray(settings.holidayTaskTypes) && settings.holidayTaskTypes.includes('review');
-  const holidayDays = new Set(reviewAllowedOnHoliday ? [] : (Array.isArray(settings.weeklyHolidayDays) ? settings.weeklyHolidayDays : DEFAULT_WEEKLY_HOLIDAY_DAYS).map(Number));
+  const _resolveHolidayDays = () => {
+    if (reviewAllowedOnHoliday) {
+      return [];
+    }
+    return (Array.isArray(settings.weeklyHolidayDays) ? settings.weeklyHolidayDays : DEFAULT_WEEKLY_HOLIDAY_DAYS).map(Number);
+  };
+  const holidayDays = new Set(_resolveHolidayDays());
   return getWeekDaysBetween(plan.reviewWeekStartDay, plan.reviewWeekEndDay)
     .filter((day) => !holidayDays.has(day));
 }
@@ -1641,7 +1689,7 @@ function isValidQuranPageNumber(page) {
 
 async function getQuranPageBoundary(connection, page) {
   const rows = await loadQuranPagePositions(connection, page);
-  return rows.length ? { start: rows[0], end: rows[rows.length - 1] } : null;
+  return rows.length ? { start: rows[0], end: rows.at(-1) } : null;
 }
 
 async function getQuranPageAyahs(connection, page) {
@@ -1653,7 +1701,7 @@ async function getQuranPageBoundaryInDirection(connection, page, direction = 1) 
   const ayahs = await getQuranPageAyahs(connection, page);
   if (!ayahs.length) return null;
   const ordered = [...ayahs].sort((first, second) => compareQuranPositionInDirection(first, second, -1));
-  return { start: ordered[0], end: ordered[ordered.length - 1] };
+  return { start: ordered[0], end: ordered.at(-1) };
 }
 
 async function getAdjacentQuranAyah(connection, position, direction) {
@@ -1860,6 +1908,10 @@ async function getDescendingMushafFractionEnd(connection, start, endLimit, fract
     guard += 1;
   }
   if (!ordered.length) return null;
+  return selectDescendingFractionEnd(ordered, start, fraction);
+}
+
+function selectDescendingFractionEnd(ordered, start, fraction) {
   const coveredLines = new Set();
   let candidate = ordered[0];
   for (const ayah of ordered) {
@@ -1869,7 +1921,7 @@ async function getDescendingMushafFractionEnd(connection, start, endLimit, fract
     if (Number(layout.startPage) <= Number(start.page) && Number(layout.endPage) >= Number(start.page)) {
       const firstLine = Number(layout.startPage) === Number(start.page) ? Number(layout.startLine) : 1;
       const lastLine = Number(layout.endPage) === Number(start.page) ? Number(layout.endLine) : QURAN_LINES_PER_PAGE;
-      for (let line = firstLine; line <= lastLine; line += 1) coveredLines.add(line);
+      for (let line = firstLine;line <= lastLine;line += 1) coveredLines.add(line);
     }
     if (coveredLines.size >= Math.ceil(QURAN_LINES_PER_PAGE * Number(fraction))) break;
   }
@@ -2009,7 +2061,7 @@ async function mergeQuranRanges(connection, ranges = []) {
   const merged = [];
   for (const range of sortedRanges) {
     const current = { ...range };
-    const last = merged[merged.length - 1];
+    const last = merged.at(-1);
     if (!last) {
       merged.push(current);
       continue;
@@ -2377,7 +2429,16 @@ async function normalizeQuranRangeWordMarks(connection, range, payload) {
   for (const rawMark of payload) {
     const startIndex = wordIndexByLocation.get(String(rawMark?.startLocation || ''));
     const endIndex = wordIndexByLocation.get(String(rawMark?.endLocation || ''));
-    const markType = rawMark?.markType === 'warning' ? 'warning' : rawMark?.markType === 'mistake' ? 'mistake' : null;
+    const _resolveMarkType = () => {
+      if (rawMark?.markType === 'warning') {
+        return 'warning';
+      }
+      if (rawMark?.markType === 'mistake') {
+        return 'mistake';
+      }
+      return null;
+    };
+    const markType = _resolveMarkType();
     if (startIndex === undefined || endIndex === undefined || !markType) return null;
     const fromIndex = Math.min(startIndex, endIndex);
     const toIndex = Math.max(startIndex, endIndex);
@@ -2386,7 +2447,7 @@ async function normalizeQuranRangeWordMarks(connection, range, payload) {
     normalized.push({
       page: Number(selectedWords[0].page),
       startLocation: selectedWords[0].location,
-      endLocation: selectedWords[selectedWords.length - 1].location,
+      endLocation: selectedWords.at(-1).location,
       selectedText: formatQuranSelectionText(selectedWords).slice(0, 1000),
       markType,
       notes: String(rawMark?.notes || '').trim().slice(0, 500),
@@ -2908,7 +2969,7 @@ function pagesToRanges(pages) {
   const sorted = [...new Set(pages.map(Number).filter(Boolean))].sort((a, b) => a - b);
   const ranges = [];
   for (const page of sorted) {
-    const last = ranges[ranges.length - 1];
+    const last = ranges.at(-1);
     if (last && page === last.toPage + 1) {
       last.toPage = page;
     } else {
@@ -3035,8 +3096,8 @@ function pickAvailablePages(availablePages, startPage, count) {
   const picked = [];
   let segments = 0;
   for (const page of ordered) {
-    const previous = picked[picked.length - 1];
-    const wrappedToStart = previous && page === sorted[0] && previous === sorted[sorted.length - 1];
+    const previous = picked.at(-1);
+    const wrappedToStart = previous && page === sorted[0] && previous === sorted.at(-1);
     if (previous && page !== previous + 1 && !wrappedToStart) {
       segments += 1;
       if (segments > 1) break;
@@ -3049,7 +3110,7 @@ function pickAvailablePages(availablePages, startPage, count) {
     picked.push(page);
     if (picked.length >= count) break;
   }
-  const lastPicked = picked[picked.length - 1];
+  const lastPicked = picked.at(-1);
   const nextReviewPage = lastPicked
     ? (sorted.find((page) => page > lastPicked) || sorted[0])
     : (sorted[0] || startPage);
@@ -3062,13 +3123,19 @@ function formatTaskPreview(task, referenceMode = 'ayah') {
     const samePage = Number(task.fromPage) === Number(task.toPage);
     const startLayout = getQuranVerseLine({ surah: task.fromSurah, ayah: task.fromAyah });
     const endLayout = getQuranVerseLine({ surah: task.toSurah, ayah: task.toAyah });
-    const partialLabel = samePage && startLayout && endLayout
-      ? endLayout.endLine <= 8
-        ? ' - النصف الأول'
-        : startLayout.startLine >= 8
-        ? ' - النصف الثاني'
-        : ''
-      : '';
+    const _resolvePartialLabel = () => {
+      if (samePage && startLayout && endLayout) {
+        if (endLayout.endLine <= 8) {
+          return ' - النصف الأول';
+        }
+        if (startLayout.startLine >= 8) {
+          return ' - النصف الثاني';
+        }
+        return '';
+      }
+      return '';
+    };
+    const partialLabel = _resolvePartialLabel();
     return samePage
       ? `الوجه ${task.fromPage}${partialLabel}`
       : `من ${task.fromPage} إلى ${task.toPage}`;
@@ -3076,17 +3143,29 @@ function formatTaskPreview(task, referenceMode = 'ayah') {
   const hasAyahRange = task.fromSurah && task.fromAyah && task.toSurah && task.toAyah;
   const fromSurahName = task.fromSurahName || `سورة ${task.fromSurah}`;
   const toSurahName = task.toSurahName || `سورة ${task.toSurah}`;
-  const label = hasAyahRange
-    ? Number(task.fromSurah) === Number(task.toSurah) && Number(task.fromAyah) === Number(task.toAyah)
-      ? `${fromSurahName} آية ${task.fromAyah}`
-      : Number(task.fromSurah) === Number(task.toSurah)
-      ? `${fromSurahName} آية ${task.fromAyah} إلى آية ${task.toAyah}`
-      : `${fromSurahName} آية ${task.fromAyah} إلى ${toSurahName} آية ${task.toAyah}`
-    : null;
+  const _resolveLabel2 = () => {
+    if (hasAyahRange) {
+      if (Number(task.fromSurah) === Number(task.toSurah) && Number(task.fromAyah) === Number(task.toAyah)) {
+        return `${fromSurahName} آية ${task.fromAyah}`;
+      }
+      if (Number(task.fromSurah) === Number(task.toSurah)) {
+        return `${fromSurahName} آية ${task.fromAyah} إلى آية ${task.toAyah}`;
+      }
+      return `${fromSurahName} آية ${task.fromAyah} إلى ${toSurahName} آية ${task.toAyah}`;
+    }
+    return null;
+  };
+  const label = _resolveLabel2();
   return label || '';
 }
 
 function buildTaskRangePreview(row, referenceMode = 'ayah', endPrefix = 'to') {
+  const _resolveToSurahName = () => {
+    if (endPrefix === 'actualTo') {
+      return row.actualToSurahName || (row.actualToSurah ? `سورة ${row.actualToSurah}` : row.toSurahName);
+    }
+    return row.toSurahName;
+  };
   return formatTaskPreview({
     fromPage: row.fromPage,
     toPage: row[`${endPrefix}Page`],
@@ -3095,9 +3174,7 @@ function buildTaskRangePreview(row, referenceMode = 'ayah', endPrefix = 'to') {
     toSurah: row[`${endPrefix}Surah`],
     toAyah: row[`${endPrefix}Ayah`],
     fromSurahName: row.fromSurahName,
-    toSurahName: endPrefix === 'actualTo'
-      ? (row.actualToSurahName || (row.actualToSurah ? `سورة ${row.actualToSurah}` : row.toSurahName))
-      : row.toSurahName,
+    toSurahName: _resolveToSurahName(),
   }, referenceMode);
 }
 
@@ -3234,6 +3311,42 @@ async function splitUnevaluatedPlanTasksByFace(connection, plan, date) {
       const actualPage = Number(row.actualToPage || 0);
       const pageCompleted = row.studentStatus === 'done' && (!actualPage || (direction > 0 ? page <= actualPage : page >= actualPage));
       const isActualPage = pageCompleted && actualPage === page;
+      const _resolveConditional = () => {
+        if (pageCompleted) {
+          return 'done';
+        }
+        if (row.studentStatus === 'done') {
+          return 'not_done';
+        }
+        return row.studentStatus;
+      };
+      const _resolveConditional2 = () => {
+        if (pageCompleted) {
+          if (isActualPage && row.actualToSurah) {
+            return row.actualToSurah;
+          }
+          return boundary.end.surah;
+        }
+        return null;
+      };
+      const _resolveConditional3 = () => {
+        if (pageCompleted) {
+          if (isActualPage && row.actualToAyah) {
+            return row.actualToAyah;
+          }
+          return boundary.end.ayah;
+        }
+        return null;
+      };
+      const _resolveConditional4 = () => {
+        if (pageCompleted) {
+          if (isActualPage) {
+            return row.executionState;
+          }
+          return 'complete';
+        }
+        return null;
+      };
       await connection.query(
         `
         UPDATE student_quran_tasks
@@ -3245,11 +3358,11 @@ async function splitUnevaluatedPlanTasksByFace(connection, plan, date) {
         WHERE plan_id = ? AND task_date = ? AND task_type = ? AND from_page = ? AND to_page = ?
         `,
         [
-          pageCompleted ? 'done' : (row.studentStatus === 'done' ? 'not_done' : row.studentStatus),
+          _resolveConditional(),
           pageCompleted ? page : null,
-          pageCompleted ? (isActualPage && row.actualToSurah ? row.actualToSurah : boundary.end.surah) : null,
-          pageCompleted ? (isActualPage && row.actualToAyah ? row.actualToAyah : boundary.end.ayah) : null,
-          pageCompleted ? (isActualPage ? row.executionState : 'complete') : null,
+          _resolveConditional2(),
+          _resolveConditional3(),
+          _resolveConditional4(),
           plan.id,
           date,
           row.taskType,
@@ -3350,7 +3463,7 @@ async function repairUnevaluatedMemorizationTaskRange(connection, plan, date, se
     direction,
   ));
   const first = ordered[0];
-  const last = ordered[ordered.length - 1];
+  const last = ordered.at(-1);
   const currentStart = { page: Number(first.fromPage), surah: Number(first.fromSurah), ayah: Number(first.fromAyah) };
   const currentEnd = { page: Number(last.toPage), surah: Number(last.toSurah), ayah: Number(last.toAyah) };
   const progressContext = await getPlanProgressContext(connection, plan, date, settings, currentStart);
@@ -3375,7 +3488,7 @@ async function repairUnevaluatedMemorizationTaskRange(connection, plan, date, se
 }
 
 async function ensureStudentPlanTasks(connection, plan, date, settings) {
-  if (!plan || plan.status !== 'active') return [];
+  if (plan?.status !== 'active') return [];
   if (settings.nazemIntegrationEnabled) {
     await ensureNazemLinkTasks(connection, plan, date);
     return [];
@@ -3712,7 +3825,16 @@ async function previewStudentPlanDay(connection, plan, date, settings, nazemMana
   const next = await getNextUnmemorizedPlanPosition(connection, plan, { beforeDate: date });
   if (next && canCreateQuranTaskOnDate(settings, date, 'memorization')) {
     const range = await buildQuranRangeByFaceTarget(connection, next, end, Math.max(.25, Number(plan.dailyPages || 1)));
-    for (const part of range?.segments?.length ? range.segments : (range ? [range] : [])) addRange('memorization', part.start, part.end, part.faces);
+    const _resolveConditional5 = () => {
+      if (range?.segments?.length) {
+        return range.segments;
+      }
+      if (range) {
+        return [range];
+      }
+      return [];
+    };
+    for (const part of _resolveConditional5()) addRange('memorization', part.start, part.end, part.faces);
   }
   const memorized = await getStudentMemorizedRanges(connection, plan.studentId, { beforeDate: date });
   const links = await buildExactLinkRanges(connection, memorized, next, direction, plan.linkPages || 10);
@@ -3867,26 +3989,38 @@ function normalizePlanRow(row) {
   const totalAyahs = Number(row.totalAyahs || 0);
   const completedAyahs = Math.max(0, Math.min(totalAyahs || Number.MAX_SAFE_INTEGER, Number(row.completedAyahs || 0)));
   const hasDetailedProgress = Array.isArray(row.completedMemorization);
-  const completedPages = row.completedPagesExact !== undefined
-    ? Math.max(0, Math.min(totalPages, Number(row.completedPagesExact || 0)))
-    : hasDetailedProgress
-    ? Math.min(totalPages, countUniquePagesWithinPlan(row.completedMemorization || [], startPage, endPage))
-    : Math.max(0, Math.min(totalPages, Number(row.completedPages || 0)));
+  const _resolveCompletedPages = () => {
+    if (row.completedPagesExact !== undefined) {
+      return Math.max(0, Math.min(totalPages, Number(row.completedPagesExact || 0)));
+    }
+    if (hasDetailedProgress) {
+      return Math.min(totalPages, countUniquePagesWithinPlan(row.completedMemorization || [], startPage, endPage));
+    }
+    return Math.max(0, Math.min(totalPages, Number(row.completedPages || 0)));
+  };
+  const completedPages = _resolveCompletedPages();
   const progressPercent = totalAyahs > 0 ? Math.round((completedAyahs / totalAyahs) * 100) : Math.round((completedPages / totalPages) * 100);
   const dueFaces = Number(row.dueFaces || 0);
   const dueCompletedFaces = Number(row.dueCompletedFaces || 0);
   const adherencePercent = dueFaces ? Math.round(Math.min(100, (dueCompletedFaces / dueFaces) * 100)) : 0;
   const currentDate = getSaudiDateTimeParts().date;
   const { startDate: effectiveStartDate } = { startDate: row.startDate || row.createdDate };
-  const scheduleStatus = progressPercent >= 100
-    ? 'completed'
-    : effectiveStartDate && currentDate < effectiveStartDate
-      ? 'not_started'
-      : adherencePercent >= 100
-        ? 'on_track'
-        : adherencePercent >= 80
-          ? 'at_risk'
-          : 'delayed';
+  const _resolveScheduleStatus = () => {
+    if (progressPercent >= 100) {
+      return 'completed';
+    }
+    if (effectiveStartDate && currentDate < effectiveStartDate) {
+      return 'not_started';
+    }
+    if (adherencePercent >= 100) {
+      return 'on_track';
+    }
+    if (adherencePercent >= 80) {
+      return 'at_risk';
+    }
+    return 'delayed';
+  };
+  const scheduleStatus = _resolveScheduleStatus();
   return {
     id: row.id,
     previousPlanId: row.previousPlanId || null,
@@ -4074,15 +4208,20 @@ async function importNazemPlanCandidate(connection, candidate) {
   const progressEnd = completedToday && progress.actualToSurah && progress.actualToAyah
     ? await getQuranAyah(connection, Number(progress.actualToSurah), Number(progress.actualToAyah))
     : null;
-  let next = !progress
-    ? start
-    : progressEnd
-    ? await getAdjacentQuranAyahInDirection(connection, progressEnd, direction)
-    : await getQuranAyah(
+  let next;
+  if (!progress) {
+    next = start;
+  } else {
+    if (progressEnd) {
+      next = await getAdjacentQuranAyahInDirection(connection, progressEnd, direction);
+    } else {
+      next = await getQuranAyah(
       connection,
       Number(progress.scheduledFromSurah || 0),
       Number(progress.scheduledFromAyah || 0),
     );
+    }
+  }
   let completedPlan = Boolean(
     progressEnd && compareQuranPositionInDirection(progressEnd, end, direction) >= 0,
   );
@@ -5255,7 +5394,7 @@ function normalizeHolidayTaskTypes(value) {
       }
     })();
   return [...new Set((Array.isArray(raw) ? raw : []).map(String))]
-    .filter((type) => QURAN_DAILY_TASK_TYPES.includes(type));
+    .filter((type) => QURAN_DAILY_TASK_TYPES.has(type));
 }
 
 function normalizePositiveIdList(value) {
@@ -5293,6 +5432,60 @@ function normalizeSettings(rows) {
       return [];
     }
   })();
+  const _resolveTeacherMemorizationRecitationMode = () => {
+    if (settings.teacherMemorizationRecitationMode === 'count') {
+      return 'count';
+    }
+    if (settings.teacherMemorizationRecitationMode === 'mushaf') {
+      return 'mushaf';
+    }
+    return memorizationAndMasteryRecitationMode;
+  };
+  const _resolveTeacherReviewRecitationMode = () => {
+    if (settings.teacherReviewRecitationMode === 'count') {
+      return 'count';
+    }
+    if (settings.teacherReviewRecitationMode === 'mushaf') {
+      return 'mushaf';
+    }
+    return reviewRecitationMode;
+  };
+  const _resolveTeacherLinkRecitationMode = () => {
+    if (settings.teacherLinkRecitationMode === 'count') {
+      return 'count';
+    }
+    if (settings.teacherLinkRecitationMode === 'mushaf') {
+      return 'mushaf';
+    }
+    return linkRecitationMode;
+  };
+  const _resolveReciterMemorizationRecitationMode = () => {
+    if (settings.reciterMemorizationRecitationMode === 'count') {
+      return 'count';
+    }
+    if (settings.reciterMemorizationRecitationMode === 'mushaf') {
+      return 'mushaf';
+    }
+    return memorizationAndMasteryRecitationMode;
+  };
+  const _resolveReciterReviewRecitationMode = () => {
+    if (settings.reciterReviewRecitationMode === 'count') {
+      return 'count';
+    }
+    if (settings.reciterReviewRecitationMode === 'mushaf') {
+      return 'mushaf';
+    }
+    return reviewRecitationMode;
+  };
+  const _resolveReciterLinkRecitationMode = () => {
+    if (settings.reciterLinkRecitationMode === 'count') {
+      return 'count';
+    }
+    if (settings.reciterLinkRecitationMode === 'mushaf') {
+      return 'mushaf';
+    }
+    return linkRecitationMode;
+  };
   return {
     ...normalizeRecitationRewardSettings(settings),
     maxSupervisorStudentPoints: Number(settings.maxSupervisorStudentPoints ?? 10),
@@ -5354,12 +5547,12 @@ function normalizeSettings(rows) {
     masteryRecitationMode: memorizationAndMasteryRecitationMode,
     reviewRecitationMode,
     linkRecitationMode,
-    teacherMemorizationRecitationMode: settings.teacherMemorizationRecitationMode === 'count' ? 'count' : (settings.teacherMemorizationRecitationMode === 'mushaf' ? 'mushaf' : memorizationAndMasteryRecitationMode),
-    teacherReviewRecitationMode: settings.teacherReviewRecitationMode === 'count' ? 'count' : (settings.teacherReviewRecitationMode === 'mushaf' ? 'mushaf' : reviewRecitationMode),
-    teacherLinkRecitationMode: settings.teacherLinkRecitationMode === 'count' ? 'count' : (settings.teacherLinkRecitationMode === 'mushaf' ? 'mushaf' : linkRecitationMode),
-    reciterMemorizationRecitationMode: settings.reciterMemorizationRecitationMode === 'count' ? 'count' : (settings.reciterMemorizationRecitationMode === 'mushaf' ? 'mushaf' : memorizationAndMasteryRecitationMode),
-    reciterReviewRecitationMode: settings.reciterReviewRecitationMode === 'count' ? 'count' : (settings.reciterReviewRecitationMode === 'mushaf' ? 'mushaf' : reviewRecitationMode),
-    reciterLinkRecitationMode: settings.reciterLinkRecitationMode === 'count' ? 'count' : (settings.reciterLinkRecitationMode === 'mushaf' ? 'mushaf' : linkRecitationMode),
+    teacherMemorizationRecitationMode: _resolveTeacherMemorizationRecitationMode(),
+    teacherReviewRecitationMode: _resolveTeacherReviewRecitationMode(),
+    teacherLinkRecitationMode: _resolveTeacherLinkRecitationMode(),
+    reciterMemorizationRecitationMode: _resolveReciterMemorizationRecitationMode(),
+    reciterReviewRecitationMode: _resolveReciterReviewRecitationMode(),
+    reciterLinkRecitationMode: _resolveReciterLinkRecitationMode(),
     registrationEnabled: settings.registrationEnabled === 'true',
     registrationPreAcceptTemplate: settings.registrationPreAcceptTemplate || 'السلام عليكم، تم قبول طلب تسجيل الطالب {name} مبدئياً، وسيتم التواصل معكم لإكمال الإجراء.',
     registrationAcceptTemplate: settings.registrationAcceptTemplate || 'السلام عليكم، تم قبول الطالب {name} في حلقة {committee}. رقم الدخول: {login}.',
@@ -5615,7 +5808,7 @@ async function deleteProgramDataExceptCore(connection) {
 }
 
 function isValidTimeString(value) {
-  const match = String(value || '').match(/^(\d{2}):(\d{2})$/);
+  const match = /^(\d{2}):(\d{2})$/.exec(String(value || ''));
   if (!match) return false;
   const hours = Number(match[1]);
   const minutes = Number(match[2]);
@@ -6027,7 +6220,7 @@ async function syncFamilyPointStudentContributionSetting(connection, settings, e
   const affectedStudentIds = new Set([
     ...inactiveRows.map((row) => String(row.studentId)),
     ...existingRows.map((row) => String(row.studentId)),
-    ...extraStudentIds.map((id) => String(id)),
+    ...extraStudentIds.map(String),
   ]);
 
   for (const studentId of affectedStudentIds) {
@@ -6128,7 +6321,7 @@ async function syncInactiveSourcePointAdjustments(connection, settings, extraStu
       .filter((row) => row.dedupeKey)
       .map((row) => [row.dedupeKey, row])
   );
-  const affectedStudentIds = new Set(extraStudentIds.map((id) => String(id)));
+  const affectedStudentIds = new Set(extraStudentIds.map(String));
 
   for (const row of inactiveRows) {
     const studentId = String(row.studentId);
@@ -6516,7 +6709,7 @@ async function getNarrationEvent(eventId, auth) {
 async function sendNarrationMessages(event, { type, eventStudentId = null, eventStudentIds = null, committeeId = null } = {}) {
   const settings = await loadSettings();
   const allowedStudentIds = Array.isArray(eventStudentIds)
-    ? new Set(eventStudentIds.map((id) => String(id)))
+    ? new Set(eventStudentIds.map(String))
     : null;
   const targets = event.students.filter((student) => {
     if (committeeId && String(student.committeeId) !== String(committeeId)) return false;
@@ -6524,11 +6717,16 @@ async function sendNarrationMessages(event, { type, eventStudentId = null, event
     if (type === 'result') return student.id === String(eventStudentId) && student.status === 'completed';
     return true;
   });
-  const template = type === 'start'
-    ? settings.narrationStartTemplate
-    : type === 'end'
-      ? settings.narrationEndTemplate
-      : settings.narrationResultTemplate;
+  const _resolveTemplate = () => {
+    if (type === 'start') {
+      return settings.narrationStartTemplate;
+    }
+    if (type === 'end') {
+      return settings.narrationEndTemplate;
+    }
+    return settings.narrationResultTemplate;
+  };
+  const template = _resolveTemplate();
   const notificationTitles = {
     start: 'بدأ يوم السرد',
     end: 'انتهى يوم السرد',
@@ -6627,7 +6825,7 @@ app.delete('/api/narration-events/:id', requireNarrationAccess, async (req, res,
       'SELECT id, status, created_by_role AS createdByRole, created_by_id AS createdById FROM narration_events WHERE id = ? LIMIT 1',
       [eventId]
     );
-    if (!event || event.status !== 'archived') {
+    if (event?.status !== 'archived') {
       return res.status(404).json({ message: 'الأرشيف غير موجود.' });
     }
     if (
@@ -6649,9 +6847,13 @@ app.post('/api/narration-events', requireNarrationAccess, async (req, res, next)
     const startDate = String(req.body.startDate || '');
     const endDate = String(req.body.endDate || '');
     const scope = req.body.scope === 'committee' ? 'committee' : 'all';
-    const requestedCommitteeIds = scope === 'committee'
-      ? [...new Set((Array.isArray(req.body.committeeIds) ? req.body.committeeIds : [req.body.committeeId]).map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))]
-      : [];
+    const _resolveRequestedCommitteeIds = () => {
+      if (scope === 'committee') {
+        return [...new Set((Array.isArray(req.body.committeeIds) ? req.body.committeeIds : [req.body.committeeId]).map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))];
+      }
+      return [];
+    };
+    const requestedCommitteeIds = _resolveRequestedCommitteeIds();
     if (!name || !isValidDateOnly(startDate) || !isValidDateOnly(endDate) || startDate > endDate || (scope === 'committee' && !requestedCommitteeIds.length)) {
       return res.status(422).json({ message: 'بيانات يوم السرد غير مكتملة.' });
     }
@@ -6731,7 +6933,7 @@ app.put('/api/narration-events/:eventId/parts/:partId', requireNarrationAccess, 
        FROM narration_event_parts p JOIN narration_event_students es ON es.id = p.event_student_id JOIN narration_events e ON e.id = es.event_id
        WHERE p.id = ? AND e.id = ? AND es.archived_at IS NULL LIMIT 1`, [partId, eventId]
     );
-    if (!part || part.status !== 'open') return res.status(404).json({ message: 'التقييم غير متاح.' });
+    if (part?.status !== 'open') return res.status(404).json({ message: 'التقييم غير متاح.' });
     if (!await canAccessNarrationCommittee(req.auth, part.committeeId)) return res.status(403).json({ message: 'لا يمكنك تقييم هذا الطالب.' });
     const settings = await loadSettings();
     const evaluationMode = ['mushaf', 'count'].includes(req.body.evaluationMode) ? req.body.evaluationMode : null;
@@ -6782,7 +6984,7 @@ app.post('/api/narration-events/:id/archive', requireNarrationAccess, async (req
     const eventId = Number(req.params.id);
     const committeeId = Number(req.body.committeeId || 0) || null;
     const event = await getNarrationEvent(eventId, req.auth);
-    if (!event || event.status !== 'open') return res.status(404).json({ message: 'يوم السرد غير متاح.' });
+    if (event?.status !== 'open') return res.status(404).json({ message: 'يوم السرد غير متاح.' });
     const targets = event.students.filter((student) => !student.archivedAt && (!committeeId || Number(student.committeeId) === committeeId));
     if (!targets.length) {
       if (committeeId) return res.status(404).json({ message: 'لا توجد حلقة مفتوحة مطابقة.' });
@@ -6875,11 +7077,16 @@ app.use('/api/auth', tenantAuthRouter);
 
 app.get('/api/dashboard-permissions/me', async (req, res, next) => {
   try {
-    const permissions = req.auth?.role === 'manager'
-      ? DASHBOARD_PERMISSION_KEYS
-      : ['supervisor', 'admin', 'reciter'].includes(req.auth?.role)
-        ? await getSupervisorDashboardPermissions(req.auth?.id)
-        : [];
+    let permissions;
+    if (req.auth?.role === 'manager') {
+      permissions = DASHBOARD_PERMISSION_KEYS;
+    } else {
+      if (['supervisor', 'admin', 'reciter'].includes(req.auth?.role)) {
+        permissions = await getSupervisorDashboardPermissions(req.auth?.id);
+      } else {
+        permissions = [];
+      }
+    }
     res.json({ permissions });
   } catch (error) {
     next(error);
@@ -6957,13 +7164,18 @@ app.get('/api/dashboard-bootstrap', async (req, res, next) => {
     if (!['manager', 'supervisor', 'admin', 'reciter'].includes(req.auth?.role)) {
       return res.status(403).json({ message: 'غير مصرح بالدخول إلى لوحة التحكم.' });
     }
+    const _resolveConditional6 = () => {
+      if (req.auth?.role === 'manager') {
+        return Promise.resolve(DASHBOARD_PERMISSION_KEYS);
+      }
+      if (['supervisor', 'admin', 'reciter'].includes(req.auth?.role)) {
+        return getSupervisorDashboardPermissions(req.auth?.id);
+      }
+      return Promise.resolve([]);
+    };
     const [settings, permissions] = await Promise.all([
       loadSettings(),
-      req.auth?.role === 'manager'
-        ? Promise.resolve(DASHBOARD_PERMISSION_KEYS)
-        : ['supervisor', 'admin', 'reciter'].includes(req.auth?.role)
-          ? getSupervisorDashboardPermissions(req.auth?.id)
-          : Promise.resolve([]),
+      _resolveConditional6(),
     ]);
     res.json({
       settings: req.auth?.role === 'manager' ? settings : publicSettingsForClient(settings),
@@ -7239,6 +7451,27 @@ app.put('/api/settings', requirePermission('settings'), async (req, res, next) =
       : 'mushaf';
     const reciterReviewRecitationMode = previousSettings.reciterReviewRecitationMode === 'count' ? 'count' : 'mushaf';
     const reciterLinkRecitationMode = previousSettings.reciterLinkRecitationMode === 'count' ? 'count' : 'mushaf';
+    const _resolveStaffAttendanceSource = () => {
+      if (req.body.staffAttendanceSource === undefined) {
+        return previousSettings.staffAttendanceSource;
+      }
+      if (req.body.staffAttendanceSource === 'teacher') {
+        return 'teacher';
+      }
+      return 'supervisor';
+    };
+    const _resolveQuranReferenceMode = () => {
+      if (req.body.quranReferenceMode === undefined) {
+        if (previousSettings.quranReferenceMode === 'page') {
+          return 'page';
+        }
+        return 'ayah';
+      }
+      if (req.body.quranReferenceMode === 'page') {
+        return 'page';
+      }
+      return 'ayah';
+    };
     const settings = {
       maxSupervisorStudentPoints: Number(req.body.maxSupervisorStudentPoints || 0),
       maxDailyStudentPoints: 0,
@@ -7279,9 +7512,7 @@ app.put('/api/settings', requirePermission('settings'), async (req, res, next) =
       attendanceLocationUrl: '',
       attendanceLocationLat: null,
       attendanceLocationLng: null,
-      staffAttendanceSource: req.body.staffAttendanceSource === undefined
-        ? previousSettings.staffAttendanceSource
-        : (req.body.staffAttendanceSource === 'teacher' ? 'teacher' : 'supervisor'),
+      staffAttendanceSource: _resolveStaffAttendanceSource(),
       staffAttendanceLocationUrl: req.body.staffAttendanceLocationUrl === undefined
         ? String(previousSettings.staffAttendanceLocationUrl || '')
         : String(req.body.staffAttendanceLocationUrl || '').trim(),
@@ -7304,9 +7535,7 @@ app.put('/api/settings', requirePermission('settings'), async (req, res, next) =
       executionReminderExcludedStudentIds: req.body.executionReminderExcludedStudentIds === undefined
         ? normalizePositiveIdList(previousSettings.executionReminderExcludedStudentIds)
         : normalizePositiveIdList(req.body.executionReminderExcludedStudentIds),
-      quranReferenceMode: req.body.quranReferenceMode === undefined
-        ? (previousSettings.quranReferenceMode === 'page' ? 'page' : 'ayah')
-        : (req.body.quranReferenceMode === 'page' ? 'page' : 'ayah'),
+      quranReferenceMode: _resolveQuranReferenceMode(),
       registrationEnabled: req.body.registrationEnabled === undefined
         ? Boolean(previousSettings.registrationEnabled)
         : parseBoolean(req.body.registrationEnabled),
@@ -9079,7 +9308,7 @@ app.get('/api/execution-followup', requireExecutionFollowupOrOwnCommittee, async
     if (getDatesInRange(fromDate, toDate).length > 120) {
       return res.status(422).json({ message: 'اختر نطاقاً لا يتجاوز 120 يوماً.' });
     }
-    if (taskType !== 'all' && !QURAN_DAILY_TASK_TYPES.includes(taskType)) {
+    if (taskType !== 'all' && !QURAN_DAILY_TASK_TYPES.has(taskType)) {
       return res.status(422).json({ message: 'نوع المهمة غير صحيح.' });
     }
     if (!['all', 'done', 'not_done', 'pending', 'partial', 'extra', 'completed', 'needs_repeat'].includes(status)) {
@@ -9753,11 +9982,15 @@ app.post('/api/quran-tests/result', requirePermission('quranTests'), async (req,
     const evaluationMode = ['mushaf', 'count'].includes(req.body.evaluationMode) ? req.body.evaluationMode : null;
     if (!evaluationMode) return res.status(422).json({ message: 'اختر طريقة تسجيل نتيجة الاختبار.' });
     const juzRange = (await getQuranJuzRanges(connection)).find((item) => Number(item.juz) === juzNumber);
-    const samplePages = evaluationMode === 'mushaf' && juzRange
-      ? [...new Set((Array.isArray(req.body.samplePages) ? req.body.samplePages : [])
+    const _resolveSamplePages = () => {
+      if (evaluationMode === 'mushaf' && juzRange) {
+        return [...new Set((Array.isArray(req.body.samplePages) ? req.body.samplePages : [])
         .map(Number)
-        .filter((page) => Number.isInteger(page) && page >= Number(juzRange.startPage) && page <= Number(juzRange.endPage)))]
-      : [];
+        .filter((page) => Number.isInteger(page) && page >= Number(juzRange.startPage) && page <= Number(juzRange.endPage)))];
+      }
+      return [];
+    };
+    const samplePages = _resolveSamplePages();
     const normalizedWordMarks = evaluationMode === 'mushaf' && juzRange
       ? await normalizeQuranRangeWordMarks(connection, juzRange, req.body.wordMarks)
       : null;
@@ -10005,8 +10238,26 @@ app.post('/api/quran-tests/result', requirePermission('quranTests'), async (req,
       }
     }
 
-    const resultType = passed ? 'passed' : (requiresRetest ? 'retest' : 'repeat_memorization');
-    const resultLabel = passed ? 'ناجح' : (requiresRetest ? 'إعادة اختبار' : 'إعادة حفظ');
+    const _resolveResultType = () => {
+      if (passed) {
+        return 'passed';
+      }
+      if (requiresRetest) {
+        return 'retest';
+      }
+      return 'repeat_memorization';
+    };
+    const resultType = _resolveResultType();
+    const _resolveResultLabel = () => {
+      if (passed) {
+        return 'ناجح';
+      }
+      if (requiresRetest) {
+        return 'إعادة اختبار';
+      }
+      return 'إعادة حفظ';
+    };
+    const resultLabel = _resolveResultLabel();
     await createStudentAccountNotification(connection, {
       studentId,
       title: 'بدأ الاختبار',
@@ -10524,17 +10775,23 @@ app.get('/api/students/:id/quran-sessions', async (req, res, next) => {
 
     const marksByTask = await getQuranTaskDisplayMarks(db(), rows.map((row) => row.id));
     if (planView) await filterPlanMarksByLatestAttempt(db(), marksByTask);
-    const resultRows = rows.map((row) => ({
-      ...normalizeTaskRow(row, row.nazemSource ? 'ayah' : settings.quranReferenceMode),
-      ...(planView && row.taskDate === today ? {
+    const resultRows = rows.map((row) => { const _resolveResultRows = () => {
+                                             if (planView && row.taskDate === today) {
+                                               return {
         repeatCount: Number(row.nazemRepeatCount ?? (row.track === 'mastery' ? settings.masteryRepeatCount : settings.memorizationRepeatCount)),
         listeningCount: Number(row.track === 'mastery' ? settings.masteryListeningCount : settings.memorizationListeningCount),
-      } : {}),
+      };
+                                             }
+                                             return {};
+                                           };
+                                           return ({
+      ...normalizeTaskRow(row, row.nazemSource ? 'ayah' : settings.quranReferenceMode),
+      ...(_resolveResultRows()),
       sessionDate: row.sessionDate,
       teacherName: row.teacherName || 'المعلم',
       evaluatedAt: row.evaluatedAt || '',
       ayahMarks: marksByTask.get(Number(row.id)) || [],
-    }));
+    }); });
     if (planView && req.query.includePoints === '1') {
       const [[[student]], [transactions], [attendance]] = await Promise.all([
         db().query('SELECT points FROM students WHERE id = ?', [studentId]),
@@ -10935,6 +11192,15 @@ async function saveQuranExecutionSegments(connection, {
   );
   for (const segment of segments) {
     const points = pointDetails.find((item) => item.type === segment.type);
+    const _resolveConditional7 = () => {
+      if (segment.type === 'compensation') {
+        return settings.quranCompensationPointsPercent;
+      }
+      if (segment.type === 'extra') {
+        return settings.quranExtraPointsPercent;
+      }
+      return 100;
+    };
     await connection.query(
       `INSERT INTO student_quran_execution_segments
         (plan_id, student_id, task_date, task_type, source_type, source_id, segment_type,
@@ -10956,7 +11222,7 @@ async function saveQuranExecutionSegments(connection, {
         segment.end.surah,
         segment.end.ayah,
         segment.amount,
-        points?.percent ?? (segment.type === 'compensation' ? settings.quranCompensationPointsPercent : segment.type === 'extra' ? settings.quranExtraPointsPercent : 100),
+        points?.percent ?? (_resolveConditional7()),
         points?.points || 0,
       ],
     );
@@ -11178,7 +11444,7 @@ app.get('/api/quran-execution-corrections', requirePermission('studentPlans'), a
           options.push(toQuranExecutionOption(ayah));
         }
       }
-      const last = ordered[ordered.length - 1];
+      const last = ordered.at(-1);
       if (first.taskType === 'memorization' && correctionPlan) {
         const limit = await getAllowedExecutionEnd(connection, correctionPlan, taskEndPosition(last), first.taskType);
         const candidates = await getQuranAyahsInPageRange(connection, taskStartPosition(ordered[0]).page, limit.page);
@@ -11189,9 +11455,30 @@ app.get('/api/quran-execution-corrections', requirePermission('studentPlans'), a
           .map(toQuranExecutionOption));
       }
       const allDone = ordered.every((row) => row.studentStatus === 'done');
-      const relatedRepeats = repeatRows.filter((row) => Number(row.planId) === Number(first.planId) && row.track === first.track);
+      const relatedRepeats = repeatRows.find((row) => Number(row.planId) === Number(first.planId) && row.track === first.track);
       const locked = ordered.some((row) => row.teacherCompleted != null || row.executionActorRole === 'teacher');
       const nazemLocked = Boolean(Number(first.nazemManaged) && first.taskType === 'link');
+      const _resolveLockedReason = () => {
+        if (locked) {
+          return 'تم اعتماد المهمة في جلسة التسميع ولا يمكن تعديل تنفيذ الطالب.';
+        }
+        if (nazemLocked) {
+          return 'الربط مرتبط بناظم ويُعدّل من ناظم.';
+        }
+        return '';
+      };
+      const _resolveExpectedRepeatCount3 = () => {
+        if (first.taskType === 'memorization') {
+          return normalizeRepeatCount(first.track === 'mastery' ? settings.masteryRepeatCount : settings.memorizationRepeatCount, 1);
+        }
+        return 0;
+      };
+      const _resolveExpectedListeningCount2 = () => {
+        if (first.taskType === 'memorization') {
+          return normalizeRepeatCount(first.track === 'mastery' ? settings.masteryListeningCount : settings.memorizationListeningCount, 3);
+        }
+        return 0;
+      };
       tasks.push({
         key,
         taskIds: ordered.map((row) => Number(row.id)),
@@ -11217,20 +11504,12 @@ app.get('/api/quran-execution-corrections', requirePermission('studentPlans'), a
         }),
         options,
         rows: ordered.map((row) => normalizeTaskRow(row, settings.quranReferenceMode)),
-        expectedRepeatCount: first.taskType === 'memorization'
-          ? normalizeRepeatCount(first.track === 'mastery' ? settings.masteryRepeatCount : settings.memorizationRepeatCount, 1)
-          : 0,
-        expectedListeningCount: first.taskType === 'memorization'
-          ? normalizeRepeatCount(first.track === 'mastery' ? settings.masteryListeningCount : settings.memorizationListeningCount, 3)
-          : 0,
-        actualRepeatCount: Math.max(0, Number(relatedRepeats[0]?.actualRepeatCount || 0)),
-        actualListeningCount: Math.max(0, Number(relatedRepeats[0]?.actualListeningCount || 0)),
+        expectedRepeatCount: _resolveExpectedRepeatCount3(),
+        expectedListeningCount: _resolveExpectedListeningCount2(),
+        actualRepeatCount: Math.max(0, Number(relatedRepeats?.actualRepeatCount || 0)),
+        actualListeningCount: Math.max(0, Number(relatedRepeats?.actualListeningCount || 0)),
         canEdit: !locked && !nazemLocked,
-        lockedReason: locked
-          ? 'تم اعتماد المهمة في جلسة التسميع ولا يمكن تعديل تنفيذ الطالب.'
-          : nazemLocked
-            ? 'الربط مرتبط بناظم ويُعدّل من ناظم.'
-            : '',
+        lockedReason: _resolveLockedReason(),
       });
     }
     await connection.commit();
@@ -11384,16 +11663,26 @@ const executeStudentQuranTasks = async (req, res, next) => {
       const expectedListeningCount = normalizeRepeatCount(first.track === 'mastery'
         ? settings.masteryListeningCount
         : settings.memorizationListeningCount, 3);
-      const actualRepeatCount = status === 'done'
-        ? !nazemManaged && settings.allowRepeatCountEditing
-          ? Math.min(expectedRepeatCount, Math.max(1, Math.trunc(Number(req.body.repeatCount ?? expectedRepeatCount))))
-          : expectedRepeatCount
-        : 0;
-      const actualListeningCount = status === 'done'
-        ? !nazemManaged && settings.allowListeningCountEditing
-          ? Math.min(expectedListeningCount, Math.max(1, Math.trunc(Number(req.body.listeningCount ?? expectedListeningCount))))
-          : expectedListeningCount
-        : 0;
+      const _resolveActualRepeatCount = () => {
+        if (status === 'done') {
+          if (!nazemManaged && settings.allowRepeatCountEditing) {
+            return Math.min(expectedRepeatCount, Math.max(1, Math.trunc(Number(req.body.repeatCount ?? expectedRepeatCount))));
+          }
+          return expectedRepeatCount;
+        }
+        return 0;
+      };
+      const actualRepeatCount = _resolveActualRepeatCount();
+      const _resolveActualListeningCount = () => {
+        if (status === 'done') {
+          if (!nazemManaged && settings.allowListeningCountEditing) {
+            return Math.min(expectedListeningCount, Math.max(1, Math.trunc(Number(req.body.listeningCount ?? expectedListeningCount))));
+          }
+          return expectedListeningCount;
+        }
+        return 0;
+      };
+      const actualListeningCount = _resolveActualListeningCount();
       await connection.query(
         `UPDATE student_quran_tasks
          SET student_status = ?, actual_to_page = CASE WHEN ? = 'done' THEN to_page ELSE NULL END,
@@ -11455,7 +11744,7 @@ const executeStudentQuranTasks = async (req, res, next) => {
       compareQuranPositionInDirection(taskStartPosition(a), taskStartPosition(b), executionDirection)
     ));
     const expectedStart = taskStartPosition(tasks[0]);
-    const expectedEnd = taskEndPosition(tasks[tasks.length - 1]);
+    const expectedEnd = taskEndPosition(tasks.at(-1));
     const expectedPages = tasks.reduce((sum, task) => sum + Math.max(0.25, Number(task.targetPages || 0) || (Math.abs(Number(task.toPage) - Number(task.fromPage)) + 1)), 0);
     let actualEnd = status === 'done'
       ? await resolveExecutionEndPosition(connection, req.body.actualEnd, expectedEnd, executionDirection)
@@ -11470,12 +11759,17 @@ const executeStudentQuranTasks = async (req, res, next) => {
       memorizationContext = first.taskType === 'memorization'
         ? await getPlanProgressContext(connection, plan, first.taskDate, settings, expectedStart)
         : null;
-      const allowedEnd = ['review', 'link'].includes(first.taskType)
-        ? expectedEnd
-        : administrativeCorrection
-          ? await getAllowedExecutionEnd(connection, plan, expectedEnd, first.taskType)
-          : memorizationContext?.allowedEnd
+      let allowedEnd;
+      if (['review', 'link'].includes(first.taskType)) {
+        allowedEnd = expectedEnd;
+      } else {
+        if (administrativeCorrection) {
+          allowedEnd = await getAllowedExecutionEnd(connection, plan, expectedEnd, first.taskType);
+        } else {
+          allowedEnd = memorizationContext?.allowedEnd
           || await getAllowedExecutionEnd(connection, plan, expectedEnd, first.taskType);
+        }
+      }
       const isExpectedCompletion = isSameQuranPosition(actualEnd, expectedEnd);
       if (
         !actualEnd
@@ -11615,22 +11909,40 @@ const executeStudentQuranTasks = async (req, res, next) => {
       );
     }
 
-    const expectedRepeatCount = first.taskType === 'memorization'
-      ? Math.max(1, Number(first.track === 'mastery' ? settings.masteryRepeatCount : settings.memorizationRepeatCount))
-      : 0;
-    const actualRepeatCount = status === 'done' && first.taskType === 'memorization'
-      ? settings.allowRepeatCountEditing
-        ? Math.min(expectedRepeatCount, Math.max(1, Math.trunc(Number(req.body.repeatCount ?? expectedRepeatCount))))
-        : expectedRepeatCount
-      : 0;
-    const expectedListeningCount = first.taskType === 'memorization'
-      ? normalizeRepeatCount(first.track === 'mastery' ? settings.masteryListeningCount : settings.memorizationListeningCount, 3)
-      : 0;
-    const actualListeningCount = status === 'done' && expectedListeningCount > 0
-      ? settings.allowListeningCountEditing
-        ? Math.min(expectedListeningCount, Math.max(1, Math.trunc(Number(req.body.listeningCount ?? expectedListeningCount))))
-        : expectedListeningCount
-      : 0;
+    const _resolveExpectedRepeatCount4 = () => {
+      if (first.taskType === 'memorization') {
+        return Math.max(1, Number(first.track === 'mastery' ? settings.masteryRepeatCount : settings.memorizationRepeatCount));
+      }
+      return 0;
+    };
+    const expectedRepeatCount = _resolveExpectedRepeatCount4();
+    const _resolveActualRepeatCount2 = () => {
+      if (status === 'done' && first.taskType === 'memorization') {
+        if (settings.allowRepeatCountEditing) {
+          return Math.min(expectedRepeatCount, Math.max(1, Math.trunc(Number(req.body.repeatCount ?? expectedRepeatCount))));
+        }
+        return expectedRepeatCount;
+      }
+      return 0;
+    };
+    const actualRepeatCount = _resolveActualRepeatCount2();
+    const _resolveExpectedListeningCount3 = () => {
+      if (first.taskType === 'memorization') {
+        return normalizeRepeatCount(first.track === 'mastery' ? settings.masteryListeningCount : settings.memorizationListeningCount, 3);
+      }
+      return 0;
+    };
+    const expectedListeningCount = _resolveExpectedListeningCount3();
+    const _resolveActualListeningCount2 = () => {
+      if (status === 'done' && expectedListeningCount > 0) {
+        if (settings.allowListeningCountEditing) {
+          return Math.min(expectedListeningCount, Math.max(1, Math.trunc(Number(req.body.listeningCount ?? expectedListeningCount))));
+        }
+        return expectedListeningCount;
+      }
+      return 0;
+    };
+    const actualListeningCount = _resolveActualListeningCount2();
     if (first.taskType === 'memorization') {
       const repeatIds = tasks.filter((task) => task.taskType === 'repeat').map((task) => Number(task.id));
       if (repeatIds.length) {
@@ -12420,7 +12732,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
         const ordered = [...groupRows].sort((first, second) => compareQuranPositionInDirection(taskStartPosition(first), taskStartPosition(second), direction));
         const start = taskStartPosition(ordered[0]);
         if (Number(row.nazemManaged)) {
-          const lastTask = ordered[ordered.length - 1] || row;
+          const lastTask = ordered.at(-1) || row;
           const scheduledEnd = taskEndPosition(lastTask);
           const nazemLate = Boolean(Number(row.nazemLate));
           const planEnd = {
@@ -12517,7 +12829,25 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
       [supervisorId, date, date, date],
     );
     const nazemDueStudentIds = new Set(nazemDueRows.map((row) => Number(row.studentId)));
-    const serializeEvaluationTask = (row) => ({
+    const serializeEvaluationTask = (row) => { const _resolveExpectedRepeatCount = () => {
+                                                 if (row.nazemManaged) {
+                                                   return row.nazemRepeatCount;
+                                                 }
+                                                 if (row.track === 'mastery') {
+                                                   return settings.masteryRepeatCount;
+                                                 }
+                                                 return settings.memorizationRepeatCount;
+                                               };
+                                               const _resolveExpectedListeningCount = () => {
+                                                 if (row.taskType === 'memorization') {
+                                                   if (row.nazemManaged) {
+                                                     return 1;
+                                                   }
+                                                   return normalizeRepeatCount(row.track === 'mastery' ? settings.masteryListeningCount : settings.memorizationListeningCount, 3);
+                                                 }
+                                                 return 0;
+                                               };
+                                               return ({
       ...normalizeTaskRow(row, row.nazemManaged ? 'ayah' : settings.quranReferenceMode),
       nazemManaged: Boolean(row.nazemManaged),
       nazemLate: Boolean(Number(row.nazemManaged) && Number(row.nazemLate)),
@@ -12526,15 +12856,9 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
       allowQuranCompensation: !row.nazemManaged && Boolean(settings.allowQuranCompensation),
       allowQuranExtra: !row.nazemManaged && Boolean(settings.allowQuranExtra),
       expectedRepeatCount: row.taskType === 'memorization'
-        ? normalizeRepeatCount(row.nazemManaged
-          ? row.nazemRepeatCount
-          : row.track === 'mastery' ? settings.masteryRepeatCount : settings.memorizationRepeatCount, 1)
+        ? normalizeRepeatCount(_resolveExpectedRepeatCount(), 1)
         : 0,
-      expectedListeningCount: row.taskType === 'memorization'
-        ? (row.nazemManaged
-          ? 1
-          : normalizeRepeatCount(row.track === 'mastery' ? settings.masteryListeningCount : settings.memorizationListeningCount, 3))
-        : 0,
+      expectedListeningCount: _resolveExpectedListeningCount(),
       expectedLinkCount: row.nazemManaged && ['memorization', 'link'].includes(row.taskType) && row.track !== 'mastery'
         ? readNazemLinkCount(row.nazemLinkCount)
         : 0,
@@ -12544,10 +12868,10 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
         { page: Number(row.planStartPage), surah: Number(row.planStartSurah), ayah: Number(row.planStartAyah) },
         { page: Number(row.planEndPage), surah: Number(row.planEndSurah), ayah: Number(row.planEndAyah) },
       ),
-      ...(executionOptionsByGroup.get(`${row.planId}:${row.taskDate}:${row.taskType}:${row.track}`) || {}),
+      ...(executionOptionsByGroup.get(`${row.planId}:${row.taskDate}:${row.taskType}:${row.track}`)),
       ayahMarkCount: new Set((marksByTask.get(Number(row.id)) || []).map(quranTaskMarkVerseKey)).size,
       ayahMarks: marksByTask.get(Number(row.id)) || [],
-    });
+    }); };
     res.json({
       date,
       previousSessionDate,
@@ -12747,7 +13071,7 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
     const nazemManaged = await isStudentPlanManagedByNazem(connection, anchor.studentId);
     if (nazemManaged) {
       const expectedStart = taskStartPosition(tasks[0]);
-      const expectedEnd = taskEndPosition(tasks[tasks.length - 1]);
+      const expectedEnd = taskEndPosition(tasks.at(-1));
       const nazemLate = Boolean(Number(anchor.nazemLate));
       const planEnd = {
         page: Number(plan.endPage),
@@ -12775,16 +13099,52 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
         const partial = !beforeTask && compareQuranPositionInDirection(requestedEnd, taskEnd, direction) < 0;
         const extended = index === tasks.length - 1
           && compareQuranPositionInDirection(requestedEnd, taskEnd, direction) > 0;
+        const _resolveConditional8 = () => {
+          if (beforeTask) {
+            return null;
+          }
+          if (partial || extended) {
+            return requestedEnd.page;
+          }
+          return taskEnd.page;
+        };
+        const _resolveConditional9 = () => {
+          if (beforeTask) {
+            return null;
+          }
+          if (partial || extended) {
+            return requestedEnd.surah;
+          }
+          return taskEnd.surah;
+        };
+        const _resolveConditional0 = () => {
+          if (beforeTask) {
+            return null;
+          }
+          if (partial || extended) {
+            return requestedEnd.ayah;
+          }
+          return taskEnd.ayah;
+        };
+        const _resolveConditional1 = () => {
+          if (beforeTask || partial) {
+            return 'partial';
+          }
+          if (extended) {
+            return 'extra';
+          }
+          return 'complete';
+        };
         await connection.query(
           `UPDATE student_quran_tasks
            SET student_status = ?, actual_to_page = ?, actual_to_surah = ?, actual_to_ayah = ?, execution_state = ?
            WHERE id = ?`,
           [
             beforeTask ? 'not_done' : 'done',
-            beforeTask ? null : partial || extended ? requestedEnd.page : taskEnd.page,
-            beforeTask ? null : partial || extended ? requestedEnd.surah : taskEnd.surah,
-            beforeTask ? null : partial || extended ? requestedEnd.ayah : taskEnd.ayah,
-            beforeTask || partial ? 'partial' : extended ? 'extra' : 'complete',
+            _resolveConditional8(),
+            _resolveConditional9(),
+            _resolveConditional0(),
+            _resolveConditional1(),
             currentTask.id,
           ],
         );
@@ -12813,17 +13173,17 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
     }
     await buildExecutionSegmentDetails(connection, context, actualEnd, settings);
 
-    const currentEnd = taskEndPosition(tasks[tasks.length - 1]);
+    const currentEnd = taskEndPosition(tasks.at(-1));
     if (compareQuranPositionInDirection(actualEnd, currentEnd, direction) > 0) {
       const combinedTasksBeforeExtension = tasks;
-      const extensionTaskDate = tasks[tasks.length - 1].taskDate;
+      const extensionTaskDate = tasks.at(-1).taskDate;
       let cursor = await getAdjacentQuranAyahInDirection(connection, currentEnd, direction);
       let canExtendCurrentPageTask = true;
       let guard = 0;
       while (cursor && compareQuranPositionInDirection(cursor, actualEnd, direction) <= 0 && guard < 1000) {
         const segmentEnd = await getQuranTraversalPageEnd(connection, cursor, actualEnd, direction);
         if (canExtendCurrentPageTask && Number(cursor.page) === Number(currentEnd.page)) {
-          const currentTask = tasks[tasks.length - 1];
+          const currentTask = tasks.at(-1);
           await connection.query(
             `UPDATE student_quran_tasks
              SET to_page = ?, to_surah = ?, to_ayah = ?,
@@ -12889,6 +13249,42 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
       const beforeTask = compareQuranPositionInDirection(actualEnd, taskStart, direction) < 0;
       const partial = !beforeTask && compareQuranPositionInDirection(actualEnd, taskEnd, direction) < 0;
       const beyondNormal = compareQuranPositionInDirection(taskStart, context.normalEnd, direction) > 0;
+      const _resolveConditional10 = () => {
+        if (beforeTask) {
+          return null;
+        }
+        if (partial) {
+          return actualEnd.page;
+        }
+        return taskEnd.page;
+      };
+      const _resolveConditional11 = () => {
+        if (beforeTask) {
+          return null;
+        }
+        if (partial) {
+          return actualEnd.surah;
+        }
+        return taskEnd.surah;
+      };
+      const _resolveConditional12 = () => {
+        if (beforeTask) {
+          return null;
+        }
+        if (partial) {
+          return actualEnd.ayah;
+        }
+        return taskEnd.ayah;
+      };
+      const _resolveConditional13 = () => {
+        if (beforeTask || partial) {
+          return 'partial';
+        }
+        if (beyondNormal) {
+          return 'extra';
+        }
+        return 'complete';
+      };
       await connection.query(
         `UPDATE student_quran_tasks
          SET student_status = ?, actual_to_page = ?, actual_to_surah = ?, actual_to_ayah = ?, execution_state = ?,
@@ -12897,10 +13293,10 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
          WHERE id = ?`,
         [
           beforeTask ? 'not_done' : 'done',
-          beforeTask ? null : partial ? actualEnd.page : taskEnd.page,
-          beforeTask ? null : partial ? actualEnd.surah : taskEnd.surah,
-          beforeTask ? null : partial ? actualEnd.ayah : taskEnd.ayah,
-          beforeTask || partial ? 'partial' : beyondNormal ? 'extra' : 'complete',
+          _resolveConditional10(),
+          _resolveConditional11(),
+          _resolveConditional12(),
+          _resolveConditional13(),
           context.normalEnd.page, context.normalEnd.surah, context.normalEnd.ayah,
           context.scheduledEnd?.page || null, context.scheduledEnd?.surah || null, context.scheduledEnd?.ayah || null,
           task.id,
@@ -13322,7 +13718,16 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
         for (const rawMark of wordMarksPayload) {
           const startIndex = wordIndexByLocation.get(String(rawMark?.startLocation || ''));
           const endIndex = wordIndexByLocation.get(String(rawMark?.endLocation || ''));
-          const markType = rawMark?.markType === 'warning' ? 'warning' : rawMark?.markType === 'mistake' ? 'mistake' : null;
+          const _resolveMarkType2 = () => {
+            if (rawMark?.markType === 'warning') {
+              return 'warning';
+            }
+            if (rawMark?.markType === 'mistake') {
+              return 'mistake';
+            }
+            return null;
+          };
+          const markType = _resolveMarkType2();
           if (startIndex === undefined || endIndex === undefined || !markType) {
             await connection.rollback();
             return res.status(422).json({ message: 'تحديد الكلمات غير صحيح.' });
@@ -13456,7 +13861,16 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
       && task.track === 'mastery'
       ? true
       : !notMemorized && score >= policy.passingScore;
-    const ratingLabel = notMemorized ? nazemNotCompletedLabel(task) : (completed ? 'متقن' : 'يحتاج إعادة');
+    const _resolveRatingLabel = () => {
+      if (notMemorized) {
+        return nazemNotCompletedLabel(task);
+      }
+      if (completed) {
+        return 'متقن';
+      }
+      return 'يحتاج إعادة';
+    };
+    const ratingLabel = _resolveRatingLabel();
     await connection.query(
       `
       UPDATE student_quran_tasks
@@ -13526,28 +13940,51 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
       && task.taskType === 'memorization'
       && !(task.nazemManaged && task.track === 'mastery')
       && (task.nazemManaged || canTeacherExecuteQuranTask(settings, 'repeat'))) {
+      const _resolveExpectedRepeatCount2 = () => {
+        if (task.nazemManaged) {
+          return task.nazemRepeatCount;
+        }
+        if (task.track === 'mastery') {
+          return settings.masteryRepeatCount;
+        }
+        return settings.memorizationRepeatCount;
+      };
       const expectedRepeatCount = normalizeRepeatCount(
-        task.nazemManaged
-          ? task.nazemRepeatCount
-          : task.track === 'mastery' ? settings.masteryRepeatCount : settings.memorizationRepeatCount,
+        _resolveExpectedRepeatCount2(),
         1,
       );
       const requestedRepeatCount = Number(req.body.repeatCount ?? expectedRepeatCount);
-      const actualRepeatCount = Number.isFinite(requestedRepeatCount)
-        ? Math.min(task.nazemManaged ? 30 : expectedRepeatCount, Math.max(1, Math.trunc(requestedRepeatCount)))
-        : expectedRepeatCount;
-      const expectedListeningCount = task.nazemManaged
-        ? 1
-        : normalizeRepeatCount(
+      const _resolveActualRepeatCount3 = () => {
+        if (Number.isFinite(requestedRepeatCount)) {
+          return Math.min(task.nazemManaged ? 30 : expectedRepeatCount, Math.max(1, Math.trunc(requestedRepeatCount)));
+        }
+        return expectedRepeatCount;
+      };
+      const actualRepeatCount = _resolveActualRepeatCount3();
+      const _resolveExpectedListeningCount4 = () => {
+        if (task.nazemManaged) {
+          return 1;
+        }
+        return normalizeRepeatCount(
           task.track === 'mastery' ? settings.masteryListeningCount : settings.memorizationListeningCount,
           3,
         );
+      };
+      const expectedListeningCount = _resolveExpectedListeningCount4();
       const requestedListeningCount = Number(req.body.listeningCount ?? expectedListeningCount);
-      const actualListeningCount = task.nazemManaged
-        ? (requestedListeningCount > 0 ? 1 : 0)
-        : expectedListeningCount > 0 && Number.isFinite(requestedListeningCount)
-          ? Math.min(expectedListeningCount, Math.max(1, Math.trunc(requestedListeningCount)))
-          : expectedListeningCount;
+      const _resolveActualListeningCount3 = () => {
+        if (task.nazemManaged) {
+          if (requestedListeningCount > 0) {
+            return 1;
+          }
+          return 0;
+        }
+        if (expectedListeningCount > 0 && Number.isFinite(requestedListeningCount)) {
+          return Math.min(expectedListeningCount, Math.max(1, Math.trunc(requestedListeningCount)));
+        }
+        return expectedListeningCount;
+      };
+      const actualListeningCount = _resolveActualListeningCount3();
       await connection.query(
         `UPDATE student_quran_tasks
          SET student_status = 'done',
@@ -13680,14 +14117,14 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
         );
         const ordered = [...groupTasks].sort((first, second) => compareQuranPositionInDirection(taskStartPosition(first), taskStartPosition(second), direction));
         const actualStart = taskStartPosition(ordered[0]);
-        const last = ordered[ordered.length - 1];
+        const last = ordered.at(-1);
         const actualEnd = {
           page: Number(last.actualToPage || last.toPage),
           surah: Number(last.actualToSurah || last.toSurah),
           ayah: Number(last.actualToAyah || last.toAyah),
         };
         const nazemLate = Boolean(Number(task.nazemLate));
-        const nazemScheduledEnd = taskEndPosition(ordered[ordered.length - 1]);
+        const nazemScheduledEnd = taskEndPosition(ordered.at(-1));
         const nazemPlanEnd = {
           page: Number(plan.endPage),
           surah: Number(plan.endSurah),
@@ -13696,8 +14133,9 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
         const executionSettings = task.nazemManaged
           ? { ...settings, allowQuranCompensation: false, allowQuranExtra: !nazemLate }
           : settings;
-        const context = task.nazemManaged
-          ? {
+        let context;
+        if (task.nazemManaged) {
+          context = {
               actualStart,
               normalEnd: nazemScheduledEnd,
               scheduledEnd: nazemScheduledEnd,
@@ -13705,8 +14143,10 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
               allowedEnd: nazemLate ? nazemScheduledEnd : nazemPlanEnd,
               direction,
               legacyMode: false,
-            }
-          : await getPlanProgressContext(connection, plan, date, executionSettings, actualStart);
+            };
+        } else {
+          context = await getPlanProgressContext(connection, plan, date, executionSettings, actualStart);
+        }
         const segments = await buildExecutionSegmentDetails(
           connection,
           context,
@@ -13737,9 +14177,19 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
           await updatePlanCursorAfterExecution(connection, plan, 'memorization', actualEnd, { nazemManaged: task.nazemManaged });
         }
       }
-      const taskLabel = task.taskType === 'memorization'
-        ? (task.track === 'mastery' ? 'الإتقان' : 'الحفظ')
-        : task.taskType === 'review' ? 'المراجعة' : 'الربط';
+      const _resolveTaskLabel = () => {
+        if (task.taskType === 'memorization') {
+          if (task.track === 'mastery') {
+            return 'الإتقان';
+          }
+          return 'الحفظ';
+        }
+        if (task.taskType === 'review') {
+          return 'المراجعة';
+        }
+        return 'الربط';
+      };
+      const taskLabel = _resolveTaskLabel();
       if (settings.pointsSystemEnabled) {
         await setQuranTaskGroupReward(connection, {
           taskIds: groupTasks.map((row) => row.id),
@@ -13764,17 +14214,25 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
           if (repeatRows.length) {
             const completedRepeatCount = Math.min(...repeatRows.map((row) => Math.max(0, Number(row.actualRepeatCount || 0))));
             const completedListeningCount = Math.min(...repeatRows.map((row) => Math.max(0, Number(row.actualListeningCount || 0))));
+            const _resolveExpectedRepeatCount5 = () => {
+              if (task.nazemManaged) {
+                return 30;
+              }
+              return normalizeRepeatCount(task.track === 'mastery' ? settings.masteryRepeatCount : settings.memorizationRepeatCount, 1);
+            };
+            const _resolveExpectedListeningCount5 = () => {
+              if (task.nazemManaged) {
+                return 1;
+              }
+              return normalizeRepeatCount(task.track === 'mastery' ? settings.masteryListeningCount : settings.memorizationListeningCount, 3);
+            };
             const repeatReward = calculateStudentExecutionPoints({
               taskType: 'memorization',
               track: task.track,
               completedRepeatCount,
-              expectedRepeatCount: task.nazemManaged
-                ? 30
-                : normalizeRepeatCount(task.track === 'mastery' ? settings.masteryRepeatCount : settings.memorizationRepeatCount, 1),
+              expectedRepeatCount: _resolveExpectedRepeatCount5(),
               completedListeningCount,
-              expectedListeningCount: task.nazemManaged
-                ? 1
-                : normalizeRepeatCount(task.track === 'mastery' ? settings.masteryListeningCount : settings.memorizationListeningCount, 3),
+              expectedListeningCount: _resolveExpectedListeningCount5(),
               settings,
             });
             await setQuranTaskGroupReward(connection, {
@@ -13819,6 +14277,15 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
     const savedMarksByTask = await getQuranTaskAyahMarks(connection, [taskId]);
     const savedAyahMarks = savedMarksByTask.get(taskId) || [];
     const savedWordMarksByTask = await getQuranTaskWordMarks(connection, [taskId]);
+    const _resolveSyncStatus = () => {
+      if (task.nazemManaged) {
+        if (nazemJobId) {
+          return 'pending';
+        }
+        return 'awaiting_related_tasks';
+      }
+      return 'synced';
+    };
     res.json({
       ok: true,
       warningCount,
@@ -13833,9 +14300,7 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
       ayahMarks: savedAyahMarks,
       wordMarks: savedWordMarksByTask.get(taskId) || [],
       sessionId: sessionClaim.sessionId,
-      syncStatus: task.nazemManaged
-        ? (nazemJobId ? 'pending' : 'awaiting_related_tasks')
-        : 'synced',
+      syncStatus: _resolveSyncStatus(),
       syncError: '',
     });
   } catch (error) {
@@ -13896,7 +14361,7 @@ app.post('/api/offline-recitation/batch', async (req, res) => {
         const taskResults = [];
         for (const item of (Array.isArray(session?.tasks) ? session.tasks : [])) {
           const body = {
-            ...(item.payload || {}),
+            ...(item.payload),
             requestId: `${session.sessionId}:${item.taskId}`,
             sessionId: session.sessionId,
             date: session.sessionDate,
@@ -14040,7 +14505,7 @@ const allowedWhatsAppAttachmentTypes = new Set([
 
 const sanitizeWhatsAppAttachmentName = (value) => Array.from(String(value || 'attachment'))
   .map((character) => {
-    const code = character.charCodeAt(0);
+    const code = character.codePointAt(0);
     return character === '/' || character === '\\' || code < 32 || code === 127 ? '_' : character;
   })
   .join('')
@@ -14060,7 +14525,7 @@ app.post('/api/whatsapp/send', requirePermission('whatsappSend'), async (req, re
     const studentIds = normalizeRecipientIds(req.body.studentIds);
     const supervisorIds = normalizeRecipientIds(req.body.supervisorIds);
     const messageTemplate = String(req.body.message || '').trim();
-    const attachment = req.body.attachment && req.body.attachment.data && req.body.attachment.type
+    const attachment = req.body.attachment?.data && req.body.attachment.type
       ? {
           name: sanitizeWhatsAppAttachmentName(req.body.attachment.name),
           type: String(req.body.attachment.type || '').trim().toLowerCase().slice(0, 120),
@@ -15960,27 +16425,39 @@ async function buildProgressReport({
         const memorization = completedTaskAmount(memorizationItems, isAcceptedMemorizationTask);
         const mastery = completedTaskAmount(masteryItems, isAcceptedMemorizationTask);
         const review = completedTaskAmount(taskItems.review, (task) => task.studentStatus === 'done');
+        const _resolveMemorizationStatus = () => {
+          if (memorizationItems.length === 0) {
+            return 'no_plan';
+          }
+          if (acceptedMemorizationItems.length === 0) {
+            return 'not_completed';
+          }
+          if (acceptedMemorizationItems.some((task) => task.executionState === 'partial')) {
+            return 'partial';
+          }
+          return 'completed';
+        };
+        const _resolveMasteryStatus = () => {
+          if (masteryItems.length === 0) {
+            return 'no_plan';
+          }
+          if (acceptedMasteryItems.length === 0) {
+            return 'not_completed';
+          }
+          if (acceptedMasteryItems.some((task) => task.executionState === 'partial')) {
+            return 'partial';
+          }
+          return 'completed';
+        };
         return {
           date: detailDate,
           attendanceStatus: attendanceRecord?.status || (sessionDateSet.has(detailDate) ? '' : 'no_session'),
           memorization,
           memorizationItems: acceptedMemorizationItems,
-          memorizationStatus: memorizationItems.length === 0
-            ? 'no_plan'
-            : acceptedMemorizationItems.length === 0
-              ? 'not_completed'
-              : acceptedMemorizationItems.some((task) => task.executionState === 'partial')
-                ? 'partial'
-                : 'completed',
+          memorizationStatus: _resolveMemorizationStatus(),
           mastery,
           masteryItems: acceptedMasteryItems,
-          masteryStatus: masteryItems.length === 0
-            ? 'no_plan'
-            : acceptedMasteryItems.length === 0
-              ? 'not_completed'
-              : acceptedMasteryItems.some((task) => task.executionState === 'partial')
-                ? 'partial'
-                : 'completed',
+          masteryStatus: _resolveMasteryStatus(),
           review,
           reviewItems: taskItems.review.filter((task) => task.studentStatus === 'done'),
           repeat: completedRepeatItems.length
@@ -16171,11 +16648,16 @@ async function buildProgressPdf(report) {
         const gap = Math.max(3, size * 0.4);
         const widths = words.map((word) => doc.widthOfString(word));
         const phraseWidth = widths.reduce((sum, itemWidth) => sum + itemWidth, 0) + (Math.max(words.length - 1, 0) * gap);
-        let cursor = align === 'center'
-          ? x + ((width + Math.min(phraseWidth, width)) / 2)
-          : align === 'left'
-            ? x + Math.min(phraseWidth, width)
-            : x + width;
+        const _resolveCursor = () => {
+          if (align === 'center') {
+            return x + ((width + Math.min(phraseWidth, width)) / 2);
+          }
+          if (align === 'left') {
+            return x + Math.min(phraseWidth, width);
+          }
+          return x + width;
+        };
+        let cursor = _resolveCursor();
         for (let index = 0; index < words.length; index += 1) {
           const wordWidth = widths[index];
           if (cursor - wordWidth < x) break;
@@ -16415,12 +16897,18 @@ const countRecitationSessions = (rows = []) => new Set(
 ).size;
 
 function getRecitationRowValues(row) {
+  const _resolveExecutionBreakdown = () => {
+    if (row.taskType === 'memorization') {
+      return `السماع: ${Number(row.actualListeningCount || 0) > 0 ? 'نعم' : 'لا'}`;
+    }
+    return '';
+  };
   const executionBreakdown = [
     Number(row.normalFaces || 0) ? `طبيعي: ${Number(row.normalFaces)} وجه` : '',
     !row.nazemSource && Number(row.compensationFaces || 0) ? `تعويض: ${Number(row.compensationFaces)} وجه` : '',
     !row.nazemSource && Number(row.extraFaces || 0) ? `زيادة: ${Number(row.extraFaces)} وجه` : '',
     row.taskType === 'memorization' ? `التكرار: ${Number(row.actualRepeatCount || 0)}` : '',
-    row.taskType === 'memorization' ? `السماع: ${Number(row.actualListeningCount || 0) > 0 ? 'نعم' : 'لا'}` : '',
+    _resolveExecutionBreakdown(),
     row.nazemSource ? 'المصدر: ناظم' : '',
   ].filter(Boolean).join('، ');
   return {
@@ -16611,7 +17099,16 @@ async function buildRecitationSessionsReport({ from, startDate: requestedStartDa
     const wordMarks = parseAttemptMarks(row.wordMarksJson);
     const currentMarks = wordMarks.length ? wordMarks : ayahMarks;
     const historicalMarks = historicalMarksByTaskDate.get(`${Number(row.taskId)}:${row.sessionDate}`);
-    const displayMarks = isStudentHistory ? currentMarks : currentMarks.length ? currentMarks : (historicalMarks?.marks || []);
+    const _resolveDisplayMarks = () => {
+      if (isStudentHistory) {
+        return currentMarks;
+      }
+      if (currentMarks.length) {
+        return currentMarks;
+      }
+      return historicalMarks?.marks || [];
+    };
+    const displayMarks = _resolveDisplayMarks();
     const detailedWarningCount = displayMarks.reduce((sum, mark) => (
       sum + (mark.markType === 'warning' ? Number(mark.count || 1) : Number(mark.warningCount || 0))
     ), 0);
@@ -16808,7 +17305,16 @@ function formatMemorizedSize(mergedRanges, juzRanges, totalFaces) {
     && compareQuranPosition(getQuranRangeEnd(range), { page: juz.endPage, surah: juz.endSurah, ayah: juz.endAyah }) >= 0
   ))).length;
   if (completedJuzCount > 0) {
-    const unit = completedJuzCount === 1 ? 'جزء' : completedJuzCount === 2 ? 'جزآن' : 'أجزاء';
+    const _resolveUnit = () => {
+      if (completedJuzCount === 1) {
+        return 'جزء';
+      }
+      if (completedJuzCount === 2) {
+        return 'جزآن';
+      }
+      return 'أجزاء';
+    };
+    const unit = _resolveUnit();
     return `${completedJuzCount.toLocaleString('ar-SA')} ${unit}`;
   }
   return `${Number(totalFaces || 0).toLocaleString('ar-SA')} وجه`;
@@ -17200,7 +17706,7 @@ async function getReportArchiveById(archiveId, { committeeId = 'all' } = {}) {
     const [[committee]] = await db().query('SELECT name FROM committees WHERE id = ? LIMIT 1', [Number(committeeId)]);
     if (committee?.name) {
       progressReport.rows = (progressReport.rows || []).filter((row) => row.committeeName === committee.name);
-      progressReport.period = { ...(progressReport.period || {}), committeeId, committeeName: committee.name };
+      progressReport.period = { ...(progressReport.period), committeeId, committeeName: committee.name };
     }
   }
   return {

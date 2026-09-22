@@ -11,9 +11,27 @@ export default function StudentHomeHeader({ points, progress, progressLabel = "�
   const mobile = useMediaQuery('(max-width: 899px)');
   const [open, setOpen] = useState(false);
   const select = (key) => { setOpen(false); onOpen(key); };
+  const _resolveTitle = () => {
+    if (!showLevel) {
+      return 'الحساب';
+    }
+    if (level == null) {
+      return 'تحميل المستوى';
+    }
+    return `المستوى ${level} من 100`;
+  };
+  const _resolveConditional = () => {
+    if (!showLevel) {
+      return <User size={24} />;
+    }
+    if (level == null) {
+      return '—';
+    }
+    return Number(level).toLocaleString('ar-SA-u-nu-latn');
+  };
   return <header className="student-home-header"><div className="student-home-header-inner">
     <div className="student-home-account-group"><Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild><Button variant="ghost" className="student-home-level !text-white" aria-label="قائمة حساب الطالب" title={!showLevel ? 'الحساب' : level == null ? 'تحميل المستوى' : `المستوى ${level} من 100`}>{!showLevel ? <User size={24} /> : level == null ? '—' : Number(level).toLocaleString('ar-SA-u-nu-latn')}</Button></PopoverTrigger>
+      <PopoverTrigger asChild><Button variant="ghost" className="student-home-level !text-white" aria-label="قائمة حساب الطالب" title={_resolveTitle()}>{_resolveConditional()}</Button></PopoverTrigger>
       <PopoverContent align="end" className="student-home-account-menu" dir="rtl" aria-label="الحساب">
         <div className="student-home-points" aria-label="إجمالي النقاط">{points == null ? <span>—</span> : <RankingPointsValue value={points} />}</div>
         {[[CalendarDays, 'الجلسات', 'sessions'], [PhoneCall, 'المكالمات', 'calls'], ...(!mobile && programsEnabled ? [[BookOpen, 'البرامج', 'programs']] : [])].map(([Icon, label, key]) => <Button variant="ghost" key={key} className="student-home-menu-item" onClick={() => select(key)}><Icon size={18} /><span>{label}</span></Button>)}

@@ -248,50 +248,20 @@ const NarrationDaySection = () => {
     setEndOpen(true);
   };
 
-  return (
-    <>
-      <DashboardMobileHeaderActions>
-        <div className="flex items-center gap-1.5 sm:gap-2" dir="rtl">
-          <Button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            className="h-11 w-11 gap-2 px-0 sm:w-auto sm:px-3"
-            aria-label="فتح يوم سرد"
-            title="فتح يوم سرد"
-          >
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">فتح</span>
-          </Button>
-          {archiveId && events.some((item) => item.status === 'open') && (
-            <Button type="button" variant="outline" onClick={returnToCurrent} className="h-11 w-11 gap-2 px-0 sm:w-auto sm:px-3" aria-label="العودة للسرد الحالي" title="العودة للسرد الحالي">
-              <RotateCcw className="h-4 w-4" />
-              <span className="hidden lg:inline">السرد الحالي</span>
-            </Button>
-          )}
-          {event?.status === 'open' && (
-            <Button type="button" variant="destructive" onClick={openEndDialog} className="h-11 w-11 gap-2 px-0 sm:w-auto sm:px-3" aria-label="إنهاء يوم السرد" title="إنهاء يوم السرد">
-              <CheckCircle2 className="h-4 w-4" />
-              <span className="hidden lg:inline">إنهاء</span>
-            </Button>
-          )}
-          <Button type="button" variant="outline" onClick={() => setArchiveOpen(true)} disabled={!archivedEvents.length} className="h-11 w-11 gap-2 px-0 sm:w-auto sm:px-3" aria-label="أرشيف أيام السرد" title="أرشيف أيام السرد">
-            <Archive className="h-4 w-4" />
-            <span className="hidden lg:inline">الأرشيف</span>
-          </Button>
-        </div>
-      </DashboardMobileHeaderActions>
-
-      <Card className="border-primary/30 bg-card neon-glow" dir="rtl">
-        <CardContent className="space-y-4 p-3 sm:p-4">
-        {isSaving ? (
-          <div className="flex min-h-[420px] flex-col items-center justify-center gap-3" role="status" aria-live="polite">
+  const _resolveNarrationDaySection = () => {
+    if (isSaving) {
+      return <div className="flex min-h-[420px] flex-col items-center justify-center gap-3" role="status" aria-live="polite">
             <DashboardLoader className="min-h-24" />
             <p className="font-black text-primary [font-family:var(--font-ui)]">جاري تحميل يوم السرد</p>
-          </div>
-        ) : isLoading ? <DashboardLoader className="min-h-[420px]" /> : !event ? (
-          <div className="rounded-lg border border-dashed border-primary/20 p-10 text-center font-bold text-muted-foreground">لا يوجد يوم سرد مفتوح.</div>
-        ) : (
-          <>
+          </div>;
+    }
+    if (isLoading) {
+      return <DashboardLoader className="min-h-[420px]" />;
+    }
+    if (!event) {
+      return <div className="rounded-lg border border-dashed border-primary/20 p-10 text-center font-bold text-muted-foreground">لا يوجد يوم سرد مفتوح.</div>;
+    }
+    return <>
             <div className="rounded-lg border border-primary/15 bg-background/60 p-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
@@ -343,8 +313,44 @@ const NarrationDaySection = () => {
                 <div className="rounded-lg border border-dashed border-primary/20 p-8 text-center font-bold text-muted-foreground">لا يوجد طلاب مطابقون.</div>
               )}
             </div>
-          </>
-        )}
+          </>;
+  };
+  return (
+    <>
+      <DashboardMobileHeaderActions>
+        <div className="flex items-center gap-1.5 sm:gap-2" dir="rtl">
+          <Button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="h-11 w-11 gap-2 px-0 sm:w-auto sm:px-3"
+            aria-label="فتح يوم سرد"
+            title="فتح يوم سرد"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">فتح</span>
+          </Button>
+          {archiveId && events.some((item) => item.status === 'open') && (
+            <Button type="button" variant="outline" onClick={returnToCurrent} className="h-11 w-11 gap-2 px-0 sm:w-auto sm:px-3" aria-label="العودة للسرد الحالي" title="العودة للسرد الحالي">
+              <RotateCcw className="h-4 w-4" />
+              <span className="hidden lg:inline">السرد الحالي</span>
+            </Button>
+          )}
+          {event?.status === 'open' && (
+            <Button type="button" variant="destructive" onClick={openEndDialog} className="h-11 w-11 gap-2 px-0 sm:w-auto sm:px-3" aria-label="إنهاء يوم السرد" title="إنهاء يوم السرد">
+              <CheckCircle2 className="h-4 w-4" />
+              <span className="hidden lg:inline">إنهاء</span>
+            </Button>
+          )}
+          <Button type="button" variant="outline" onClick={() => setArchiveOpen(true)} disabled={!archivedEvents.length} className="h-11 w-11 gap-2 px-0 sm:w-auto sm:px-3" aria-label="أرشيف أيام السرد" title="أرشيف أيام السرد">
+            <Archive className="h-4 w-4" />
+            <span className="hidden lg:inline">الأرشيف</span>
+          </Button>
+        </div>
+      </DashboardMobileHeaderActions>
+
+      <Card className="border-primary/30 bg-card neon-glow" dir="rtl">
+        <CardContent className="space-y-4 p-3 sm:p-4">
+        {_resolveNarrationDaySection()}
         </CardContent>
 
       <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>

@@ -1,3 +1,4 @@
+import CheckboxOption from '@/components/ui/checkbox-option';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Check, ImagePlus, Package, Pencil, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -116,7 +117,7 @@ const StoreSection = () => {
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => setForm((current) => ({ ...current, imageData: String(reader.result || '') }));
+    reader.onload = () => setForm((current) => ({ ...current, imageData: (typeof reader.result === 'string' ? reader.result : '') }));
     reader.onerror = () => toast({ title: 'تعذر قراءة الصورة', variant: 'destructive' });
     reader.readAsDataURL(file);
   };
@@ -204,6 +205,53 @@ const StoreSection = () => {
     return <div className="[font-family:var(--font-ui)]">{configurationActions}</div>;
   }
 
+  const _resolveStoreSection = () => {
+    if (tab === 'products') {
+      if (products.length === 0) {
+        return <Card><CardContent className="p-10 text-center text-sm font-bold text-muted-foreground">لا توجد منتجات.</CardContent></Card>;
+      }
+      return <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+            {products.map((product) => (
+              <StoreProductCard key={product.id} product={product} inactive={!product.isActive} showUnlimitedStock>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button type="button" variant="outline" className="h-11 rounded-xl border-[#d7a43b]/30 bg-background/75 px-2" onClick={() => openProduct(product)}><Pencil className="h-4 w-4" /> تعديل</Button>
+                    <Button type="button" variant="outline" className="h-11 rounded-xl border-[#d7a43b]/30 bg-background/75 px-2" onClick={() => toggleProductVisibility(product)}>{product.isActive ? 'إخفاء' : 'إظهار'}</Button>
+                    <Button type="button" variant="outline" className="h-11 rounded-xl border-destructive/30 bg-background/75 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeletingProduct(product)} aria-label={`حذف ${product.name}`}><Trash2 className="h-4 w-4" /> حذف</Button>
+                  </div>
+              </StoreProductCard>
+            ))}
+          </div>;
+    }
+    if (pendingOrders.length === 0) {
+      return <Card><CardContent className="p-10 text-center text-sm font-bold text-muted-foreground">لا توجد طلبات طلاب.</CardContent></Card>;
+    }
+    return <Card className="border-primary/20 bg-card">
+          <CardContent className="divide-y divide-primary/10 p-0">
+            {pendingOrders.map((order) => (
+              <div key={order.id} className="flex min-h-16 items-center gap-2 px-3 py-2 sm:px-4">
+                <CheckboxOption
+                  checked={order.fulfilled}
+                  label={order.fulfilled ? 'إلغاء تحديد الطلب كمكتمل' : 'تحديد الطلب كمكتمل'}
+                  onCheckedChange={() => toggleOrder(order)}
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                >
+                  <span className={`grid h-7 w-7 place-items-center rounded-lg border ${order.fulfilled ? 'border-primary bg-primary text-primary-foreground' : 'border-primary/25 bg-background text-transparent'}`}>
+                    <Check className="h-3.5 w-3.5" />
+                  </span>
+                </CheckboxOption>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-black text-foreground">{order.studentName} — {order.productName}</span>
+                  <span className="mt-1 block text-xs font-bold text-muted-foreground">{order.committeeName || 'بدون حلقة'} · {order.createdAt}</span>
+                </span>
+                <PointsValue value={order.pointsPrice} className="shrink-0 text-sm" />
+                <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-destructive" onClick={() => setDeletingOrder(order)} aria-label="حذف الطلب">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>;
+  };
   return (
     <div className="space-y-5 [font-family:var(--font-ui)]">
       {configurationActions}
@@ -223,54 +271,7 @@ const StoreSection = () => {
         )}
       </div>
 
-      {tab === 'products' ? (
-        products.length === 0 ? (
-          <Card><CardContent className="p-10 text-center text-sm font-bold text-muted-foreground">لا توجد منتجات.</CardContent></Card>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-            {products.map((product) => (
-              <StoreProductCard key={product.id} product={product} inactive={!product.isActive} showUnlimitedStock>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Button type="button" variant="outline" className="h-11 rounded-xl border-[#d7a43b]/30 bg-background/75 px-2" onClick={() => openProduct(product)}><Pencil className="h-4 w-4" /> تعديل</Button>
-                    <Button type="button" variant="outline" className="h-11 rounded-xl border-[#d7a43b]/30 bg-background/75 px-2" onClick={() => toggleProductVisibility(product)}>{product.isActive ? 'إخفاء' : 'إظهار'}</Button>
-                    <Button type="button" variant="outline" className="h-11 rounded-xl border-destructive/30 bg-background/75 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeletingProduct(product)} aria-label={`حذف ${product.name}`}><Trash2 className="h-4 w-4" /> حذف</Button>
-                  </div>
-              </StoreProductCard>
-            ))}
-          </div>
-        )
-      ) : pendingOrders.length === 0 ? (
-        <Card><CardContent className="p-10 text-center text-sm font-bold text-muted-foreground">لا توجد طلبات طلاب.</CardContent></Card>
-      ) : (
-        <Card className="border-primary/20 bg-card">
-          <CardContent className="divide-y divide-primary/10 p-0">
-            {pendingOrders.map((order) => (
-              <div key={order.id} className="flex min-h-16 items-center gap-2 px-3 py-2 sm:px-4">
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={order.fulfilled}
-                  aria-label={order.fulfilled ? 'إلغاء تحديد الطلب كمكتمل' : 'تحديد الطلب كمكتمل'}
-                  onClick={() => toggleOrder(order)}
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                >
-                  <span className={`grid h-7 w-7 place-items-center rounded-lg border ${order.fulfilled ? 'border-primary bg-primary text-primary-foreground' : 'border-primary/25 bg-background text-transparent'}`}>
-                    <Check className="h-3.5 w-3.5" />
-                  </span>
-                </button>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-black text-foreground">{order.studentName} — {order.productName}</span>
-                  <span className="mt-1 block text-xs font-bold text-muted-foreground">{order.committeeName || 'بدون حلقة'} · {order.createdAt}</span>
-                </span>
-                <PointsValue value={order.pointsPrice} className="shrink-0 text-sm" />
-                <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-destructive" onClick={() => setDeletingOrder(order)} aria-label="حذف الطلب">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+      {_resolveStoreSection()}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-xl border-primary/30 bg-card text-foreground" dir="rtl">

@@ -42,7 +42,7 @@ const tasksAreContinuous = (previous, next) => {
 export const groupContinuousRecitationTasks = (tasks = []) => {
   const groups = [];
   sortRecitationTasks(tasks).forEach((task) => {
-    const current = groups[groups.length - 1];
+    const current = groups.at(-1);
     if (current && tasksAreContinuous(current.tasks[current.tasks.length - 1], task)) {
       current.tasks.push(task);
       return;
@@ -99,7 +99,7 @@ const formatContinuousPageRange = (tasks = []) => {
       toPage: Math.max(fromPage, toPage),
     } : null;
   }).filter(Boolean).sort((first, second) => first.fromPage - second.fromPage).forEach((segment) => {
-    const previous = segments[segments.length - 1];
+    const previous = segments.at(-1);
     if (previous && segment.fromPage <= previous.toPage + 1) {
       previous.toPage = Math.max(previous.toPage, segment.toPage);
       return;
@@ -113,7 +113,7 @@ export const formatContinuousRecitationRange = (tasks = [], referenceMode = 'aya
   if (referenceMode === 'page') return formatContinuousPageRange(tasks);
   const segments = [];
   sortRecitationTasks(tasks).map(taskSegment).forEach((segment) => {
-    const previous = segments[segments.length - 1];
+    const previous = segments.at(-1);
     if (previous && segmentsAreContinuous(previous, segment)) {
       previous.toSurah = segment.toSurah;
       previous.toAyah = segment.toAyah;

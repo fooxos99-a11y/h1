@@ -1,6 +1,6 @@
 const RECOVERY_STORAGE_KEY = 'madarij_stale_asset_recovery';
 const RECOVERY_COOLDOWN_MS = 30_000;
-const STALE_ASSET_ERROR = /Failed to fetch dynamically imported module|Loading chunk [\d]+ failed|ChunkLoadError|Importing a module script failed/i;
+const STALE_ASSET_ERROR = /Failed to fetch dynamically imported module|Loading chunk \d+ failed|ChunkLoadError|Importing a module script failed/i;
 
 export function recoverFromStaleAppAsset(error) {
   const message = String(error?.message || error || '');

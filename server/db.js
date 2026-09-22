@@ -1753,7 +1753,7 @@ async function initializeDatabase(databaseName, { seedDefaultData } = {}) {
 
 export async function initDatabase(databaseName = defaultDatabaseName, options = {}) {
   const normalizedName = String(databaseName || '').trim();
-  if (!/^[a-zA-Z0-9_]+$/.test(normalizedName)) {
+  if (!/^\w+$/.test(normalizedName)) {
     throw new Error('Database name is invalid.');
   }
   if (databaseInitializations.has(normalizedName)) return databaseInitializations.get(normalizedName);
@@ -1783,7 +1783,7 @@ export function runWithDatabase(databaseName, context, callback) {
   const usage = touchDatabasePool(normalizedName);
   usage.activeContexts += 1;
   return databaseContext.run(
-    { ...(context || {}), databaseName: normalizedName, pool: selectedPool },
+    { ...(context), databaseName: normalizedName, pool: selectedPool },
     async () => {
       try {
         return await callback();

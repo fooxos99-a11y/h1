@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useMemo, useRef, useState } from 'react';
 import { Bookmark, BookOpen, Hash, Layers, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
 const tabs = [
   { key: 'surahs', label: 'السور', icon: BookOpen },
@@ -17,18 +17,7 @@ const normalizeDigits = (value) => String(value || '').replace(/[٠-٩]/g, (digi
 const StudentMushafIndexDialog = ({ open, onOpenChange, index, currentPage, bookmarks = [], onSelectPage }) => {
   const [activeTab, setActiveTab] = useState('surahs');
   const [search, setSearch] = useState('');
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const closeOnEscape = (event) => {
-      if (event.key !== 'Escape') return;
-      setActiveTab('surahs');
-      setSearch('');
-      onOpenChange?.(false);
-    };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [onOpenChange, open]);
+  const previousFocus = useRef(null);
 
   const handleOpenChange = (nextOpen) => {
     if (!nextOpen) {
@@ -39,7 +28,7 @@ const StudentMushafIndexDialog = ({ open, onOpenChange, index, currentPage, book
   };
   const query = normalizeSearch(search);
   const numericQuery = normalizeDigits(query);
-  const ayahQuery = numericQuery.match(/^(\d{1,3})\s*[:/]\s*(\d{1,3})$/);
+  const ayahQuery = /^(\d{1,3})\s*[:/]\s*(\d{1,3})$/.exec(numericQuery);
   const directAyah = ayahQuery ? index?.ayahs?.find((item) => (
     Number(item.surah) === Number(ayahQuery[1]) && Number(item.ayah) === Number(ayahQuery[2])
   )) : null;
@@ -69,20 +58,22 @@ const StudentMushafIndexDialog = ({ open, onOpenChange, index, currentPage, book
 
   if (!open || typeof document === 'undefined') return null;
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] grid place-items-center bg-[#071c2b]/60 p-2 backdrop-blur-[3px] sm:p-4"
-      onMouseDown={(event) => event.target === event.currentTarget && handleOpenChange(false)}
-    >
-      <section
-        className="grid h-[min(42rem,calc(100svh-1rem))] w-full max-w-2xl grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-3 overflow-hidden rounded-2xl border border-border bg-card p-3 shadow-[0_24px_70px_hsl(210_55%_10%/0.24)] sm:h-[min(42rem,calc(100svh-2rem))] sm:p-5"
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        overlayClassName="z-[100]"
+        className="z-[101] h-[min(42rem,calc(100svh-1rem))] max-w-2xl grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-3 overflow-hidden p-3 [font-family:var(--font-ui)] sm:h-[min(42rem,calc(100svh-2rem))] sm:p-5"
         dir="rtl"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="student-mushaf-index-title"
+        aria-describedby={undefined}
+        onOpenAutoFocus={() => { previousFocus.current = document.activeElement; }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (previousFocus.current?.isConnected) previousFocus.current.focus();
+        }}
       >
         <header className="flex items-center justify-between gap-3">
-          <h2 id="student-mushaf-index-title" className="text-lg font-black text-foreground">فهرس المصحف</h2>
+          <DialogTitle asChild><h2 id="student-mushaf-index-title" className="text-lg font-black text-foreground">فهرس المصحف</h2></DialogTitle>
           <Button type="button" variant="ghost" size="icon" onClick={() => handleOpenChange(false)} aria-label="إغلاق فهرس المصحف" className="shrink-0">
             <X className="h-5 w-5" />
           </Button>
@@ -178,9 +169,8 @@ const StudentMushafIndexDialog = ({ open, onOpenChange, index, currentPage, book
             ) : <div className="flex min-h-40 items-center justify-center text-sm font-bold text-muted-foreground">لا توجد علامات محفوظة.</div>
           )}
         </div>
-      </section>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 };
 

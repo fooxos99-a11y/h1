@@ -178,15 +178,22 @@ const AccountPortal = () => {
   const isImmersiveRouteLoading = isLoading
     && session.role === 'student'
     && ['dailyChallenge', 'summit'].includes(requestedSection);
-  const activeSection = requestedSection === 'mushaf' && session.role === 'student'
-    ? 'mushaf'
-    : requestedSection === 'summit' && session.role === 'student' && site.features?.summit !== false && settings.summitEnabled
-    ? 'summit'
-    : requestedSection === 'dailyChallenge' && session.role === 'student' && dailyChallengeAvailable
-      ? 'dailyChallenge'
-    : sections.some((section) => section.key === requestedSection)
-      ? requestedSection
-      : defaultAccountSection(session.role, sections);
+  const _resolveActiveSection = () => {
+    if (requestedSection === 'mushaf' && session.role === 'student') {
+      return 'mushaf';
+    }
+    if (requestedSection === 'summit' && session.role === 'student' && site.features?.summit !== false && settings.summitEnabled) {
+      return 'summit';
+    }
+    if (requestedSection === 'dailyChallenge' && session.role === 'student' && dailyChallengeAvailable) {
+      return 'dailyChallenge';
+    }
+    if (sections.some((section) => section.key === requestedSection)) {
+      return requestedSection;
+    }
+    return defaultAccountSection(session.role, sections);
+  };
+  const activeSection = _resolveActiveSection();
 
   useEffect(() => {
     if (!session.token || hasDashboard || isLoading || !activeSection) return;
@@ -315,13 +322,20 @@ const AccountPortal = () => {
     );
   }
 
-  const headerContent = session.role === 'student' ? (
-    <div className="flex items-center gap-2" dir="rtl">
+  const _resolveHeaderContent = () => {
+    if (session.role === 'student') {
+      return <div className="flex items-center gap-2" dir="rtl">
       <StudentNotificationButton />
       {activeSection === 'quranSessions' && planPoints !== null && <span aria-label={`إجمالي النقاط: ${planPoints}`} className="[font-family:var(--font-ui)]"><RankingPointsValue value={planPoints} iconClassName="h-5 w-5" /></span>}
       {activeSection === 'store' && <PointsValue value={storeBalance} className="h-10 rounded-xl border border-[#d7a43b]/30 bg-[#fff8e8] px-3 text-base shadow-sm dark:bg-[#d7a43b]/10" iconClassName="h-5 w-5" />}
-    </div>
-  ) : activeSection === 'quranEvaluation' ? <><Suspense fallback={null}><RecitationSettingsButton staffId={session.supervisorId} /></Suspense><StudentNotificationButton showTrigger={false} /></> : <StudentNotificationButton />;
+    </div>;
+    }
+    if (activeSection === 'quranEvaluation') {
+      return <><Suspense fallback={null}><RecitationSettingsButton staffId={session.supervisorId} /></Suspense><StudentNotificationButton showTrigger={false} /></>;
+    }
+    return <StudentNotificationButton />;
+  };
+  const headerContent = _resolveHeaderContent();
 
   return (
     <>

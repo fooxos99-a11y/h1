@@ -73,7 +73,7 @@ class OfflineRecitationStore {
 
   async init() {
     if (this.driver) return this;
-    if (this.initializing) return this.initializing;
+    if (this.initializing !== null) return this.initializing;
     this.initializing = this.#initialize();
     try {
       await this.initializing;

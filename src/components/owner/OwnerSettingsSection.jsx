@@ -67,24 +67,14 @@ const OwnerSettingsSection = ({ complexes }) => {
 
   if (!activeComplexes.length) return <OwnerErrorState message="لا توجد مجمعات مفعّلة." />;
 
-  return (
-    <section className="space-y-4 [font-family:var(--font-ui)]">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <h2 className="text-xl font-black text-foreground sm:text-2xl">إعدادات المنصة</h2>
-        <div className="w-full sm:w-72">
-          <Label className="mb-1 block text-xs font-black">المجمع</Label>
-          <Select value={complexId} onValueChange={setComplexId}>
-            <SelectTrigger className="h-11 bg-card" aria-label="اختيار المجمع"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">جميع المجمعات</SelectItem>
-              {activeComplexes.map((complex) => <SelectItem key={complex.id} value={String(complex.id)}>{complex.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {error ? <OwnerErrorState message={error} onRetry={load} /> : !settings || !policies ? <DashboardLoader className="min-h-80" /> : (
-        <>
+  const _resolveOwnerSettingsSection = () => {
+    if (error) {
+      return <OwnerErrorState message={error} onRetry={load} />;
+    }
+    if (!settings || !policies) {
+      return <DashboardLoader className="min-h-80" />;
+    }
+    return <>
           <Card className="border-border/70 bg-card shadow-sm">
             <CardContent className="space-y-2 p-3 sm:p-4">
               {platformSettingsGroups.map((group, groupIndex) => (
@@ -114,8 +104,25 @@ const OwnerSettingsSection = ({ complexes }) => {
           <Button type="button" className="h-11 w-full gap-2 sm:w-auto sm:min-w-56" loading={busy === 'save'} disabled={Boolean(busy)} onClick={save}>
             <Save className="h-4 w-4" />{complexId === 'all' ? 'حفظ لجميع المجمعات' : 'حفظ لهذا المجمع'}
           </Button>
-        </>
-      )}
+        </>;
+  };
+  return (
+    <section className="space-y-4 [font-family:var(--font-ui)]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <h2 className="text-xl font-black text-foreground sm:text-2xl">إعدادات المنصة</h2>
+        <div className="w-full sm:w-72">
+          <Label className="mb-1 block text-xs font-black">المجمع</Label>
+          <Select value={complexId} onValueChange={setComplexId}>
+            <SelectTrigger className="h-11 bg-card" aria-label="اختيار المجمع"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">جميع المجمعات</SelectItem>
+              {activeComplexes.map((complex) => <SelectItem key={complex.id} value={String(complex.id)}>{complex.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {_resolveOwnerSettingsSection()}
     </section>
   );
 };

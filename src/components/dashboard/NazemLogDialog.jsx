@@ -71,27 +71,26 @@ const NazemLogDialog = ({ open, onOpenChange }) => {
     if (open) void load();
   }, [load, open]);
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] max-w-3xl [font-family:var(--font-ui)]" dir="rtl">
-        <DialogHeader>
-          <div className="flex items-center justify-between gap-3 pl-8">
-            <DialogTitle>سجل ناظم</DialogTitle>
-            <Button type="button" variant="outline" size="sm" className="min-h-10 gap-2" disabled={refreshing} onClick={load}>
-              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-              تحديث
-            </Button>
-          </div>
-        </DialogHeader>
-        {error ? (
-          <ErrorState message={error} onRetry={load} />
-        ) : !entries ? (
-          <DashboardLoader />
-        ) : (
-          <div className="space-y-2 overflow-y-auto overscroll-contain">
+  const _resolveNazemLogDialog = () => {
+    if (error) {
+      return <ErrorState message={error} onRetry={load} />;
+    }
+    if (!entries) {
+      return <DashboardLoader />;
+    }
+    return <div className="space-y-2 overflow-y-auto overscroll-contain">
             {entries.length ? entries.map((entry) => {
               const details = statusDetails[entry.status] || statusDetails.failed;
               const StatusIcon = details.Icon;
+              const _resolve_resolveNazemLogDialog = () => {
+                if (entry.status === 'synced' && entry.alreadyRecorded) {
+                  return 'موجود مسبقًا في ناظم';
+                }
+                if (entry.status === 'synced' && entry.authoritative) {
+                  return 'اعتُمد من نتيجة ناظم';
+                }
+                return details.label;
+              };
               return (
                 <article key={`${entry.id}-${entry.createdAt}`} className="rounded-xl border border-primary/15 bg-card p-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -110,8 +109,7 @@ const NazemLogDialog = ({ open, onOpenChange }) => {
                     </div>
                     <span className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-black ${details.className}`}>
                       <StatusIcon className={`h-4 w-4 ${entry.status === 'syncing' || entry.status === 'retrying' ? 'animate-spin' : ''}`} />
-                      {entry.status === 'synced' && entry.alreadyRecorded ? 'موجود مسبقًا في ناظم'
-                        : entry.status === 'synced' && entry.authoritative ? 'اعتُمد من نتيجة ناظم' : details.label}
+                      {_resolve_resolveNazemLogDialog()}
                     </span>
                   </div>
                   {(entry.message || entry.errorCode) && (
@@ -140,8 +138,21 @@ const NazemLogDialog = ({ open, onOpenChange }) => {
                 لا توجد عمليات في سجل ناظم.
               </div>
             )}
+          </div>;
+  };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90dvh] max-w-3xl [font-family:var(--font-ui)]" dir="rtl">
+        <DialogHeader>
+          <div className="flex items-center justify-between gap-3 pl-8">
+            <DialogTitle>سجل ناظم</DialogTitle>
+            <Button type="button" variant="outline" size="sm" className="min-h-10 gap-2" disabled={refreshing} onClick={load}>
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              تحديث
+            </Button>
           </div>
-        )}
+        </DialogHeader>
+        {_resolveNazemLogDialog()}
         <DialogFooter>
           <Button type="button" variant="outline" className="min-h-11" onClick={() => onOpenChange(false)}>إغلاق</Button>
         </DialogFooter>

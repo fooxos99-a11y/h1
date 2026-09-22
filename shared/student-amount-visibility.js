@@ -34,6 +34,15 @@ export function studentVisibleToday(data, settings, role) {
   const { executionAyahsByType, ...visibleData } = data;
   const hiddenMemorization = isStudentAmountHidden(settings, 'memorization');
   const visibility = Object.fromEntries(Object.entries(studentAmountKeys).map(([type, key]) => [key, isStudentAmountHidden(settings, type)]));
+  const _resolveExecutionAyahs = () => {
+    if (executionAyahsByType) {
+      return Object.entries(executionAyahsByType).filter(([type]) => !isStudentAmountHidden(settings, type)).flatMap(([, ayahs]) => ayahs);
+    }
+    if (Object.values(visibility).some(Boolean)) {
+      return [];
+    }
+    return data.executionAyahs;
+  };
   return {
     ...visibleData,
     ...visibility,
@@ -43,9 +52,7 @@ export function studentVisibleToday(data, settings, role) {
     tasks: studentVisibleTasks(data.tasks || [], settings, role),
     todayAmounts: studentVisibleTasks(data.todayAmounts || [], settings, role),
     nextDay: data.nextDay ? { date: data.nextDay.date, tasks: studentVisibleTasks(data.nextDay.tasks || [], settings, role) } : null,
-    executionAyahs: executionAyahsByType
-      ? Object.entries(executionAyahsByType).filter(([type]) => !isStudentAmountHidden(settings, type)).flatMap(([, ayahs]) => ayahs)
-      : Object.values(visibility).some(Boolean) ? [] : data.executionAyahs,
+    executionAyahs: _resolveExecutionAyahs(),
     executionLimits: Object.fromEntries(Object.entries(data.executionLimits || {}).filter(([type]) => !isStudentAmountHidden(settings, type))),
     studentTaskAmountEditable: hiddenMemorization ? false : data.studentTaskAmountEditable,
     studentReviewAmountEditable: visibility.hideStudentReviewAmount ? false : data.studentReviewAmountEditable,

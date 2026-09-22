@@ -1,9 +1,10 @@
 import { isStudentAmountHidden } from '../../../shared/student-amount-visibility.js';
+import { cleanQuranPreview as cleanPreview } from '../../../shared/quran-display-text.js';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { getRecitationStatusLabel } from '@/lib/recitationEvaluation';
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useCallback } from 'react';
+
 import { CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -30,11 +31,6 @@ const emptyTaskLabels = {
   review: 'لايوجد مراجعة',
   link: 'لايوجد ربط',
 };
-
-const cleanPreview = (preview = '') => String(preview || '')
-  .replace(/\s*\(\s*وجه\s*\d+\s*\)\s*/g, '')
-  .replace(/\s*-\s*المطلوب\s*\d+\s*وجه\s*/g, '')
-  .trim();
 
 const formatTaskAmount = (task = {}) => {
   if (cleanPreview(task.preview)) return cleanPreview(task.preview);
@@ -133,9 +129,16 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
     const direction = followsPlanDirection ? planDirection : taskDirection;
     const sorted = [...tasks].sort((first, second) => compareQuranPositionInDirection(taskStart(first), taskStart(second), direction));
     const start = sorted[0] ? taskStart(sorted[0]) : null;
-    const expectedEnd = tasks[0]?.taskType === 'memorization' && !data?.nazemManaged
-      ? sorted[0]?.normalEnd || data?.plan?.progress?.normalEnd || (sorted.length ? taskEnd(sorted[sorted.length - 1]) : null)
-      : (sorted.length ? taskEnd(sorted[sorted.length - 1]) : null);
+    const _resolveExpectedEnd = () => {
+      if (tasks[0]?.taskType === 'memorization' && !data?.nazemManaged) {
+        return sorted[0]?.normalEnd || data?.plan?.progress?.normalEnd || (sorted.length ? taskEnd(sorted.at(-1)) : null);
+      }
+      if (sorted.length) {
+        return taskEnd(sorted.at(-1));
+      }
+      return null;
+    };
+    const expectedEnd = _resolveExpectedEnd();
     return { sorted, start, expectedEnd, direction };
   };
 
@@ -231,14 +234,19 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
     const tasks = (data?.tasks || []).filter((task) => task.taskType === type);
     const repeatCount = Math.max(1, Number(data?.repeatCount || 1));
     const trackLabel = tasks[0]?.trackLabel || data?.plan?.trackLabel || (data?.plan?.track === 'mastery' ? 'إتقان' : 'حفظ');
+    const _resolveLabel = () => {
+      if (type === 'memorization') {
+        return trackLabel;
+      }
+      if (type === 'repeat') {
+        return `التكرار ${repeatCount} مرة${data?.listeningEnabled ? ` والسماع ${Number(data?.listeningCount || 0)} مرة` : ''}`;
+      }
+      return typeLabels[type];
+    };
     return {
       type,
       tasks,
-      label: type === 'memorization'
-        ? trackLabel
-        : type === 'repeat'
-          ? `التكرار ${repeatCount} مرة${data?.listeningEnabled ? ` والسماع ${Number(data?.listeningCount || 0)} مرة` : ''}`
-        : typeLabels[type],
+      label: _resolveLabel(),
       preview: tasks.map(formatTaskAmount).filter(Boolean).join('، '),
       actualPreview: tasks
         .filter((task) => task.studentStatus === 'done' && task.actualPreview)
@@ -274,7 +282,7 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
       const pages = [...new Set(options.map((option) => Number(option.page)).filter(Boolean))];
       const selectPage = (page) => {
         const pageOptions = options.filter((option) => Number(option.page) === Number(page));
-        setSelectedEndKey(group.type, pageOptions[pageOptions.length - 1]?.key || getSelectedEndKey(group));
+        setSelectedEndKey(group.type, pageOptions.at(-1)?.key || getSelectedEndKey(group));
       };
       return (
         <div className="mt-2 flex flex-wrap items-center justify-start gap-2 text-xs font-black text-muted-foreground">
@@ -333,12 +341,17 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
     );
   };
 
-  const content = isLoading ? <DashboardLoader /> : !data?.plan ? (
-    <div className="rounded-xl border border-dashed border-primary/20 p-8 text-center text-muted-foreground">لا توجد خطة حالية.</div>
-  ) : data.isHoliday ? (
-    <div className="rounded-xl border border-primary/15 bg-primary/5 p-5 text-center font-bold">اليوم إجازة أسبوعية.</div>
-  ) : (
-    <div className="space-y-3">
+  const _resolveContent = () => {
+    if (isLoading) {
+      return <DashboardLoader />;
+    }
+    if (!data?.plan) {
+      return <div className="rounded-xl border border-dashed border-primary/20 p-8 text-center text-muted-foreground">لا توجد خطة حالية.</div>;
+    }
+    if (data.isHoliday) {
+      return <div className="rounded-xl border border-primary/15 bg-primary/5 p-5 text-center font-bold">اليوم إجازة أسبوعية.</div>;
+    }
+    return <div className="space-y-3">
       {taskGroups.map((group) => (
         <div key={group.type} className="grid gap-3 rounded-xl border border-primary/15 bg-background/70 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           <div>
@@ -409,8 +422,9 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
           )}
         </div>
       ))}
-    </div>
-  );
+    </div>;
+  };
+  const content = _resolveContent();
 
   if (inline && compact) {
     if (!data) return isLoading ? <LoadingSpinner /> : <Button variant="outline" onClick={() => load()}>إعادة المحاولة</Button>;

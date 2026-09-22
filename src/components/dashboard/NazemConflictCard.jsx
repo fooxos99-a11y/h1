@@ -22,9 +22,16 @@ const recitationSnapshotText = (snapshot) => {
   if (value.errorCode) return value.message || value.errorCode;
   const start = `${value.fromSurah || value.surah_from_name || '—'} ${value.fromAyah || value.verse_from || '—'}`;
   const end = `${value.toSurah || value.actual_surah_to_name || '—'} ${value.toAyah || value.actual_verse_to || '—'}`;
-  const result = value.completed === true || (value.status && value.status !== 'not_completed')
-    ? 'تم'
-    : value.completed === false || value.status === 'not_completed' ? 'لم يتم' : '';
+  const _resolveResult = () => {
+    if (value.completed === true || (value.status && value.status !== 'not_completed')) {
+      return 'تم';
+    }
+    if (value.completed === false || value.status === 'not_completed') {
+      return 'لم يتم';
+    }
+    return '';
+  };
+  const result = _resolveResult();
   const mistakes = Number(value.mistakeCount ?? value.remoteMistakeCount ?? value.mistake ?? 0)
     + Number(value.tune ?? 0);
   return `${start} — ${end}${result ? ` · ${result}` : ''} · ${mistakes} خطأ`;
@@ -39,6 +46,24 @@ const snapshotText = (row, snapshot) => (
 const NazemConflictCard = ({ row, busy = false, onResolve, onLeave }) => {
   const isRecitation = ['recitation', 'recitation_day'].includes(row.entityType);
   const remoteResolution = ['plan', 'recitation_day'].includes(row.entityType) ? 'use_nazem' : 'ignore_remote';
+  const _resolveNazemConflictCard = () => {
+    if (busy) {
+      return 'جاري الحفظ...';
+    }
+    if (isRecitation) {
+      return 'اعتماد تقييم المنصة';
+    }
+    return 'اعتماد خطة المنصة';
+  };
+  const _resolveNazemConflictCard2 = () => {
+    if (row.entityType === 'plan') {
+      return 'اعتماد خطة ناظم';
+    }
+    if (row.entityType === 'recitation_day') {
+      return 'اعتماد تقييم ناظم';
+    }
+    return 'اعتماد الوضع الحالي في ناظم';
+  };
   return (
     <div className="space-y-3 rounded-xl border border-amber-400/40 bg-amber-500/5 p-3 [font-family:var(--font-ui)] sm:p-4" dir="rtl">
       <div className="font-black text-amber-700">تعارض بين المنصة وناظم</div>
@@ -55,10 +80,10 @@ const NazemConflictCard = ({ row, busy = false, onResolve, onLeave }) => {
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="button" className="min-h-11" disabled={busy} onClick={() => onResolve(row.id, 'use_ruwasi')}>
-          {busy ? 'جاري الحفظ...' : isRecitation ? 'اعتماد تقييم المنصة' : 'اعتماد خطة المنصة'}
+          {_resolveNazemConflictCard()}
         </Button>
         <Button type="button" variant="outline" className="min-h-11" disabled={busy} onClick={() => onResolve(row.id, remoteResolution)}>
-          {row.entityType === 'plan' ? 'اعتماد خطة ناظم' : row.entityType === 'recitation_day' ? 'اعتماد تقييم ناظم' : 'اعتماد الوضع الحالي في ناظم'}
+          {_resolveNazemConflictCard2()}
         </Button>
         <Button type="button" variant="ghost" className="min-h-11" disabled={busy} onClick={() => onLeave(row.id)}>
           تركه دون تغيير

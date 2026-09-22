@@ -11,7 +11,7 @@ export default function StudentPlanDayPoints({ points }) {
       <PointIcon className="h-4 w-4" />
     </summary>
     <ul className="space-y-1 pb-2">
-      {points.details.map((item, index) => <li key={index} className="flex items-center justify-between gap-3"><span>{item.label}</span><RankingPointsValue value={item.earned} iconClassName="h-4 w-4" /></li>)}
+      {points.details.map((item) => <li key={item.label} className="flex items-center justify-between gap-3"><span>{item.label}</span><RankingPointsValue value={item.earned} iconClassName="h-4 w-4" /></li>)}
     </ul>
   </details>;
 }

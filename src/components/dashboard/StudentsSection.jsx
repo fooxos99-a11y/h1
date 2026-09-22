@@ -1,6 +1,6 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Pencil, Repeat, Trash2, Upload } from 'lucide-react';
-import { useCallback } from 'react';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -31,9 +31,9 @@ const normalizeKey = (value) =>
   normalizeCell(value)
     .toLowerCase()
     .replace(/[أإآ]/g, 'ا')
-    .replace(/ؤ/g, 'و')
-    .replace(/ئ/g, 'ي')
-    .replace(/ة/g, 'ه')
+    .replaceAll('ؤ', 'و')
+    .replaceAll('ئ', 'ي')
+    .replaceAll('ة', 'ه')
     .replace(/[^\p{L}\p{N}]+/gu, '');
 
 const toEnglishDigits = (value) =>
@@ -366,7 +366,7 @@ const StudentsSection = () => {
   };
 
   const saveBulkStudents = async () => {
-    const invalid = bulkStudents.find((student) =>
+    const invalid = bulkStudents.some((student) =>
       !student.name.trim() || !String(student.loginNumber).trim() || !student.committeeId
     );
 
@@ -431,42 +431,16 @@ const StudentsSection = () => {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      {!isOnline ? <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-center text-sm font-black text-amber-700">عرض محلي للقراءة فقط حتى عودة الاتصال.</div> : null}
-      <Card className="bg-card border-primary/30 neon-glow">
-        <CardHeader className="border-b border-primary/20 px-3 sm:px-6">
-          <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:gap-3">
-            <div className="min-w-0">
-              <Select value={committeeFilter} onValueChange={setCommitteeFilter}>
-                <SelectTrigger aria-label="اختر الحلقة" className="h-11 w-full min-w-0 bg-background border-primary/30 px-2 text-sm text-foreground">
-                  <SelectValue placeholder="اختر الحلقة" />
-                </SelectTrigger>
-                <SelectContent className="bg-card border-primary/30 text-foreground">
-                  <SelectItem value="all">كل الحلقات</SelectItem>
-                  {committees.map((committee) =>
-                  <SelectItem key={committee.id} value={String(committee.id)}>
-                      {committee.name}
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-              
-              <Button onClick={openAddDialog} disabled={!isOnline} className="h-11 min-w-24 px-4 sm:min-w-[150px]">
-                إضافة
-              </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-6">
-          {isLoading ?
-          <DashboardLoader /> :
-          students.length === 0 ?
-          <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">
+  const _resolveStudentsSection = () => {
+    if (isLoading) {
+      return <DashboardLoader />;
+    }
+    if (students.length === 0) {
+      return <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">
               لا يوجد طلاب حالياً.
-            </div> :
-
-          <div className="space-y-3">
+            </div>;
+    }
+    return <div className="space-y-3">
               {students.map((student) =>
             <div
               key={student.id}
@@ -498,7 +472,37 @@ const StudentsSection = () => {
                   </div>
                 </div>
             )}
+            </div>;
+  };
+  return (
+    <div className="space-y-6">
+      {!isOnline ? <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-center text-sm font-black text-amber-700">عرض محلي للقراءة فقط حتى عودة الاتصال.</div> : null}
+      <Card className="bg-card border-primary/30 neon-glow">
+        <CardHeader className="border-b border-primary/20 px-3 sm:px-6">
+          <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:gap-3">
+            <div className="min-w-0">
+              <Select value={committeeFilter} onValueChange={setCommitteeFilter}>
+                <SelectTrigger aria-label="اختر الحلقة" className="h-11 w-full min-w-0 bg-background border-primary/30 px-2 text-sm text-foreground">
+                  <SelectValue placeholder="اختر الحلقة" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-primary/30 text-foreground">
+                  <SelectItem value="all">كل الحلقات</SelectItem>
+                  {committees.map((committee) =>
+                  <SelectItem key={committee.id} value={String(committee.id)}>
+                      {committee.name}
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
+              
+              <Button onClick={openAddDialog} disabled={!isOnline} className="h-11 min-w-24 px-4 sm:min-w-[150px]">
+                إضافة
+              </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-6">
+          {_resolveStudentsSection()
           }
         </CardContent>
       </Card>

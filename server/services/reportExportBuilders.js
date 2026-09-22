@@ -61,9 +61,7 @@ export const styleModernReportSheet = (sheet, {
     [],
   ];
   if (summary.length) {
-    insertedRows.push(summary.map(([label]) => label));
-    insertedRows.push(summary.map(([, value]) => value));
-    insertedRows.push([]);
+    insertedRows.push(summary.map(([label]) => label), summary.map(([, value]) => value), []);
   }
   sheet.spliceRows(1, 0, ...insertedRows);
   const headerRowNumber = introRows + 1;
@@ -156,8 +154,26 @@ export const styleModernReportSheet = (sheet, {
       const value = String(cell.value || '');
       const isSuccess = value === 'حاضر' || value === 'متقن';
       const isWarning = !value || value === 'متأخر' || value === 'مستأذن' || value === 'لم يقيّم' || value === 'لا توجد جلسة';
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isSuccess ? theme.successSoft : isWarning ? theme.warningSoft : theme.dangerSoft } };
-      cell.font = { name: 'Arial', bold: true, size: 10, color: { argb: isSuccess ? theme.success : isWarning ? theme.warning : theme.danger } };
+      const _resolveArgb = () => {
+        if (isSuccess) {
+          return theme.successSoft;
+        }
+        if (isWarning) {
+          return theme.warningSoft;
+        }
+        return theme.dangerSoft;
+      };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: _resolveArgb() } };
+      const _resolveArgb2 = () => {
+        if (isSuccess) {
+          return theme.success;
+        }
+        if (isWarning) {
+          return theme.warning;
+        }
+        return theme.danger;
+      };
+      cell.font = { name: 'Arial', bold: true, size: 10, color: { argb: _resolveArgb2() } };
     }
   }
   sheet.autoFilter = { from: { row: headerRowNumber, column: 1 }, to: { row: headerRowNumber, column: columnCount } };
@@ -225,7 +241,7 @@ const addOverviewSheets = (workbook, report, { reportTitle = 'تقرير الإ�
   styleModernReportSheet(committees, {
     title: 'مؤشرات الحلق',
     subtitle: `${reportTitle} | ${report?.period?.from || '-'} إلى ${report?.period?.to || '-'}`,
-    widths: [24, 12, 16, ...Array(metricKeys.length * 3).fill(14)],
+    widths: [24, 12, 16, ...new Array(metricKeys.length * 3).fill(14)],
     percentageColumns: [3, 6, 9, 12, 15, 18],
     rightAlignedColumns: [1],
   });
@@ -252,7 +268,7 @@ const addOverviewSheets = (workbook, report, { reportTitle = 'تقرير الإ�
   styleModernReportSheet(students, {
     title: 'مؤشرات الطلاب',
     subtitle: `${reportTitle} | ${report?.period?.from || '-'} إلى ${report?.period?.to || '-'}`,
-    widths: [24, 26, 16, ...Array(metricKeys.length * 3).fill(14)],
+    widths: [24, 26, 16, ...new Array(metricKeys.length * 3).fill(14)],
     percentageColumns: [3, 6, 9, 12, 15, 18],
     rightAlignedColumns: [1, 2],
   });

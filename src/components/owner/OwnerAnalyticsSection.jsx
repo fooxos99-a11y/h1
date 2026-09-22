@@ -116,21 +116,15 @@ const OwnerAnalyticsSection = ({ complexes: availableComplexes, onOpenComplex, o
   const planTotal = Number(totals.plansCount || 0);
   const completedShare = planTotal ? Math.min(100, (Number(totals.completedPlansCount || 0) / planTotal) * 100) : 0;
 
-  return (
-    <section className="space-y-5 [font-family:var(--font-ui)]">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-xl font-black text-foreground sm:text-2xl">الإحصائيات والتحليلات</h2>
-        <Button type="button" variant="outline" className="h-11 gap-2" onClick={onOpenSettings}>
-          <Settings2 className="h-4 w-4" aria-hidden="true" />
-          الإعدادات
-        </Button>
-      </div>
-      <OwnerAnalyticsFilters filters={filters} complexes={availableComplexes} filterOptions={data?.filterOptions} onChange={setFilters} />
-
-      {isLoading ? <DashboardLoader className="min-h-[520px]" /> : error ? (
-        <OwnerErrorState message={error} onRetry={() => setRequestVersion((value) => value + 1)} />
-      ) : data ? (
-        <>
+  const _resolveOwnerAnalyticsSection = () => {
+    if (isLoading) {
+      return <DashboardLoader className="min-h-[520px]" />;
+    }
+    if (error) {
+      return <OwnerErrorState message={error} onRetry={() => setRequestVersion((value) => value + 1)} />;
+    }
+    if (data) {
+      return <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <OwnerMetricCard icon={GraduationCap} label="إجمالي الطلاب" value={number(totals.studentsCount)} rawValue={totals.studentsCount} previousValue={previous?.studentsCount} />
             <OwnerMetricCard icon={UserCheck} label="الطلاب النشطون" value={number(totals.activeStudentsCount)} rawValue={totals.activeStudentsCount} previousValue={previous?.activeStudentsCount} tone="text-emerald-600" />
@@ -239,8 +233,22 @@ const OwnerAnalyticsSection = ({ complexes: availableComplexes, onOpenComplex, o
             <OwnerComplexAnalyticsTable complexes={rows} onOpenComplex={onOpenComplex} />
           </div>
 
-        </>
-      ) : null}
+        </>;
+    }
+    return null;
+  };
+  return (
+    <section className="space-y-5 [font-family:var(--font-ui)]">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xl font-black text-foreground sm:text-2xl">الإحصائيات والتحليلات</h2>
+        <Button type="button" variant="outline" className="h-11 gap-2" onClick={onOpenSettings}>
+          <Settings2 className="h-4 w-4" aria-hidden="true" />
+          الإعدادات
+        </Button>
+      </div>
+      <OwnerAnalyticsFilters filters={filters} complexes={availableComplexes} filterOptions={data?.filterOptions} onChange={setFilters} />
+
+      {_resolveOwnerAnalyticsSection()}
     </section>
   );
 };

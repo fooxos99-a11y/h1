@@ -1,7 +1,7 @@
 import { getBusinessDate } from '../../../shared/business-date.js';
 
 export function buildNazemLateTaskExistsSql(taskAlias = 't', { includePending = true } = {}) {
-  if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(taskAlias)) throw new Error('Invalid task alias');
+  if (!/^[a-zA-Z]\w*$/.test(taskAlias)) throw new Error('Invalid task alias');
   return `EXISTS (
     SELECT 1 FROM nazem_daily_follow_up_links lateDay
     WHERE lateDay.ruwasi_plan_id = ${taskAlias}.plan_id

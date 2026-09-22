@@ -28,8 +28,8 @@ export const normalizeArabicPersonName = (value = '') => String(value)
   .normalize('NFKD')
   .replace(/[\u064B-\u065F\u0670]/g, '')
   .replace(/[أإآٱ]/g, 'ا')
-  .replace(/ى/g, 'ي')
-  .replace(/ة/g, 'ه')
+  .replaceAll('ى', 'ي')
+  .replaceAll('ة', 'ه')
   .replace(/[^\p{L}\p{N}\s]/gu, ' ')
   .replace(/\s+/g, ' ')
   .trim()
@@ -57,7 +57,7 @@ export const calculateNameMatchConfidence = (left, right) => {
   const longer = firstList.length <= secondList.length ? secondList : firstList;
   const hasSameFirstAndLast = shorter.length >= 2
     && shorter[0] === longer[0]
-    && shorter[shorter.length - 1] === longer[longer.length - 1];
+    && shorter.at(-1) === longer.at(-1);
   if (hasSameFirstAndLast && shorter.every((word) => longer.includes(word))) {
     confidence = Math.max(confidence, 0.9);
   }

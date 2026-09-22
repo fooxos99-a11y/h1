@@ -9,8 +9,8 @@ const normalizeSearchText = (value) => String(value || '')
   .normalize('NFKD')
   .replace(/[\u064B-\u065F\u0670]/g, '')
   .replace(/[أإآ]/g, 'ا')
-  .replace(/ى/g, 'ي')
-  .replace(/ة/g, 'ه')
+  .replaceAll('ى', 'ي')
+  .replaceAll('ة', 'ه')
   .trim()
   .toLowerCase();
 

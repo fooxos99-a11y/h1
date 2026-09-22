@@ -6,7 +6,7 @@ const normalizeJuzNumber = (value) => {
 const groupJuzNumbers = (values = []) => {
   const juzs = [...new Set(values.map(normalizeJuzNumber).filter(Boolean))].sort((first, second) => first - second);
   return juzs.reduce((ranges, juz) => {
-    const last = ranges[ranges.length - 1];
+    const last = ranges.at(-1);
     if (last && juz === last.endJuz + 1) {
       last.endJuz = juz;
     } else {

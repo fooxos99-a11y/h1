@@ -27,13 +27,27 @@ export default function StudentProgramsSection() {
   if (loading) return <DashboardLoader />;
   const selected = programs.find(program => program.id === programId);
   const section = selected?.sections?.find(item => item.id === sectionId);
-  const activity = sectionId ? section : selected?.sectionsEnabled ? null : selected;
-  return <section className="student-programs mx-auto w-full max-w-5xl space-y-5 p-1 [font-family:var(--font-ui)]" dir="rtl">
-    {error && <StudentHomeStatus message="تعذر تحميل البرامج." onRetry={load} />}
-    {programId && !selected || sectionId && !section ? <>
-      <p role="status">البرنامج غير متاح.</p>
-    </> : activity ? <StudentProgramContent key={activity.id} program={activity}
-      onCompleted={() => load({ quiet: true })} /> : <>
+  const _resolveActivity = () => {
+    if (sectionId) {
+      return section;
+    }
+    if (selected?.sectionsEnabled) {
+      return null;
+    }
+    return selected;
+  };
+  const activity = _resolveActivity();
+  const _resolveConditional = () => {
+    if (programId && !selected || sectionId && !section) {
+      return <>
+      <output >البرنامج غير متاح.</output>
+    </>;
+    }
+    if (activity) {
+      return <StudentProgramContent key={activity.id} program={activity}
+      onCompleted={() => load({ quiet: true })} />;
+    }
+    return <>
       {selected && <>
         <h1 className="break-words text-2xl font-black">{selected.title}</h1>
         <ProgramRichText>{selected.contents?.find(item => item.type === 'text')?.value}</ProgramRichText>
@@ -43,6 +57,10 @@ export default function StudentProgramsSection() {
         {(selected ? selected.sections : programs).map(program => <StudentProgramCard key={program.id} program={program}
           onStart={() => open(selected ? selected.id : program.id, selected ? program.id : 0)} />)}
       </div>
-    </>}
+    </>;
+  };
+  return <section className="student-programs mx-auto w-full max-w-5xl space-y-5 p-1 [font-family:var(--font-ui)]" dir="rtl">
+    {error && <StudentHomeStatus message="تعذر تحميل البرامج." onRetry={load} />}
+    {_resolveConditional()}
   </section>;
 }

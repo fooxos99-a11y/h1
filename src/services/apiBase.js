@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { trimTrailingCharacter } from '../../shared/string-suffix.js';
 
 const appBase = import.meta.env.BASE_URL === '/'
   ? ''
@@ -19,7 +20,7 @@ export const setTenantApiBase = (value) => {
     localStorage.removeItem(tenantApiStorageKey);
     return;
   }
-  const normalized = String(value || '').trim().replace(/\/+$/, '');
+  const normalized = trimTrailingCharacter(String(value || '').trim(), '/');
   if (normalized) localStorage.setItem(tenantApiStorageKey, normalized);
   else localStorage.removeItem(tenantApiStorageKey);
 };

@@ -27,7 +27,7 @@ function backupRoot() {
 }
 
 function databaseBackupDirectory(databaseName) {
-  if (!/^[a-zA-Z0-9_]+$/.test(databaseName)) throw new Error('اسم قاعدة البيانات غير صالح للنسخ الاحتياطي.');
+  if (!/^\w+$/.test(databaseName)) throw new Error('اسم قاعدة البيانات غير صالح للنسخ الاحتياطي.');
   return nodePath.join(backupRoot(), databaseName);
 }
 

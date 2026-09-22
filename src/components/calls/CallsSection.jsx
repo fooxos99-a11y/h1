@@ -65,21 +65,14 @@ const CallsSection = ({ onJoinRoom, embedded = false }) => {
 
   const Container = embedded ? 'section' : Card;
   const Content = embedded ? 'div' : CardContent;
-  return (
-    <Container className={embedded ? '[font-family:var(--font-ui)]' : 'border-primary/30 bg-card neon-glow'} dir="rtl">
-      {(!embedded || canCreate) && <CardHeader className="flex-row items-center justify-between gap-3 space-y-0 border-b border-primary/20">
-        {!embedded && <h2 className="text-xl font-black text-foreground sm:text-2xl">المكالمات</h2>}
-        {canCreate && (
-          <Button onClick={() => setCreateOpen(true)} disabled={!livekitConfigured || (committeeSelectionLocked && committees.length === 0)} className="gap-2">
-            <Plus className="h-4 w-4" /> إنشاء غرفة
-          </Button>
-        )}
-      </CardHeader>}
-      <Content className={embedded ? '' : 'pt-4 sm:pt-6'}>
-        {isLoading ? <DashboardLoader className="min-h-[320px]" /> : rooms.length === 0 ? (
-          <div className={embedded ? 'py-10 text-center text-sm text-muted-foreground' : 'rounded-lg border border-dashed border-primary/25 p-10 text-center font-bold text-muted-foreground'}>لا توجد غرف مفتوحة حاليًا.</div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+  const _resolveCallsSection = () => {
+    if (isLoading) {
+      return <DashboardLoader className="min-h-[320px]" />;
+    }
+    if (rooms.length === 0) {
+      return <div className={embedded ? 'py-10 text-center text-sm text-muted-foreground' : 'rounded-lg border border-dashed border-primary/25 p-10 text-center font-bold text-muted-foreground'}>لا توجد غرف مفتوحة حاليًا.</div>;
+    }
+    return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {rooms.map((room) => (
               <Card key={room.id} className="flex min-h-52 flex-col border-primary/20 bg-background/60 shadow-sm">
                 <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
@@ -98,8 +91,20 @@ const CallsSection = ({ onJoinRoom, embedded = false }) => {
                 </CardContent>
               </Card>
             ))}
-          </div>
+          </div>;
+  };
+  return (
+    <Container className={embedded ? '[font-family:var(--font-ui)]' : 'border-primary/30 bg-card neon-glow'} dir="rtl">
+      {(!embedded || canCreate) && <CardHeader className="flex-row items-center justify-between gap-3 space-y-0 border-b border-primary/20">
+        {!embedded && <h2 className="text-xl font-black text-foreground sm:text-2xl">المكالمات</h2>}
+        {canCreate && (
+          <Button onClick={() => setCreateOpen(true)} disabled={!livekitConfigured || (committeeSelectionLocked && committees.length === 0)} className="gap-2">
+            <Plus className="h-4 w-4" /> إنشاء غرفة
+          </Button>
         )}
+      </CardHeader>}
+      <Content className={embedded ? '' : 'pt-4 sm:pt-6'}>
+        {_resolveCallsSection()}
       </Content>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

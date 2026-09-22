@@ -9,9 +9,19 @@
   } catch {
     preference = null;
   }
-  const theme = route === '/' || /^\/login\/?$/.test(route) ? 'light'
-    : preference === 'light' || preference === 'dark'
-      ? preference : scope === 'account' ? 'light' : 'dark';
+  const _resolveTheme = () => {
+    if (route === '/' || /^\/login\/?$/.test(route)) {
+      return 'light';
+    }
+    if (preference === 'light' || preference === 'dark') {
+      return preference;
+    }
+    if (scope === 'account') {
+      return 'light';
+    }
+    return 'dark';
+  };
+  const theme = _resolveTheme();
   globalThis.document.documentElement.classList.add(theme);
   globalThis.document.documentElement.style.colorScheme = theme;
 })();

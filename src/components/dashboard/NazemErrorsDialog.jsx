@@ -50,14 +50,18 @@ export default function NazemErrorsDialog({ open, onOpenChange, onChanged, onEdi
         {error && <ErrorState message={error} onRetry={() => setVersion((current) => current + 1)} />}
         {!rows && !error ? <DashboardLoader /> : (
           <div className="space-y-4">
-            {rows?.map(({ account, data, error: accountError }) => (
-              <section key={`${version}-${account.teacherId}`} className="space-y-3 rounded-xl border p-3">
+            {rows?.map(({ account, data, error: accountError }) => { const _resolveConditional = () => {
+                                                                       if (accountError) {
+                                                                         return <p className="text-sm text-destructive">{accountError}</p>;
+                                                                       }
+                                                                       if (!data.accountIssue && !data.studentIssues.length) {
+                                                                         return <p className="text-sm text-destructive">{account.status === 'requires_review' ? 'يحتاج الحساب مراجعة.' : 'تعذر ربط الحساب.'}</p>;
+                                                                       }
+                                                                       return <NazemSyncIssuesDialog inline open account={account} initialData={data} onQueued={onChanged} />;
+                                                                     };
+                                                                     return (<section key={`${version}-${account.teacherId}`} className="space-y-3 rounded-xl border p-3">
                 <h3 className="font-black">{account.teacherName}</h3>
-                {accountError ? <p className="text-sm text-destructive">{accountError}</p> : !data.accountIssue && !data.studentIssues.length ? (
-                  <p className="text-sm text-destructive">{account.status === 'requires_review' ? 'يحتاج الحساب مراجعة.' : 'تعذر ربط الحساب.'}</p>
-                ) : (
-                  <NazemSyncIssuesDialog inline open account={account} initialData={data} onQueued={onChanged} />
-                )}
+                {_resolveConditional()}
                 <div className="flex flex-wrap gap-2">
                   {['failed', 'blocked'].includes(account.status) || ['NAZEM_LOGIN_REJECTED', 'NAZEM_LOGIN_FAILED'].includes(account.lastErrorCode) ? (
                     <Button className="min-h-11" onClick={() => { onOpenChange(false); onEditAccount(account); }}>تعديل بيانات الربط</Button>
@@ -66,8 +70,7 @@ export default function NazemErrorsDialog({ open, onOpenChange, onChanged, onEdi
                     <Button className="min-h-11" onClick={() => { onOpenChange(false); onConfirmIdentity(account); }}>اعتماد الحساب</Button>
                   )}
                 </div>
-              </section>
-            ))}
+              </section>); })}
             {conflicts.map((row) => (
               <section key={row.id} className="space-y-2 rounded-xl border p-3">
                 <h3 className="font-black">{row.teacherName} · {row.studentName || 'الخطة'}</h3>

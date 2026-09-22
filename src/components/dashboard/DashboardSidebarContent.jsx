@@ -106,7 +106,7 @@ const DashboardSidebarContent = ({
               )}
             </button>
             {hasChildren && isExpanded && (
-              <div className="mt-1 space-y-1 pe-3" role="group" aria-label={`أقسام ${section.label}`}>
+              <fieldset className="min-w-0 m-0 border-0 p-0 mt-1 space-y-1 pe-3"  aria-label={`أقسام ${section.label}`}>
                 {section.children.map((child) => {
                   const childActive = activeSection === child.key;
                   const ChildIcon = child.icon;
@@ -124,7 +124,7 @@ const DashboardSidebarContent = ({
                     </button>
                   );
                 })}
-              </div>
+              </fieldset>
             )}
           </div>
         );

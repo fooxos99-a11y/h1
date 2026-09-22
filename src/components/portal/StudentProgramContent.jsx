@@ -55,6 +55,15 @@ export default function StudentProgramContent({ program, onCompleted }) {
     submit();
   };
 
+  const _resolveConditional = () => {
+    if (submitting) {
+      return 'جارٍ الإرسال...';
+    }
+    if (questionIndex < program.questions.length - 1) {
+      return 'التالي';
+    }
+    return 'إنهاء الاختبار';
+  };
   return (
     <section className="relative mx-auto max-w-2xl space-y-5 [font-family:var(--font-ui)]" dir="rtl">
       <h1 className="break-words text-2xl font-black">{program.title}</h1>
@@ -107,13 +116,13 @@ export default function StudentProgramContent({ program, onCompleted }) {
           )}
           {!result && phase === 'quiz' && (
             <Button className="min-h-11" disabled={!selectedOptionId || submitting} onClick={next}>
-              {submitting ? 'جارٍ الإرسال...' : questionIndex < program.questions.length - 1 ? 'التالي' : 'إنهاء الاختبار'}
+              {_resolveConditional()}
             </Button>
           )}
         </div>
 
         {result && (
-          <div role="status" className="grid place-items-center rounded-2xl bg-card p-5">
+          <output  className="grid place-items-center rounded-2xl bg-card p-5">
             <div className="w-full max-w-sm rounded-[2rem] border border-emerald-500/20 bg-card p-7 text-center shadow-[0_24px_70px_rgba(7,28,43,.18)]">
               <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-primary text-primary-foreground shadow-xl shadow-primary/20">
                 <CheckCircle2 className="h-8 w-8" />
@@ -122,7 +131,7 @@ export default function StudentProgramContent({ program, onCompleted }) {
               <h3 className="mt-2 text-xl font-black text-foreground">تم الانتهاء من الاختبار!</h3>
               <p className="mt-3 text-lg font-black text-emerald-700 dark:text-emerald-300">النتيجة: {rewardUnits.format(result.earnedPoints)}</p>
             </div>
-          </div>
+          </output>
         )}
     </section>
   );

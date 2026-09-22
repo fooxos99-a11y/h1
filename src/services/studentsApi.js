@@ -67,7 +67,7 @@ export async function request(path, options = {}) {
         credentials: 'include',
         headers: {
           ...await (authSnapshot || roleHeader()),
-          ...(options.headers || {}),
+          ...(options.headers),
           ...(traceId ? { 'X-Request-Id': traceId } : {}),
         },
       });
@@ -111,8 +111,13 @@ export async function request(path, options = {}) {
     error.status = response.status;
     error.requestId = response.headers?.get('X-Request-Id') || data?.requestId || '';
     const retryAfter = response.headers?.get('Retry-After');
-    error.retryAfterMs = retryAfter
-      ? Math.max(0, /^\d+$/.test(retryAfter) ? Number(retryAfter) * 1_000 : Date.parse(retryAfter) - Date.now()) : 0;
+    const _resolveConditional = () => {
+      if (retryAfter) {
+        return Math.max(0, /^\d+$/.test(retryAfter) ? Number(retryAfter) * 1_000 : Date.parse(retryAfter) - Date.now());
+      }
+      return 0;
+    };
+    error.retryAfterMs = _resolveConditional();
     if (error.requestId && response.status >= 500) error.message += ` رقم المتابعة: ${error.requestId}`;
     throw error;
   }
@@ -130,7 +135,7 @@ async function requestFile(path, options = {}) {
       credentials: 'include',
       headers: {
         ...await roleHeader(),
-        ...(options.headers || {}),
+        ...(options.headers),
       },
     });
   } catch (error) {
@@ -147,8 +152,8 @@ async function requestFile(path, options = {}) {
     ));
   }
   const disposition = response.headers.get('Content-Disposition') || '';
-  const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/)?.[1];
-  const plainName = disposition.match(/filename="([^"]+)"/)?.[1];
+  const encodedName = /filename\*=UTF-8''([^;]+)/.exec(disposition)?.[1];
+  const plainName = /filename="([^"]+)"/.exec(disposition)?.[1];
   return {
     blob: await response.blob(),
     filename: encodedName ? decodeURIComponent(encodedName) : (plainName || 'report'),
@@ -536,7 +541,7 @@ export const studentsApi = {
   saveStudentExecutionCorrection: (studentId, payload) =>
     request(`/students/${studentId}/quran-tasks/execution`, {
       method: 'POST',
-      body: JSON.stringify({ ...(payload || {}), administrativeCorrection: true }),
+      body: JSON.stringify({ ...(payload), administrativeCorrection: true }),
     }),
   getSupervisorQuranEvaluation: loadTeacherEvaluation,
   prepareSupervisorQuranRange: (supervisorId, taskId, payload) =>

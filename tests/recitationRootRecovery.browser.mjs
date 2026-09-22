@@ -53,9 +53,16 @@ for (const [engineName, engine] of [['chromium', chromium], ['webkit', webkit]])
           submitted.push({ id: Number(path.split('/').at(-1)), ...request.postDataJSON() });
           return route.fulfill({ json: { ok: true, teacherCompleted: true, syncStatus: 'pending' } });
         }
-        return route.fulfill({ json: path.endsWith('/quran-evaluation') ? evaluation
-          : path.endsWith('/chapters') ? [{ number: 2, name: 'البقرة', ayahCount: 286 }]
-            : { ok: true, ayahs: [], words: [] } });
+        const _resolveJson = () => {
+          if (path.endsWith('/quran-evaluation')) {
+            return evaluation;
+          }
+          if (path.endsWith('/chapters')) {
+            return [{ number: 2, name: 'البقرة', ayahCount: 286 }];
+          }
+          return { ok: true, ayahs: [], words: [] };
+        };
+        return route.fulfill({ json: _resolveJson() });
       });
       await page.goto('http://127.0.0.1:3003/tests/fixtures/nazem-recitation-policy.html');
       await page.getByRole('button', { name: 'إتقان', exact: true }).click({ timeout: 10000 }).catch(async error => {

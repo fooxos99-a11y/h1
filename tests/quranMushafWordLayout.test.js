@@ -166,7 +166,7 @@ test('renders a stable fifteen-line Mushaf face with coordinated themes and comp
   assert.match(dialog, /getItem\('madarij_mushaf_theme'\) === 'dark' \? 'dark' : 'light'/);
   assert.match(dialog, /<FullScreenPage open=\{open\}/);
   assert.match(dialog, /useNativeSurfaceTheme\(mushafTheme, open\)/);
-  assert.match(dialog, /loadError \? \(/);
+  assert.match(dialog, /if \(loadError\) \{\s*return/);
   assert.match(dialog, /إعادة المحاولة/);
   assert.match(dialog, /<PageBackButton[\s\S]*?iconOnly/);
   assert.match(dialog, /pageNumber=\{activeEntry\.page\.page\}/);

@@ -17,9 +17,9 @@ const preloadImage = (source) => new Promise((resolve) => {
     resolve();
   };
   const finishAfterDecode = () => {
-    const decoding = image.decode?.();
-    if (decoding) decoding.catch(() => {}).finally(finish);
-    else finish();
+    if (typeof image.decode === 'function') {
+      Promise.resolve().then(() => image.decode()).then(finish, finish);
+    } else finish();
   };
   image.decoding = 'async';
   image.fetchPriority = 'high';

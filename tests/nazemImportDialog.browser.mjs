@@ -9,7 +9,7 @@ for (const engine of [chromium, webkit]) {
       await page.goto('http://127.0.0.1:3000/tests/fixtures/nazem-errors.html');
       await page.getByRole('button', { name: 'استيراد', exact: true }).first().waitFor();
       await page.evaluate(async () => {
-        const { nazemIntegrationApi: api } = await import('/src/services/nazemIntegrationApi.js');
+        const { nazemIntegrationApi: api } = await import(new globalThis.URL('src/services/nazemIntegrationApi.js', globalThis.location.origin).href);
         const preview = { teacher: {}, committees: [], localStudents: [], candidates: [
           { id: 13, nazemStudentName: 'سليمان عبدالعزيز', circleName: 'حلقة الاختبار', plans: [] },
         ] };
