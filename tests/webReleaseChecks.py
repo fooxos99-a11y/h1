@@ -15,13 +15,16 @@ spec.loader.exec_module(receiver)
 
 class ReleaseTests(unittest.TestCase):
     def test_asset_probe_rejects_external_urls_and_path_escape(self):
-        with patch.object(receiver.urllib.request, 'build_opener') as opener:
+        with patch.object(receiver.http.client, 'HTTPSConnection') as opener:
             for path in ['https://evil.test/file', '//evil.test/file', '../private', 'assets/%2e%2e/private', '/private']:
                 with self.assertRaises(ValueError):
                     receiver.fetch('https://example.test/', path)
             opener.assert_not_called()
-        with self.assertRaises(ValueError):
-            receiver.NoRedirect().redirect_request(None, None, 302, '', {}, 'http://169.254.169.254/')
+        with patch.object(receiver.http.client, 'HTTPSConnection') as connection:
+            connection.return_value.getresponse.return_value.status = 302
+            with self.assertRaises(ValueError):
+                receiver.fetch('https://example.test/')
+            connection.assert_called_once_with('example.test', None, timeout=30)
 
     def test_health_uses_release_identity_for_edge_filtering(self):
         response = MagicMock()
