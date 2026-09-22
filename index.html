@@ -17,6 +17,7 @@
 		<title>الحبيب ماب</title>
 		<script src="%BASE_URL%theme-bootstrap.js" data-base="%BASE_URL%"></script>
 		<link rel="stylesheet" href="/src/styles/loading-spinner.css" />
+		<link rel="stylesheet" href="/src/components/startup/startup.css" />
 		<style>
 			:root {
 				color-scheme: light;
@@ -59,7 +60,8 @@
 	<body>
 		<div id="root">
 			<output class="boot-loader" dir="rtl" aria-live="polite" aria-label="جاري التحميل">
-				<span class="loading-spinner--screen" aria-hidden="true"></span>
+				<svg class="startup-lines" viewBox="0 0 800 800" aria-hidden="true"><path d="M 0 180 L 180 180 L 340 365"/><path transform="rotate(120 400 400)" d="M 0 180 L 180 180 L 340 365"/><path transform="rotate(240 400 400)" d="M 0 180 L 180 180 L 340 365"/></svg>
+				<div class="startup-hexagon"><img src="%BASE_URL%branding/rawasi/alhabib-map-color-320.webp" alt="الحبيب ماب" /></div>
 			</output>
 			<div id="app-root"></div>
 		</div>

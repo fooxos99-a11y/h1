@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { saveManualProgramPoints } from '../server/services/manualProgramPoints.js';
+import { saveManualProgramPoints, saveManualProgramPointsBatch } from '../server/services/manualProgramPoints.js';
 
 function fixture({ questionCount = 0, allowed = true, enabled = true } = {}) {
  let previous;
@@ -33,4 +33,31 @@ test('manual program rejects excess, negative, invalid grades and out-of-scope s
  for (const options of [{ questionCount: 1 }, { allowed: false }, { enabled: false }]) {
   const f = fixture(options); await assert.rejects(f.save(50)); assert.equal(f.changes.length, 0);
  }
+});
+
+
+test('bulk manual points rejects malformed and duplicate rows before any writes', async () => {
+  const connection = { query: async () => assert.fail('Invalid batch must not query') };
+  for (const grades of [[], null, [{ studentId: 1, points: 5 }, { studentId: 1, points: 6 }], [{ studentId: 1, points: -1 }]]) {
+    await assert.rejects(saveManualProgramPointsBatch(connection, { grades }, {}), { statusCode: 422 });
+  }
+});
+
+test('bulk grades preserve server actor and program context despite payload overrides', async () => {
+  const seen = [];
+  const connection = { query: async (sql, args) => {
+    if (sql.startsWith('SELECT id, title')) { assert.equal(args[0], 9); return [[{ id: 9, title: 'برنامج', pointsReward: 100 }]]; }
+    if (sql.includes('COUNT(*)')) return [[{ count: 0 }]];
+    if (sql.startsWith('SELECT id, committee')) { seen.push(args[0]); return [[{ id: args[0], committeeId: 7 }]]; }
+    if (sql.includes('supervisor_committees')) { assert.equal(args[0], 4); return [[{ allowed: 1 }]]; }
+    if (sql.startsWith('SELECT earned_points')) return [[]];
+    if (sql.startsWith('INSERT')) return [{}];
+    assert.fail(sql);
+  } };
+  const result = await saveManualProgramPointsBatch(connection, {
+    programId: 9, actor: { role: 'supervisor', id: 4 }, settings: { pointsSystemEnabled: true },
+    grades: [{ studentId: 2, points: 30, programId: 999, actor: { role: 'admin' } }, { studentId: 1, points: 0 }],
+  }, { applyStudentPointDelta: async () => {}, logStudentPointTransaction: async () => {} });
+  assert.deepEqual(seen, [1, 2]);
+  assert.deepEqual(result.grades.map(row => row.earnedPoints), [0, 30]);
 });

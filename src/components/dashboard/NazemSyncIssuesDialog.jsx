@@ -13,7 +13,7 @@ import DashboardLoader from '@/components/dashboard/DashboardLoader';
 import ErrorState from '@/components/ui/error-state';
 import { nazemIntegrationApi } from '@/services/nazemIntegrationApi';
 import { useToast } from '@/components/ui/use-toast';
-import { canRetryNazemIssue, nazemIssueMessage } from '@/lib/nazemSyncIssues';
+import { canRetryNazemIssue, nazemIssueMessage, nazemRetryLabel } from '@/lib/nazemSyncIssues';
 
 const NazemSyncIssuesDialog = ({ account, open, onOpenChange, onQueued, inline = false, initialData = null }) => {
   const { toast } = useToast();
@@ -91,7 +91,7 @@ const NazemSyncIssuesDialog = ({ account, open, onOpenChange, onQueued, inline =
                       onClick={() => retryIssue(issue)}
                     >
                       <RefreshCw className={`h-4 w-4 ${retryingStudentId === issueKey ? 'animate-spin' : ''}`} />
-                      {queued ? 'تمت الجدولة' : 'إعادة المحاولة'}
+                      {queued ? 'تمت الجدولة' : nazemRetryLabel(issue)}
                     </Button>
                   )}
                 </div>

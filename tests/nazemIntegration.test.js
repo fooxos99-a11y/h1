@@ -124,12 +124,14 @@ test('Nazem settings expose a complete sync log for accepted, active, and failed
   assert.match(routes, /LIMIT 500/);
   assert.match(settings, /سجل ناظم/);
   assert.match(settings, /<NazemLogDialog/);
-  assert.match(dialog, /synced: \{ label: 'اكتملت المزامنة', className: 'text-emerald-700 bg-emerald-500\/10'/);
-  assert.match(dialog, /blocked: \{ label: 'معلّق'/);
-  assert.match(dialog, /entry\.message \|\| entry\.errorCode/);
+  const card = readFileSync(new URL('../src/components/dashboard/NazemSessionLogCard.jsx', import.meta.url), 'utf8');
+  assert.match(dialog, /groupNazemLogEntries\(entries\)/);
+  assert.match(card, /synced: 'أُرسل إلى ناظم'/);
+  assert.match(card, /blocked: 'معلّق'/);
+  assert.match(card, /entry\.message \|\| entry\.errorCode/);
   assert.match(dialog, /nazemIntegrationApi\.retryJob\(jobId\)/);
-  assert.match(dialog, /entry\.entryKind === 'current'.*canRetryNazemIssue\(entry\)/);
-  assert.match(dialog, /إعادة المحاولة/);
+  assert.match(card, /entry\.jobId && canRetryNazemIssue\(entry\)/);
+  assert.match(card, /nazemRetryLabel\(entry\)/);
   assert.match(routes, /status IN \('failed','blocked','requires_review','conflict'\)/);
   assert.match(api, /getLog: \(\) => request\('\/nazem\/log'\)/);
 });
@@ -304,10 +306,10 @@ test('Nazem import restores completed memorization and wakes waiting attendance'
   assert.match(serverSource, /enqueueMissingNazemAttendance\(connection/);
   assert.match(routesSource, /planCandidateId: Number\(selection\.planCandidateId/);
   assert.match(routesSource, /\(\? IS NULL OR id = \?\) FOR UPDATE/);
-  assert.match(dialogSource, /isActionableCandidate/);
+  assert.match(dialogSource, /needsNazemStudentImport/);
   assert.match(dialogSource, /useEffect\(\(\) => \{[\s\S]+if \(open && !prepared\?\.preview\) void load\(\{ refresh: true \}\)/);
   assert.match(dialogSource, /requiresPlanChoice/);
-  assert.match(dialogSource, /كل الطلاب والخطط المستوردة مرتبطة مسبقًا/);
+  assert.match(dialogSource, /لا يوجد طلاب في الحلقة المحددة/);
 });
 
 test('Nazem remains authoritative when either linked plan snapshot changes', () => {
@@ -1484,10 +1486,10 @@ test('Nazem discovers student plans and treats Nazem as the authoritative import
   assert.doesNotMatch(importDialog, /وجهة الطلاب في مدارج|nazem-import-mode/);
   assert.match(importDialog, /خطة ناظم جاهزة للاستيراد/);
   assert.match(importDialog, /لم تُكتشف خطة/);
-  assert.match(importDialog, /استيراد الطلاب ذوي الخطط/);
+  assert.match(importDialog, /استيراد الطلاب والخطط المحددة/);
   assert.doesNotMatch(importDialog, /استيراد جميع الطلاب|submit\('all'\)/);
-  assert.match(importDialog, /importMode: 'with_plans'/);
-  assert.match(routes, /importMode !== 'with_plans'/);
+  assert.match(importDialog, /importMode: 'selected'/);
+  assert.match(routes, /\['with_plans', 'selected'\]\.includes\(importMode\)/);
   assert.match(routes, /req.body.importMode \|\| 'with_plans'/);
   assert.match(routes, /importMode === 'with_plans'/);
   assert.match(routes, /استيراد الطلاب ذوي الخطط يقبل فقط طالبًا لديه خطة ناظم قابلة للاستيراد/);
@@ -1500,7 +1502,7 @@ test('Nazem discovers student plans and treats Nazem as the authoritative import
   assert.doesNotMatch(importDialog, /type="checkbox"/);
   assert.match(importDialog, /onInteractOutside=\{\(event\) => event\.preventDefault\(\)\}/);
   assert.match(importDialog, /إضافة حلقة \(\{newCommitteeName/);
-  assert.match(importDialog, /كل الطلاب والخطط المستوردة مرتبطة مسبقًا[\s\S]*إلغاء/);
+  assert.match(importDialog, /لا يوجد طلاب في الحلقة المحددة[\s\S]*إلغاء/);
   assert.match(importDialog, /createdStudents/);
   assert.match(importDialog, /candidate\.profile\?\.phone/);
   assert.match(importDialog, /candidate\.profile\?\.nationalId/);

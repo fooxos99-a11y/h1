@@ -24,7 +24,7 @@ import {
 
 const fail = (message, statusCode = 422) => Object.assign(new Error(message), { statusCode });
 
-async function loadJourney(connection, studentId, settings) {
+export async function loadJourney(connection, studentId, settings) {
   const [[student]] = await connection.query(
     'SELECT points AS rankingPoints FROM students WHERE id = ? LIMIT 1',
     [studentId],
@@ -38,13 +38,7 @@ async function loadJourney(connection, studentId, settings) {
   );
   const rewardByStage = new Map(rewards.map((row) => [Number(row.stagePoints), row]));
   const mapConfig = normalizeSummitMapConfig(settings.summitMapConfig);
-  const configuredActiveStation = getSummitActiveStation(mapConfig);
-  const activeStationReward = configuredActiveStation
-    ? rewardByStage.get(Number(configuredActiveStation.kilometer))
-    : null;
-  const activeStation = configuredActiveStation && !activeStationReward?.completedAt
-    ? configuredActiveStation
-    : null;
+  const activeStation = getSummitActiveStation(mapConfig);
   const totalKilometers = getSummitMapTotalKilometers(mapConfig);
   const configuredStages = getSummitMapEventLocations(mapConfig).map((location) => ({
     ...location,
@@ -63,23 +57,10 @@ async function loadJourney(connection, studentId, settings) {
     ...progressSummary,
     reachedSummit: mapConfig.goal.enabled && progressSummary.reachedSummit,
   };
-  const [[progressState]] = await connection.query(
-    'SELECT kilometers FROM student_summit_progress WHERE student_id = ? LIMIT 1',
-    [studentId],
-  );
-  const storedDisplayedKilometers = progressState
-    ? Math.min(totalKilometers, Math.max(0, Number(progressState.kilometers || 0)))
-    : summary.points;
-  if (!progressState) {
-    await connection.query(
-      'INSERT IGNORE INTO student_summit_progress (student_id, kilometers) VALUES (?, ?)',
-      [studentId, storedDisplayedKilometers],
-    );
-  }
   return {
     ...summary,
     totalKilometers,
-    displayedKilometers: activeStation ? Number(activeStation.kilometer) : storedDisplayedKilometers,
+    displayedKilometers: activeStation ? Number(activeStation.kilometer) : summary.points,
     activeStation,
     enabled: Boolean(settings.summitEnabled),
     challengeMaxPoints: Math.max(0, Number(settings.summitChallengeMaxPoints || 50)),

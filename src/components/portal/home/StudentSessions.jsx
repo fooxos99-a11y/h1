@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import SectionTabs from '@/components/ui/section-tabs';
 import { Button } from '@/components/ui/button';
-import LoadingSpinner from '@/components/ui/loading-spinner';
+import LoadingIndicator from '@/components/ui/loading-indicator';
 import StudentSessionWeek from './StudentSessionWeek';
 import StudentMemorized from './StudentMemorized';
 import { buildStudentPlanWeeks } from '@/lib/studentPlan';
@@ -16,7 +16,7 @@ export default function StudentSessions({ studentId, plan, today, onRead, tab, o
   return <SectionTabs items={tabs} value={selected} onChange={onTabChange || setLocalTab} label="أقسام الجلسات">
     {selected === 'saved' ? <StudentMemorized studentId={studentId} onRead={onRead} openJuzs={openJuzs} onJuzToggle={onJuzToggle} /> : <>
       {plan.error && <div className="student-home-error" role="alert"><span>{plan.error}</span><Button variant="outline" onClick={plan.retry}>إعادة المحاولة</Button></div>}
-      {plan.loading && !plan.data ? <div className="student-home-loading"><LoadingSpinner /></div> : <div className="student-home-evaluations">{weeks.map(week => <StudentSessionWeek key={week.start} week={week} today={today} />)}</div>}
+      {plan.loading && !plan.data ? <div className="student-home-loading"><LoadingIndicator /></div> : <div className="student-home-evaluations">{weeks.map(week => <StudentSessionWeek key={week.start} week={week} today={today} />)}</div>}
     </>}
   </SectionTabs>;
 }

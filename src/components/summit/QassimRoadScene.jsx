@@ -21,35 +21,9 @@ const getRoadScenePhase = (segmentProgress) => {
   return 'city-entrance';
 };
 
-const getUpcomingRoadsideItem = (items, currentKilometer, predicate = () => true) => (
-  (Array.isArray(items) ? items : [])
-    .filter((item) => {
-      const distanceAhead = Number(item.kilometer) - currentKilometer;
-      const visibleFrom = Number(item.visibleFromKilometer ?? Math.max(0, Number(item.kilometer) - 1000));
-      const visibleUntil = Number(item.kilometer);
-      return currentKilometer >= visibleFrom
-        && currentKilometer <= visibleUntil
-        && distanceAhead >= 0
-        && predicate(item);
-    })
-    .sort((first, second) => first.kilometer - second.kilometer)[0] || null
-);
-
-const formatRoadsideDistance = (kilometer, currentKilometer) => {
-  const distanceAhead = Math.max(0, Number(kilometer) - currentKilometer);
-  return distanceAhead === 0
-    ? 'وصلت'
-    : `متبقي ${distanceAhead.toLocaleString('ar-SA-u-nu-latn', { maximumFractionDigits: 0 })} كم`;
-};
-
 const QassimRoadScene = ({ journey }) => {
   const routeOptions = getQassimJourneyRouteOptions(journey);
   const progress = getQassimRoadProgress(journey.points, routeOptions);
-  const activeSign = getUpcomingRoadsideItem(
-    journey.mapConfig?.signs,
-    progress.distanceKm,
-    (sign) => sign.enabled && sign.text,
-  );
   const arrivedCity = getSummitActiveCity(journey.mapConfig, progress.distanceKm);
   const customScene = getSummitScene(journey.mapConfig, progress.distanceKm);
   const activeStation = getSummitActiveStation(journey.mapConfig);
@@ -97,23 +71,6 @@ const QassimRoadScene = ({ journey }) => {
         >
           <div><Flag aria-hidden="true" /></div>
           <span>{journey.mapConfig?.goal?.name}</span>
-        </div>
-      )}
-
-      {activeSign && (
-        <div className={`qassim-road-sign is-${activeSign.side}`} dir="rtl">
-          <strong>{activeSign.text}</strong>
-          <small>{formatRoadsideDistance(activeSign.kilometer, progress.distanceKm)}</small>
-        </div>
-      )}
-
-      {activeStation && (
-        <div className={`qassim-road-station is-service-stop ${activeStation.kilometer === progress.distanceKm ? 'is-arrived' : ''}`} dir="rtl">
-          <div className="qassim-road-station-board">
-            <span>محطة</span>
-            <strong>{activeStation.name}</strong>
-            <small>{formatRoadsideDistance(activeStation.kilometer, progress.distanceKm)}</small>
-          </div>
         </div>
       )}
 

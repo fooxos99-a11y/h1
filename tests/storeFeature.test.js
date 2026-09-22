@@ -94,6 +94,6 @@ test('store uses exciting shared product cards, ten-megabyte images, stock visib
   assert.match(routes, /deleted_at IS NULL/);
   assert.match(routes, /deleted_at = NOW\(\)/);
   assert.match(migration, /ADD COLUMN deleted_at TIMESTAMP NULL/);
-  assert.match(studentStore, /تم الشراء بنجاح/);
+  assert.match(studentStore, /أُرسل الطلب للمراجعة/);
   assert.match(studentStore, /duration: 3000/);
 });

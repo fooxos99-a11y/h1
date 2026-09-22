@@ -1,17 +1,31 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { resolveAssetUrl } from '@/lib/assetUrl';
-import LoadingIndicator from '@/components/ui/loading-indicator';
+import { useStartup } from '@/components/startup/StartupProvider';
+import { StartupLines } from '@/components/startup/StartupVisual';
 import AccountLoginForm from './AccountLoginForm';
+import { getStartupTiming } from '@/lib/startupTiming';
+import LoadingIndicator from '@/components/ui/loading-indicator';
 
 export default function AccountLoginPage({ site, onLogin, loading }) {
-  if (loading) return <LoadingIndicator mode="screen" delayMs={0} />;
-  return <main className="grid min-h-[100svh] place-items-center bg-background px-5 py-10 [font-family:var(--font-ui)]" dir="rtl">
-    <section className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 shadow-xl shadow-primary/5 sm:p-8" aria-labelledby="login-title">
-      <header className="mb-8 flex flex-col items-center gap-3 text-center">
-        {site.logo && <img src={resolveAssetUrl(site.logo)} alt={site.name} className="h-20 w-20 object-contain" />}
-        <h1 id="login-title" className="text-2xl font-black text-foreground">تسجيل الدخول</h1>
-      </header>
-      <AccountLoginForm onLogin={onLogin} loading={loading} />
+  const startup = useStartup();
+  const [timing] = useState(() => {
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return getStartupTiming({ active: startup?.active, startedAt: startup?.startedAt, now: performance.now(), reducedMotion: reduced });
+  });
+  const [entering, setEntering] = useState(timing.duration > 0);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { setEntering(false); startup?.finish(); }, timing.duration);
+    return () => window.clearTimeout(timer);
+  }, [startup?.finish, timing.duration]);
+  return <>{loading && <LoadingIndicator mode="screen" delayMs={0} />}
+  <main hidden={loading} className={`${loading ? '!hidden' : ''} startup-scene px-5 py-10 ${entering ? 'startup-enter' : ''}`} style={{ '--startup-delay': `-${timing.elapsed}ms` }} dir="rtl">
+    {entering && <StartupLines />}
+    <section className="startup-login-card" aria-labelledby="login-title" aria-busy={entering}>
+      {site.logo && <img src={resolveAssetUrl(site.logo)} alt={site.name} className="startup-login-logo" />}
+      <header className="startup-login-header"><h1 id="login-title" className="text-2xl font-black text-foreground">تسجيل الدخول</h1></header>
+      <div className="startup-login-fields" inert={entering ? '' : undefined} aria-hidden={entering || undefined}>
+        <fieldset disabled={entering} className="m-0 min-w-0 border-0 p-0"><AccountLoginForm onLogin={onLogin} loading={loading} autoFocus={false} /></fieldset>
+      </div>
     </section>
-  </main>;
+  </main></>;
 }

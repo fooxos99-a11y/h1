@@ -1,37 +1,13 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import ReportsSection from '../../src/components/dashboard/ReportsSection';
-import SummitJourneySection from '../../src/components/portal/SummitJourneySection';
-import StudentPlanFeedback from '../../src/components/portal/StudentPlanFeedback';
-import { studentsApi } from '../../src/services/studentsApi';
-import { Toaster } from '../../src/components/ui/toaster';
+import StudentSessionWeek from '../../src/components/portal/home/StudentSessionWeek';
 import '../../src/index.css';
-
-if (!import.meta.env.DEV || !['localhost', '127.0.0.1'].includes(location.hostname)) throw new Error('Local fixture only');
-localStorage.setItem('wajeh_role', 'manager');
-const state = { points: 20, saved: [], requests: [] };
-globalThis.studentPointsFixture = state;
-studentsApi.getReportCommittees = async () => [{ id: 1, name: 'حلقة الاختبار' }];
-studentsApi.getReportArchives = async () => [];
-studentsApi.getOverviewReport = async () => ({});
-studentsApi.getStudentPointTransactionsReport = async (params) => {
-  state.requests.push(params);
-  return { period: params, rows: [
-    { studentId: 1, studentName: 'خالد السعوي — بيانات اختبار', committeeName: 'حلقة الاختبار', balance: 360,
-      increases: 122, deductions: 15, total: 107, transactions: [
-        { id: 1, type: 'increase', points: 122, source: 'التسميع', reason: 'تقييم الحفظ', date: '2026-09-08', actorName: 'معلم الاختبار' },
-        { id: 2, type: 'deduction', points: 15, source: 'يدوي', reason: 'تصحيح تقييم', date: '2026-09-08', actorName: 'معلم الاختبار' },
-      ] },
-    { studentId: 2, studentName: 'أحمد — بيانات اختبار', committeeName: 'حلقة الاختبار', balance: 50,
-      increases: 0, deductions: 0, total: 0, transactions: [] },
-  ] };
-};
-studentsApi.getSummitJourney = async () => ({ points: state.points, displayedKilometers: 20, totalKilometers: 1000,
-  activeStation: null, stages: [], mapConfig: { activeStationId: null, cities: [], stations: [], goal: { enabled: false } } });
-studentsApi.updateSummitProgress = async (points) => { state.saved.push(points); return { kilometers: points }; };
-createRoot(document.getElementById('root')).render(<><div className="p-3"><ReportsSection /></div>
-  {location.search === '?status' && <div data-testid="feedback"><StudentPlanFeedback tasks={[
-    { id: 1, teacherCompleted: true, teacherRatingKey: 'repeat_required', teacherRatingLabel: 'يحتاج إعادة' },
-    { id: 2, teacherCompleted: false, nazemSource: true, teacherRatingLabel: 'يحتاج إعادة' },
-  ]} /></div>}
-  {location.search === '?map' && <SummitJourneySection onBack={() => {}} />}<Toaster /></>);
+import '../../src/components/portal/home/student-home.css';
+if (!import.meta.env.DEV || !['localhost', '127.0.0.1'].includes(location.hostname)) throw new Error('Local only');
+const today = '2026-09-22';
+const week = { start: '2026-09-20', end: '2026-09-26', days: [
+  { date: today, points: { earned: 25, maximum: 75, maximumDetails: [{ label: 'الحفظ', maximum: 30, parts: [{ label: 'الحفظ', maximum: 20 }, { label: 'السماع', maximum: 5 }, { label: 'التكرار', maximum: 5 }] }, { label: 'المراجعة', maximum: 10 }, { label: 'الربط', maximum: 10 }, { label: 'الحضور', maximum: 25 }], details: [{ label: 'الحضور', earned: 25 }], additionalEarned: 150, additionalDetails: [{ label: 'حضور ثاني أيام البرنامج', earned: 150 }] },
+    tasks: [{ id: 1, taskType: 'memorization', teacherCompleted: null, amountHidden: true }, { id: 2, taskType: 'review', teacherCompleted: false, amountHidden: true }] },
+  { date: '2026-09-21', tasks: [{ id: 3, taskType: 'memorization', teacherCompleted: true, evaluatedAt: `${today} 18:18:09`, amountHidden: true }] },
+] };
+createRoot(document.getElementById('root')).render(<main className="student-home mx-auto max-w-3xl p-3"><StudentSessionWeek week={week} today={today} /></main>);

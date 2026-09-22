@@ -13,11 +13,12 @@ test('one-day refresh imports the explicit previous pending day for every track 
   for (const type of ['conserve', 'revision', 'master']) {
     const adapter = new NazemAdapter();
     const pending = { id: 123, date: '2026-09-07', status: 'pending', surah_from: 67, verse_from: 13, surah_to: 67, verse_to: 26 };
-    adapter.openFollowUp = async () => payload({ type, pending_day: pending, late_items: [],
+    adapter.openFollowUp = async () => payload({ id: 32698, type, pending_day: pending, late_items: [],
       is_blocked_by_previous_days: true, today: { ...pending, id: 125, date: getBusinessDate(), verse_from: 27, verse_to: 30 } });
     const history = await adapter.readStudentFollowUpHistory('191', student, 1);
     assert.equal(history.scheduledFollowUps.length, 2);
-    assert.deepEqual(history.scheduledFollowUps[0], { ...pending, remoteType: type,
+    assert.ok(history.scheduledFollowUps.every(day => day.nazemItemId === '32698'));
+    assert.deepEqual(history.scheduledFollowUps[0], { ...pending, nazemItemId: '32698', remoteType: type,
       taskType: type === 'revision' ? 'review' : 'memorization', attendanceStatus: null,
       nazemLate: false, nazemPendingDay: true, nazemLateAvailableOn: getBusinessDate(),
       nazemQueueDate: getBusinessDate(), nazemActionableDate: pending.date, nazemLinkDate: pending.date });

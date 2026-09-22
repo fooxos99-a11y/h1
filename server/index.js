@@ -1,3 +1,5 @@
+import { practiceCompletionCount } from '../shared/practice-completion.js';
+import { normalizePointAdjustmentTarget, setStudentStoreBalance } from './services/studentBalanceAdjustment.js';
 import { normalizeWordMarkType, normalizeSelectedWordMarks, normalizeSelectedAyahMarks } from './services/recitationMarks.js';
 import { persistTaskExecutionUpdates } from './services/taskExecutionUpdates.js';
 function createCompactPdfWriter(doc, regularFont, text) {
@@ -726,10 +728,10 @@ const activityDetailLabels = {
   allowRepeatCountEditing: 'السماح للطالب بتعديل عدد التكرارات',
   memorizationListeningCount: 'عدد مرات سماع الحفظ',
   masteryListeningCount: 'عدد مرات سماع الإتقان',
-  memorizationRepeatPointValue: 'كيلومترات كل تكرار للحفظ',
-  masteryRepeatPointValue: 'كيلومترات كل تكرار للإتقان',
-  memorizationListeningPointValue: 'كيلومترات كل سماع للحفظ',
-  masteryListeningPointValue: 'كيلومترات كل سماع للإتقان',
+  memorizationRepeatPointValue: 'كيلومترات التكرار للحفظ',
+  masteryRepeatPointValue: 'كيلومترات التكرار للإتقان',
+  memorizationListeningPointValue: 'كيلومترات السماع للحفظ',
+  masteryListeningPointValue: 'كيلومترات السماع للإتقان',
   allowListeningCountEditing: 'السماح للطالب بتعديل عدد مرات السماع',
   excusedAttendancePoints: 'كيلومترات الاستئذان',
 };
@@ -10671,10 +10673,10 @@ function buildEvaluationSettingsUpdate({ req, previousSettings, teacherMemorizat
     masteryRepeatCount: normalizeRepeatCount(req.body.masteryRepeatCount, previousSettings.masteryRepeatCount ?? 1),
     memorizationListeningCount: normalizeRepeatCount(req.body.memorizationListeningCount, previousSettings.memorizationListeningCount ?? 3),
     masteryListeningCount: normalizeRepeatCount(req.body.masteryListeningCount, previousSettings.masteryListeningCount ?? 3),
-    memorizationRepeatPointValue: Math.max(0, Math.trunc(Number(req.body.memorizationRepeatPointValue ?? previousSettings.memorizationRepeatPointValue ?? 1))),
-    masteryRepeatPointValue: Math.max(0, Math.trunc(Number(req.body.masteryRepeatPointValue ?? previousSettings.masteryRepeatPointValue ?? 1))),
-    memorizationListeningPointValue: Math.max(0, Math.trunc(Number(req.body.memorizationListeningPointValue ?? previousSettings.memorizationListeningPointValue ?? 10))),
-    masteryListeningPointValue: Math.max(0, Math.trunc(Number(req.body.masteryListeningPointValue ?? previousSettings.masteryListeningPointValue ?? 10))),
+    memorizationRepeatPointValue: Math.max(0, Math.trunc(Number(req.body.memorizationRepeatPointValue ?? previousSettings.memorizationRepeatPointValue ?? 5))),
+    masteryRepeatPointValue: Math.max(0, Math.trunc(Number(req.body.masteryRepeatPointValue ?? previousSettings.masteryRepeatPointValue ?? 5))),
+    memorizationListeningPointValue: Math.max(0, Math.trunc(Number(req.body.memorizationListeningPointValue ?? previousSettings.memorizationListeningPointValue ?? 5))),
+    masteryListeningPointValue: Math.max(0, Math.trunc(Number(req.body.masteryListeningPointValue ?? previousSettings.masteryListeningPointValue ?? 5))),
     allowRepeatCountEditing: req.body.allowRepeatCountEditing === undefined
       ? Boolean(previousSettings.allowRepeatCountEditing)
       : parseBoolean(req.body.allowRepeatCountEditing),
@@ -11652,7 +11654,7 @@ const executeStudentQuranTasks = async (req, res, next) => {
     const _resolveActualRepeatCount2 = () => {
       if (status === 'done' && first.taskType === 'memorization') {
         if (settings.allowRepeatCountEditing) {
-          return Math.min(expectedRepeatCount, Math.max(1, Math.trunc(Number(req.body.repeatCount ?? expectedRepeatCount))));
+          return practiceCompletionCount(req.body.repeatCount, expectedRepeatCount);
         }
         return expectedRepeatCount;
       }
@@ -11663,7 +11665,7 @@ const executeStudentQuranTasks = async (req, res, next) => {
     const _resolveActualListeningCount2 = () => {
       if (status === 'done' && expectedListeningCount > 0) {
         if (settings.allowListeningCountEditing) {
-          return Math.min(expectedListeningCount, Math.max(1, Math.trunc(Number(req.body.listeningCount ?? expectedListeningCount))));
+          return practiceCompletionCount(req.body.listeningCount, expectedListeningCount);
         }
         return expectedListeningCount;
       }
@@ -12274,7 +12276,7 @@ async function executeRepeatTaskGroup({ first, settings, status, nazemManaged, r
   const _resolveActualRepeatCount = () => {
     if (status === 'done') {
       if (!nazemManaged && settings.allowRepeatCountEditing) {
-        return Math.min(expectedRepeatCount, Math.max(1, Math.trunc(Number(req.body.repeatCount ?? expectedRepeatCount))));
+        return practiceCompletionCount(req.body.repeatCount, expectedRepeatCount);
       }
       return expectedRepeatCount;
     }
@@ -12284,7 +12286,7 @@ async function executeRepeatTaskGroup({ first, settings, status, nazemManaged, r
   const _resolveActualListeningCount = () => {
     if (status === 'done') {
       if (!nazemManaged && settings.allowListeningCountEditing) {
-        return Math.min(expectedListeningCount, Math.max(1, Math.trunc(Number(req.body.listeningCount ?? expectedListeningCount))));
+        return practiceCompletionCount(req.body.listeningCount, expectedListeningCount);
       }
       return expectedListeningCount;
     }
@@ -13423,7 +13425,7 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
     );
     const rejectInvalidRecitationTaskResult = await rejectInvalidRecitationTask({ task, settings, connection, res, req, notMemorized });
     if (rejectInvalidRecitationTaskResult) { return rejectInvalidRecitationTaskResult; }
-    if (Number(task.nazemLate) && !(req.recitationSessionTaskIds || []).length
+    if (Number(task.nazemManaged) && !(req.recitationSessionTaskIds || []).length
       && !await validateNazemLateSession(connection, {
         studentId: task.studentId, sessionDate: date, sessionId: req.body.sessionId,
         tasks: [{ taskId }],
@@ -13785,6 +13787,7 @@ app.get('/api/students', async (req, res, next) => {
         s.guardian_phone AS guardianPhone,
         s.committee_id AS committeeId,
         s.points,
+        s.store_balance AS storeBalance,
         c.name AS committeeName
       FROM students s
       LEFT JOIN committees c ON c.id = s.committee_id
@@ -14090,6 +14093,7 @@ app.put('/api/students/:id', requirePermission('students'), async (req, res, nex
     const cleanNationalId = normalizeOptionalNationalId(req.body.nationalId);
     const points = Number(req.body.points || 0);
     const pointReason = String(req.body.pointReason || '').trim();
+    const pointTarget = normalizePointAdjustmentTarget(req.body.pointTarget);
     const settings = await loadSettings();
     if (!Number.isSafeInteger(points) || points < 0 || points > 2147483647) {
       throw invalidInput('قيمة الكيلومترات غير صحيحة.');
@@ -14104,7 +14108,7 @@ app.put('/api/students/:id', requirePermission('students'), async (req, res, nex
       await connection.rollback();
       return res.status(404).json({ message: 'الطالب غير موجود.' });
     }
-    const pointDelta = points - Number(current.points || 0);
+    const pointDelta = pointTarget === 'both' ? points - Number(current.points || 0) : 0;
     if (pointDelta && !pointReason) {
       await connection.rollback();
       return res.status(422).json({ message: 'سبب تعديل الكيلومترات مطلوب.' });
@@ -14120,6 +14124,13 @@ app.put('/api/students/:id', requirePermission('students'), async (req, res, nex
     );
     if (String(current.loginNumber || '').trim() !== cleanLoginNumber) {
       await revokeAuthSessionsForUser(connection, 'student', req.params.id);
+    }
+    if (pointTarget === 'balance') {
+      await setStudentStoreBalance(connection, {
+        studentId: req.params.id, balance: Number(req.body.storeBalance),
+        expectedBalance: req.body.expectedStoreBalance,
+        reason: pointReason, actor: req.auth,
+      });
     }
     if (pointDelta) {
       const today = getSaudiDateTimeParts().date;
@@ -15187,6 +15198,7 @@ async function applyEvaluatedGroupSegments({ groupEvaluated, task, groupTasks, s
     if (segments.length) {
       const segmented = calculateSegmentedPlanPoints({
         basePoints: settings.pointsSystemEnabled ? reward : 0,
+        normalCompleted: compareQuranPositionInDirection(actualEnd, task.nazemManaged ? context.scheduledEnd : context.normalEnd, direction) >= 0,
         dailyAmount: Number(plan.dailyPages || 1),
         segments,
         compensationPercent: settings.quranCompensationPointsPercent,
@@ -15266,7 +15278,7 @@ async function saveTeacherExecutedRepetitions({ notMemorized, teacherExecutionMo
     const requestedRepeatCount = Number(req.body.repeatCount ?? expectedRepeatCount);
     const _resolveActualRepeatCount3 = () => {
       if (Number.isFinite(requestedRepeatCount)) {
-        return Math.min(task.nazemManaged ? 30 : expectedRepeatCount, Math.max(1, Math.trunc(requestedRepeatCount)));
+        return practiceCompletionCount(requestedRepeatCount, Math.min(task.nazemManaged ? 30 : expectedRepeatCount, expectedRepeatCount));
       }
       return expectedRepeatCount;
     };
@@ -15281,7 +15293,7 @@ async function saveTeacherExecutedRepetitions({ notMemorized, teacherExecutionMo
         return 0;
       }
       if (expectedListeningCount > 0 && Number.isFinite(requestedListeningCount)) {
-        return Math.min(expectedListeningCount, Math.max(1, Math.trunc(requestedListeningCount)));
+        return practiceCompletionCount(requestedListeningCount, expectedListeningCount);
       }
       return expectedListeningCount;
     };

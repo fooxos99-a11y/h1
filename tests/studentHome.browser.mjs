@@ -87,7 +87,8 @@ try {
     assert.equal(await page.getByRole('progressbar', { name: 'إنجاز خطة اليوم' }).getAttribute('aria-valuenow'), '33');
     assert.equal(await page.locator('.student-home-points').count(), 0);
     assert.equal(await page.locator('.student-home-journey').getByText('1,234', { exact: true }).count(), 0, 'Account total belongs only in its popover');
-    assert.equal(await page.locator('.student-home-level').innerText(), '44', 'Level follows the current plan');
+    assert.equal(await page.locator('.student-home-level').innerText(), '');
+    assert.equal(await page.locator('.student-home-level svg').count(), 1);
     const layout = await page.locator('.student-home-task').evaluateAll((elements) => elements.map((el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, height: r.height, width: r.width }; }));
     assert.equal(new Set(layout.map((r) => r.y)).size, 1);
     assert.ok(layout[0].x > layout[1].x && layout[1].x > layout[2].x);

@@ -63,7 +63,7 @@ test('qassim map starts in Buraidah, labels every governorate, and keeps the goa
   assert.equal(getQassimRoadProgress(8000).goalProximity, 1);
 });
 
-test('map configuration supports global station events, hundred-kilometer cities, and target-bounded signs', () => {
+test('map configuration supports global station events, hundred-kilometer cities, and ignores removed roadside signs', () => {
   const config = normalizeSummitMapConfig({
     cities: [{ key: 'mithnab', name: 'مدينة المذنب' }],
     stations: [
@@ -75,10 +75,10 @@ test('map configuration supports global station events, hundred-kilometer cities
     activeStationId: 'notice',
   });
   assert.equal(config.cities.find(({ key }) => key === 'mithnab').name, 'مدينة المذنب');
-  assert.deepEqual(config.stations.map(({ notificationEnabled, challengeEnabled }) => [notificationEnabled, challengeEnabled]), [[false, false], [true, false], [false, true]]);
+  assert.deepEqual(config.stations.map(({ notificationEnabled, challengeEnabled }) => [notificationEnabled, challengeEnabled]), [[false, false], [false, false], [false, false]]);
   assert.ok(config.stations.every(({ kilometer }) => kilometer > 0));
   assert.equal(getSummitActiveStation(config)?.id, 'notice');
-  assert.deepEqual(config.signs[0], { id: 'manual', kilometer: 1000, visibleFromKilometer: 0, text: 'المذنب ١٠٠٠ كم', side: 'right', enabled: true });
+  assert.deepEqual(config.signs, []);
   assert.equal(getNextSummitBlockingStation(config.stations.map((station) => ({ ...station, points: station.kilometer })), 1000, 3500)?.id, 'quiet');
   assert.equal(getNextSummitBlockingStation(config.stations.map((station) => ({ ...station, points: station.kilometer, completed: true })), 2200, 3500), null);
 
@@ -87,9 +87,7 @@ test('map configuration supports global station events, hundred-kilometer cities
     signs: [{ id: 'start-sign', kilometer: 0, text: 'ابدأ من هنا' }],
   });
   assert.equal(startConfig.stations[0].kilometer, 0);
-  assert.equal(startConfig.signs[0].kilometer, 0);
-  assert.equal(startConfig.signs[0].visibleFromKilometer, 0);
-  assert.equal('visibleUntilKilometer' in startConfig.signs[0], false);
+  assert.deepEqual(startConfig.signs, []);
 
   const cityEventConfig = normalizeSummitMapConfig({
     cities: [{ id: 'new-city', name: 'مدينة جديدة', kilometer: 1750, challengeEnabled: true, challengeType: 'forest', rewardPoints: 85 }],
@@ -267,10 +265,7 @@ test('summit is wired as a responsive student journey with protected persistence
   assert.match(roadScene, /city-interior/);
   assert.match(roadScene, /qassim-road-station\.webp/);
   assert.match(roadScene, /progress\.segmentIndex % 2 === 0 \? 'day' : 'night'/);
-  assert.match(roadScene, /distanceAhead >= 0/);
-  assert.match(roadScene, /currentKilometer >= visibleFrom/);
-  assert.match(roadScene, /currentKilometer <= visibleUntil/);
-  assert.match(roadScene, /qassim-road-station/);
+  assert.doesNotMatch(roadScene, /qassim-road-sign|qassim-road-station-board/);
   assert.doesNotMatch(roadScene, /qassim-road-station-place/);
   assert.doesNotMatch(roadScene, /qassim-road-city-arrival/);
   assert.match(roadScene, /getSummitActiveCity\(journey\.mapConfig, progress\.distanceKm\)/);
@@ -312,14 +307,12 @@ test('summit is wired as a responsive student journey with protected persistence
   assert.match(settings, />الخريطة</);
   assert.match(mapEventFields, /مكافأة الفوز بالتحدي/);
   assert.match(settings, /SummitMapEditor/);
-  assert.ok(mapEditor.indexOf('كيلومتر الهدف') < mapEditor.indexOf('تظهر من كيلومتر'));
-  assert.ok(mapEditor.indexOf('تظهر من كيلومتر') < mapEditor.indexOf('إظهار اللوحة'));
   assert.match(mapEditor, /الوجهة النهائية/);
   assert.match(mapEditor, /كشف الاسم قبل الوصول بـ/);
   assert.match(mapEditor, /<SummitJourneyMap embedded/);
   assert.match(mapEditor, /notificationEnabled/);
   assert.match(mapEditor, /challengeEnabled/);
-  assert.match(mapEditor, /config\.signs/);
+  assert.doesNotMatch(mapEditor, /config\.signs|selectedSignId/);
   assert.match(server, /summitMapConfig/);
   assert.match(routes, /getSummitMapEventLocation/);
   assert.match(routes, /student_summit_progress/);

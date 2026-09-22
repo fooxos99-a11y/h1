@@ -563,6 +563,7 @@ export async function claimNextNazemJob(connection = db()) {
        ORDER BY CASE
          WHEN JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.requestedFrom')) = 'student-plan-import' THEN 0
          WHEN job.operation_type = 'account.verify' THEN 1
+         WHEN job.operation_type = 'account.refresh_followups' THEN 2
          WHEN job.operation_type = 'attendance.submit' THEN 2
          WHEN job.operation_type = 'recitation.submit' THEN 3
          WHEN JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.requestedFrom')) = 'teacher-evaluation' THEN 4

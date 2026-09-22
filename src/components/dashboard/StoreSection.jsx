@@ -1,6 +1,5 @@
-import CheckboxOption from '@/components/ui/checkbox-option';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, ImagePlus, Package, Pencil, Plus, ShoppingBag, Trash2 } from 'lucide-react';
+import { ImagePlus, Package, Pencil, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -34,6 +33,8 @@ const StoreSection = () => {
   const [tab, setTab] = useState('products');
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [decidingOrderId, setDecidingOrderId] = useState(null);
+  const decidingOrder = useRef(false);
   const [configuration, setConfiguration] = useState({
     pointsSystemEnabled: false,
     storeEnabled: false,
@@ -47,7 +48,6 @@ const StoreSection = () => {
   const [form, setForm] = useState(emptyProduct);
   const [isSaving, setIsSaving] = useState(false);
   const [deletingProduct, setDeletingProduct] = useState(null);
-  const [deletingOrder, setDeletingOrder] = useState(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -173,29 +173,22 @@ const StoreSection = () => {
     }
   };
 
-  const deleteOrder = async () => {
-    if (!deletingOrder) return;
+  const decideOrder = async (order, status) => {
+    if (decidingOrder.current) return;
+    decidingOrder.current = true;
+    setDecidingOrderId(order.id);
     try {
-      await studentsApi.deleteStoreOrder(deletingOrder.id);
-      setOrders((current) => current.filter((item) => item.id !== deletingOrder.id));
-      setDeletingOrder(null);
+      await studentsApi.decideStoreOrder(order.id, status);
+      setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status } : item));
     } catch (error) {
-      toast({ title: 'تعذر حذف الطلب', description: error.message, variant: 'destructive' });
-    }
-  };
-
-  const toggleOrder = async (order) => {
-    const fulfilled = !order.fulfilled;
-    setOrders((current) => current.map((item) => item.id === order.id ? { ...item, fulfilled } : item));
-    try {
-      await studentsApi.setStoreOrderFulfilled(order.id, fulfilled);
-    } catch (error) {
-      setOrders((current) => current.map((item) => item.id === order.id ? { ...item, fulfilled: !fulfilled } : item));
       toast({ title: 'تعذر تحديث الطلب', description: error.message, variant: 'destructive' });
+    } finally {
+      decidingOrder.current = false;
+      setDecidingOrderId(null);
     }
   };
 
-  const pendingOrders = orders.filter((order) => !order.fulfilled);
+  const pendingOrders = orders.filter((order) => (order.status || (order.fulfilled ? 'accepted' : 'pending')) === 'pending');
 
   if (isLoading) return <DashboardLoader className="min-h-[420px]" />;
 
@@ -232,25 +225,16 @@ const StoreSection = () => {
     return <Card className="border-primary/20 bg-card">
           <CardContent className="divide-y divide-primary/10 p-0">
             {pendingOrders.map((order) => (
-              <div key={order.id} className="flex min-h-16 items-center gap-2 px-3 py-2 sm:px-4">
-                <CheckboxOption
-                  checked={order.fulfilled}
-                  label={order.fulfilled ? 'إلغاء تحديد الطلب كمكتمل' : 'تحديد الطلب كمكتمل'}
-                  onCheckedChange={() => toggleOrder(order)}
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                >
-                  <span className={`grid h-7 w-7 place-items-center rounded-lg border ${order.fulfilled ? 'border-primary bg-primary text-primary-foreground' : 'border-primary/25 bg-background text-transparent'}`}>
-                    <Check className="h-3.5 w-3.5" />
-                  </span>
-                </CheckboxOption>
+              <div key={order.id} className="flex min-h-16 flex-wrap items-center gap-2 px-3 py-2 sm:px-4">
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-black text-foreground">{order.studentName} — {order.productName}</span>
                   <span className="mt-1 block text-xs font-bold text-muted-foreground">{order.committeeName || 'بدون حلقة'} · {order.createdAt}</span>
                 </span>
                 <PointsValue value={order.pointsPrice} className="shrink-0 text-sm" />
-                <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-destructive" onClick={() => setDeletingOrder(order)} aria-label="حذف الطلب">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex gap-2">
+                  <Button className="min-h-11" disabled={decidingOrderId !== null} onClick={() => decideOrder(order, 'accepted')}>قبول</Button>
+                  <Button variant="outline" className="min-h-11 text-destructive" disabled={decidingOrderId !== null} onClick={() => decideOrder(order, 'rejected')}>رفض</Button>
+                </div>
               </div>
             ))}
           </CardContent>
@@ -305,16 +289,6 @@ const StoreSection = () => {
           <DialogFooter>
             <Button type="button" variant="outline" className="h-11" onClick={() => setDialogOpen(false)}>إلغاء</Button>
             <Button type="button" className="h-11" disabled={isSaving} onClick={saveProduct}>{isSaving ? 'جاري الحفظ...' : 'حفظ'}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(deletingOrder)} onOpenChange={(open) => !open && setDeletingOrder(null)}>
-        <DialogContent className="max-w-sm border-primary/30 bg-card text-foreground" dir="rtl">
-          <DialogHeader><DialogTitle>حذف الطلب نهائيًا؟</DialogTitle></DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDeletingOrder(null)}>إلغاء</Button>
-            <Button type="button" variant="destructive" onClick={deleteOrder}>حذف</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

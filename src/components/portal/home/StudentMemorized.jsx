@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BookOpen, ChevronDown } from 'lucide-react';
 import StudentHomeProgress from './StudentHomeProgress';
 import { Button } from '@/components/ui/button';
-import LoadingSpinner from '@/components/ui/loading-spinner';
+import LoadingIndicator from '@/components/ui/loading-indicator';
 import { loadStudentMemorized } from '@/services/studentHomeService';
 import { buildPlanMushafTarget, planTaskAmount } from '@/lib/studentPlan';
 
@@ -17,7 +17,7 @@ export default function StudentMemorized({ studentId, onRead, openJuzs, onJuzTog
     }).catch(() => { if (active) setState({ loading: false, rows: [], error: 'تعذر تحميل المحفوظ.' }); });
     return () => { active = false; };
   }, [studentId, version]);
-  if (state.loading) return <div className="student-home-loading"><LoadingSpinner /></div>;
+  if (state.loading) return <div className="student-home-loading"><LoadingIndicator /></div>;
   if (state.error) return <div className="student-home-error" role="alert"><p>{state.error}</p><Button variant="outline" onClick={() => setVersion((value) => value + 1)}>إعادة المحاولة</Button></div>;
   const visibleRows = state.rows.filter(juz => Number(juz.progressPercent) > 0 || juz.savedRanges?.length > 0);
   return <div className="student-home-memorized">

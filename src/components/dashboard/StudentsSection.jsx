@@ -23,6 +23,8 @@ const emptyStudent = {
   guardianPhone: '',
   committeeId: '',
   points: 0,
+  pointTarget: 'both',
+  storeBalance: 0,
   pointReason: '',
 };
 
@@ -299,6 +301,9 @@ const StudentsSection = () => {
       guardianPhone: student.guardianPhone,
       committeeId: student.committeeId ? String(student.committeeId) : '',
       points: Number(student.points || 0),
+      pointTarget: 'both',
+      storeBalance: Number(student.storeBalance || 0),
+      expectedStoreBalance: Number(student.storeBalance || 0),
       pointReason: '',
     });
     setDialog('edit');
@@ -598,21 +603,35 @@ const StudentsSection = () => {
               {dialog === 'edit' && (
                 <>
                   <div className="space-y-2">
-                    <Label>{rewardUnits.text('الكيلومترات')}</Label>
+                    <Label htmlFor="student-point-target">تعديل</Label>
+                    <Select value={studentForm.pointTarget} onValueChange={(pointTarget) => setStudentForm({
+                      ...studentForm, pointTarget, points: Number(selectedStudent.points || 0),
+                      storeBalance: Number(selectedStudent.storeBalance || 0), pointReason: '',
+                    })}>
+                      <SelectTrigger id="student-point-target" className="min-h-11"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="balance">الرصيد فقط</SelectItem>
+                        <SelectItem value="both">الرصيد والنقاط الأساسية</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{studentForm.pointTarget === 'balance' ? 'الرصيد' : rewardUnits.text('الكيلومترات')}</Label>
                     <Input
                       type="number"
-                      aria-label={rewardUnits.text('الكيلومترات')}
+                      aria-label={studentForm.pointTarget === 'balance' ? 'الرصيد' : rewardUnits.text('الكيلومترات')}
                       min="0"
-                      value={studentForm.points}
-                      onChange={(event) => setStudentForm({ ...studentForm, points: Number(event.target.value || 0) })}
+                      value={studentForm.pointTarget === 'balance' ? studentForm.storeBalance : studentForm.points}
+                      onChange={(event) => setStudentForm({ ...studentForm, [studentForm.pointTarget === 'balance' ? 'storeBalance' : 'points']: Number(event.target.value || 0) })}
                     />
                   </div>
-                  {Number(studentForm.points) !== Number(selectedStudent?.points || 0) && (
+                  {(Number(studentForm.points) !== Number(selectedStudent?.points || 0)
+                    || Number(studentForm.storeBalance) !== Number(selectedStudent?.storeBalance || 0)) && (
                     <div className="space-y-2">
-                      <Label>{rewardUnits.text('سبب تعديل الكيلومترات')}</Label>
+                      <Label>{studentForm.pointTarget === 'balance' ? 'سبب تعديل الرصيد' : rewardUnits.text('سبب تعديل الكيلومترات')}</Label>
                       <Input
                         value={studentForm.pointReason}
-                        aria-label={rewardUnits.text('سبب تعديل الكيلومترات')}
+                        aria-label={studentForm.pointTarget === 'balance' ? 'سبب تعديل الرصيد' : rewardUnits.text('سبب تعديل الكيلومترات')}
                         onChange={(event) => setStudentForm({ ...studentForm, pointReason: event.target.value })}
                         placeholder="اكتب سبب الزيادة أو الخصم"
                       />

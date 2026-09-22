@@ -46,7 +46,10 @@ test('programs use optional text content, optional files, and latest-attempt poi
   assert.match(editor, /إرفاق ملف/);
   assert.match(editor, /السماح بأكثر من محاولة/);
   assert.doesNotMatch(editor, /مفعل ويظهر للطلاب|غلاف|رابط|PDF|صورة داخل المحتوى/);
-  assert.match(cards, /النتيجة: \{units\.format\(program\.earnedPoints\)\}/);
+  assert.match(cards, /<StudentProgramResult program=\{program\}/);
+  const result = await readFile(new URL('../src/components/programs/StudentProgramResult.jsx', import.meta.url), 'utf8');
+  assert.match(result, /units\.format\(program\.earnedPoints\)/);
+  assert.match(result, /Boolean\(program\.completedAt\)/);
   assert.match(cards, />ابدأ<\/Button>/);
   assert.doesNotMatch(cards, /أفضل نتيجة|\{program\.(?:contents|questions)\.length\}/);
   assert.doesNotMatch(cards, /عرض المحتوى/);

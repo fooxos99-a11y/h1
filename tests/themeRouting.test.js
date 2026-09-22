@@ -3,6 +3,27 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { getDefaultThemeForPath, getPreferredThemeForPath, saveThemePreference } from '../src/lib/theme.js';
 
+test('student preference survives login navigation and a fresh module session until explicitly switched', async () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const stored = new Map();
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { localStorage: {
+    getItem: key => stored.get(key), setItem: (key, value) => stored.set(key, value),
+  } } });
+  try {
+    const before = await import('../src/lib/theme.js?student-session-before');
+    before.saveThemePreference('dark', '/portal');
+    assert.equal(before.getPreferredThemeForPath('/login'), 'light');
+    const fresh = await import('../src/lib/theme.js?student-session-test');
+    assert.equal(fresh.getPreferredThemeForPath('/portal'), 'dark');
+    assert.equal(fresh.getPreferredThemeForPath('/portal/programs'), 'dark');
+    fresh.saveThemePreference('light', '/portal');
+    assert.equal(fresh.getPreferredThemeForPath('/portal'), 'light');
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'window', original);
+    else delete globalThis.window;
+  }
+});
+
 test('login entry and dashboards default to light', () => {
   assert.equal(getDefaultThemeForPath('/'), 'light');
   assert.equal(getDefaultThemeForPath('/login'), 'light');

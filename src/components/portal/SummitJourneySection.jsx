@@ -64,7 +64,7 @@ const SummitJourneySection = ({ onBack }) => {
             || stage.challengeEnabled
           )
         ));
-        if (initialStage) {
+        if (initialStage && !data.activeStation) {
           setActiveStation(initialStage);
           if (['station', 'city'].includes(initialStage.locationType) || initialStage.notificationEnabled) announceArrival(initialStage, !data.activeStation);
           else setSelectedStage(initialStage);
@@ -88,6 +88,7 @@ const SummitJourneySection = ({ onBack }) => {
         const previousId = journey.mapConfig?.activeStationId || null;
         const nextId = data.mapConfig?.activeStationId || null;
         if (previousId === nextId) {
+          if (data.activeStation) setDisplayedKilometers(Number(data.activeStation.kilometer));
           setJourney(data);
           return;
         }
@@ -95,15 +96,11 @@ const SummitJourneySection = ({ onBack }) => {
         setIsMoving(false);
         setJourney(data);
         setDisplayedKilometers(Number(data.activeStation?.kilometer ?? data.displayedKilometers ?? data.points ?? 0));
-        if (data.activeStation) {
-          const stage = data.stages.find(({ id }) => id === data.activeStation.id) || data.activeStation;
-          setActiveStation(stage);
-          announceArrival(stage);
-        } else {
-          setActiveStation(null);
-          setSelectedStage(null);
-          setNotificationOpen(false);
-        }
+        setActiveStation(null);
+        setSelectedStage(null);
+        setNotificationOpen(false);
+        setAttempt(null);
+        setResult(null);
       } catch (error) {
         if (mounted && !stationRefreshErrorShownRef.current) {
           stationRefreshErrorShownRef.current = true;
@@ -201,6 +198,7 @@ const SummitJourneySection = ({ onBack }) => {
   };
 
   const openStation = (stage) => {
+    if (journey?.activeStation) return;
     if (!['station', 'city'].includes(stage.locationType) && !stage.notificationEnabled && !stage.challengeEnabled) return;
     setActiveStation(stage);
     setResult(null);
@@ -253,7 +251,7 @@ const SummitJourneySection = ({ onBack }) => {
       points: displayedKilometers,
       isMoving,
       nextStage: journey.stages.find((stage) => stage.points > displayedKilometers) || null,
-      reachedSummit: Boolean(journey.mapConfig?.goal?.enabled)
+      reachedSummit: !journey.activeStation && Boolean(journey.mapConfig?.goal?.enabled)
         && displayedKilometers >= Number(journey.totalKilometers || 8000),
     };
   }, [displayedKilometers, isMoving, journey]);
@@ -270,7 +268,7 @@ const SummitJourneySection = ({ onBack }) => {
         </dialog>
       )}
 
-      <Dialog open={notificationOpen} onOpenChange={() => {}}>
+      <Dialog open={notificationOpen && !journey?.activeStation} onOpenChange={() => {}}>
         <DialogContent overlayClassName="z-[150]" className="z-[160] max-w-sm border-[var(--brand-navigation-highlight)] bg-[#fffaf0] text-center [font-family:var(--font-ui)]" dir="rtl">
           <BellRing className="mx-auto h-14 w-14 text-[var(--brand-navigation-highlight)]" />
           <DialogHeader>
@@ -287,14 +285,14 @@ const SummitJourneySection = ({ onBack }) => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(selectedStage && !attempt && !result)} onOpenChange={(open) => { if (!open && !activeStation) setSelectedStage(null); }}>
+      <Dialog open={Boolean(selectedStage && !attempt && !result && !journey?.activeStation)} onOpenChange={(open) => { if (!open && !activeStation) setSelectedStage(null); }}>
         <DialogContent overlayClassName="z-[150]" className="z-[160] max-w-md [font-family:var(--font-ui)]" dir="rtl">
           <DialogHeader><DialogTitle className="text-center text-2xl font-black">{selectedStage?.name}</DialogTitle></DialogHeader>
           <div className="space-y-4 text-center"><p className="text-muted-foreground">وصلت إلى {selectedStage?.name} عند {selectedStage?.points.toLocaleString('ar-SA-u-nu-latn')} كم. أكمل التحدي لتحصل على مكافأة الفوز بالتحدي: {Number(selectedStage?.rewardPoints ?? journey.challengeMaxPoints).toLocaleString('ar-SA-u-nu-latn')} كم.</p>{selectedStage?.completed && <p className="rounded-xl bg-primary/10 p-3 text-sm font-bold text-primary">أنهيت هذا التحدي سابقًا.</p>}<Button className="h-12 w-full" disabled={isStarting} onClick={startStage}>{isStarting ? <LoadingSpinner size="md" /> : 'ابدأ التحدي'}</Button></div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(attempt)} onOpenChange={(open) => !open && setAttempt(null)}>
+      <Dialog open={Boolean(attempt && !journey?.activeStation)} onOpenChange={(open) => !open && setAttempt(null)}>
         <DialogContent overlayClassName="z-[150]" className="z-[160] max-h-[94dvh] max-w-xl overflow-y-auto bg-[#001f2d] [font-family:var(--font-ui)]" dir="rtl">
           {SUMMIT_DAILY_CHALLENGE_GAME_TYPES.includes(attempt?.gameType) ? (
             <SummitMiniGame attempt={attempt} onSubmit={submitAttempt} isSubmitting={isSubmitting} />
@@ -306,7 +304,7 @@ const SummitJourneySection = ({ onBack }) => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(result)} onOpenChange={(open) => !open && setResult(null)}>
+      <Dialog open={Boolean(result && !journey?.activeStation)} onOpenChange={(open) => !open && setResult(null)}>
         <DialogContent overlayClassName="z-[150]" className="z-[160] max-w-sm text-center [font-family:var(--font-ui)]" dir="rtl"><div className="space-y-4 py-4">{result?.completed ? <Trophy className="mx-auto h-14 w-14 text-primary" /> : <Navigation className="mx-auto h-14 w-14 text-muted-foreground" />}<h2 className="text-2xl font-black">{result?.completed ? 'اكتمل التحدي' : 'المحاولة غير مكتملة'}</h2><p className="text-muted-foreground">{result?.completed ? `حصلت على ${result.awardedPoints} كم.` : 'أعد المحاولة وحاول إكمال التحدي.'}</p><Button className="w-full" onClick={() => { if (result?.completed) void continueAfterChallenge(); else { setResult(null); void startStage(); } }}>{result?.completed ? 'متابعة الرحلة' : 'إعادة المحاولة'}</Button></div></DialogContent>
       </Dialog>
     </div>

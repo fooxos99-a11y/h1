@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { studentsApi } from '@/services/studentsApi';
 import { useToast } from '@/components/ui/use-toast';
 import useRewardUnits from '@/hooks/useRewardUnits';
+import { hasProgramActivity } from '@/lib/programActivity';
+import StudentProgramResult from '@/components/programs/StudentProgramResult';
 
 export default function StudentProgramContent({ program, onCompleted }) {
   const rewardUnits = useRewardUnits();
@@ -25,6 +27,7 @@ export default function StudentProgramContent({ program, onCompleted }) {
   const content = useMemo(() => program?.contents?.find(({ type }) => type === 'text'), [program]);
   const attachment = useMemo(() => program?.contents?.find(({ type }) => type !== 'text'), [program]);
   if (!program) return null;
+  if (!hasProgramActivity(program)) return <section className="space-y-5 [font-family:var(--font-ui)]" dir="rtl"><h1 className="text-2xl font-black">{program.title}</h1><StudentProgramResult program={program} /></section>;
 
   const canAttempt = !program.completedAt || program.allowMultipleAttempts;
   const currentQuestion = (program.questions || [])[questionIndex];

@@ -1,5 +1,21 @@
 const fail = (message, statusCode = 422) => Object.assign(new Error(message), { statusCode });
 
+/** Save one batch inside the caller's transaction; the same authorization applies to every row. */
+export async function saveManualProgramPointsBatch(connection, { grades, ...context }, dependencies) {
+  if (!Array.isArray(grades) || !grades.length || grades.length > 2000
+    || grades.some(row => !row || !Number.isSafeInteger(row.studentId) || row.studentId <= 0
+      || !Number.isSafeInteger(row.points) || row.points < 0)
+    || new Set(grades.map(row => row.studentId)).size !== grades.length) {
+    throw fail('قائمة النقاط غير صالحة أو تحتوي طالبًا مكررًا.');
+  }
+  const results = [];
+  for (const grade of [...grades].sort((a, b) => a.studentId - b.studentId)) {
+    const result = await saveManualProgramPoints(connection, { ...context, studentId: grade.studentId, points: grade.points }, dependencies);
+    results.push({ studentId: grade.studentId, ...result });
+  }
+  return { grades: results };
+}
+
 export async function saveManualProgramPoints(connection, { programId, studentId, points, actor, settings, date }, { applyStudentPointDelta, logStudentPointTransaction }) {
   if (!Number.isSafeInteger(studentId) || studentId <= 0 || !Number.isSafeInteger(programId) || programId <= 0) throw fail('الطالب أو البرنامج غير صالح.');
   const [[program]] = await connection.query('SELECT id, title, points_reward AS pointsReward, (SELECT COUNT(*) FROM learning_paths child WHERE child.parent_path_id = learning_paths.id) AS sectionCount FROM learning_paths WHERE id = ? FOR UPDATE', [programId]);

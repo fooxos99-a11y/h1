@@ -1,3 +1,4 @@
+import ProgramManagementDialog from '@/components/programs/ProgramManagementDialog';
 import ProgramGradesDialog from '@/components/programs/ProgramGradesDialog';
 import React, { useCallback, useEffect, useState } from 'react';
 import { BookOpen, Eye, EyeOff, Pencil, Plus, Trash2 } from 'lucide-react';
@@ -20,6 +21,7 @@ export default function ProgramsSection() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [entered, setEntered] = useState(null);
   const [grading, setGrading] = useState(null);
   const [deleting, setDeleting] = useState(null);
 
@@ -124,7 +126,7 @@ export default function ProgramsSection() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {programs.map((program) => (
-            <Card key={program.id} className={`group overflow-hidden rounded-2xl border-primary/15 transition-all hover:-translate-y-0.5 hover:shadow-lg ${program.status === 'locked' ? 'opacity-75' : ''}`}>
+            <Card key={program.id} onClick={event => { if (!event.target.closest('button') && (program.sectionsEnabled || !program.questions.length)) setEntered(program); }} className={`group overflow-hidden rounded-2xl border-primary/15 transition-all hover:-translate-y-0.5 hover:shadow-lg ${program.status === 'locked' ? 'opacity-75' : ''}`}>
               <CardContent className="space-y-5 p-5 sm:p-6">
                 <div className="flex items-start justify-between gap-3">
                   <h2 className="min-w-0 break-words text-xl font-black text-foreground">{program.title}</h2>
@@ -132,8 +134,7 @@ export default function ProgramsSection() {
                     <BookOpen className="h-5 w-5" />
                   </span>
                 </div>
-                {!program.sectionsEnabled && !program.questions.length && <Button className="min-h-11 w-full" onClick={() => setGrading(program)}>تسجيل النقاط</Button>}
-                {program.sections?.filter(section => !section.questions.length).map(section => <Button key={section.id} variant="outline" className="min-h-11 w-full" onClick={() => setGrading(section)}>تسجيل النقاط: {section.title}</Button>)}
+                {(program.sectionsEnabled || !program.questions.length) && <Button className="min-h-11 w-full" onClick={() => setEntered(program)}>دخول</Button>}
                 <div className="flex gap-2">
                   <Button className="min-h-11 flex-1" variant="outline" onClick={() => { setEditing(program); setEditorOpen(true); }}>
                     <Pencil className="h-4 w-4" /> تعديل
@@ -151,6 +152,7 @@ export default function ProgramsSection() {
         </div>
       ))}
 
+      <ProgramManagementDialog program={grading || editorOpen ? null : entered} onClose={() => setEntered(null)} onGrade={setGrading} onEdit={program => { setEditing(program); setEditorOpen(true); }} />
       <ProgramGradesDialog program={grading} onClose={() => setGrading(null)} />
       <ProgramEditorDialog open={editorOpen} program={editing} saving={saving} onOpenChange={setEditorOpen} onSave={save} />
       <Dialog open={Boolean(deleting)} onOpenChange={(open) => !open && setDeleting(null)}>

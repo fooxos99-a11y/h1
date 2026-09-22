@@ -18,3 +18,11 @@ test('link follows its memorization date independently from a review date', () =
   const authorities = [{ ...rows[0], linkDate: '2026-09-09' }, rows[2]];
   assert.deepEqual(selectNazemFirstActionableTasks(rows, authorities).map(t => t.id), [1, 2, 3]);
 });
+
+test('a completed oldest link does not hide the next link while memorization still has older late work', () => {
+  const rows = [task(1, '2026-09-10', 'memorization'), task(2, '2026-09-13', 'link'),
+    task(3, '2026-09-14', 'link'), task(4, '2026-09-22')];
+  const authorities = [{ ...rows[0], linkDate: '2026-09-10' }, rows[3]];
+  assert.deepEqual(selectNazemFirstActionableTasks(rows, authorities).map(row => row.id), [1, 2, 4]);
+  assert.deepEqual(selectNazemFirstActionableTasks(rows.filter(row => row.id !== 2), authorities).map(row => row.id), [1, 3, 4]);
+});

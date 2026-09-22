@@ -1,6 +1,7 @@
 import { nazemTaskTrack } from './taskTrack.js';
 import { reconcileNazemReview } from './reviewIdentity.js';
 import { loadNazemPlanLinkCount } from './planLinkCount.js';
+import { latestNazemScheduleSql } from './scheduleAuthority.js';
 
 const supportedTaskTypes = new Set(['memorization', 'review']);
 
@@ -191,7 +192,7 @@ async function upsertScheduledDailyLink({ link, connection, plan, day, taskType,
        ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id),
          nazem_record_id = IF(local_snapshot IS NULL, COALESCE(VALUES(nazem_record_id), nazem_record_id), nazem_record_id),
          sync_status = IF(sync_status = 'synced', sync_status, 'pending'),
-         last_remote_checked_at = NOW(3), remote_snapshot = IF(local_snapshot IS NULL, VALUES(remote_snapshot), remote_snapshot)`,
+         last_remote_checked_at = NOW(3), remote_snapshot = ${latestNazemScheduleSql}`,
       [plan.id, plan.studentId, Number(link.teacherId), day.date, taskType, plan.track,
       day.id == null ? null : String(day.id), JSON.stringify(day)]
     );

@@ -1,6 +1,8 @@
 import { includeNazemPlanStudents } from './planStudents.js';
+import { nazemWriteFailure } from './writeFailure.js';
+import { readNazemStudentActivity } from './studentActivity.js';
 import { selectNazemFollowUpItem } from './followUpCycles.js';
-import { findMatchingNazemLate, matchesNazemTarget } from './recitationTarget.js';
+import { findMatchingNazemLate, matchesNazemTarget, findRegeneratedPendingDay } from './recitationTarget.js';
 import {
   blockedNazemError,
   conflictNazemError,
@@ -112,6 +114,7 @@ export function mapNazemPendingFollowUps(item, {
     if (!lateDate || isNazemFollowUpCompleted(late?.status)) return [];
     return [{
       ...late,
+      ...(item?.id ? { nazemItemId: String(item.id) } : {}),
       date: lateDate,
       remoteType,
       taskType,
@@ -307,7 +310,17 @@ export function mergeNazemStudentSources(optionStudents = [], profiles = [], ava
     }];
   });
   const profileById = new Map(profiles.map((profile) => [String(profile.id), profile]));
-  return deduplicateNazemStudents([...optionStudents, ...profileStudents]).map((student) => ({
+  const resolvedOptions = optionStudents.flatMap((student) => {
+    if (isNazemExternalStudentId(student.externalId)) return [student];
+    const matches = profileStudents.filter((profileStudent) => (
+      normalizeArabicPersonName(profileStudent.name) === normalizeArabicPersonName(student.name)
+      && studentContextKey(profileStudent.organization?.name, profileStudent.circle?.name)
+        === studentContextKey(student.organization?.name, student.circle?.name)
+    ));
+    // The roster supplies authoritative IDs even when the dropdown supplies only names.
+    return matches.length === 1 ? [{ ...student, externalId: matches[0].externalId }] : [];
+  });
+  return deduplicateNazemStudents([...resolvedOptions, ...profileStudents]).map((student) => ({
     ...student,
     profile: profileById.get(String(student.externalId)) || student.profile || null,
   }));
@@ -813,14 +826,24 @@ export class NazemAdapter {
       for (let pageNumber = 0; pageNumber < 50; pageNumber += 1) {
         const payload = await response.json();
         const page = payload?.data || {};
-        const rows = Array.isArray(page.data) ? page.data : [];
+        if (!Array.isArray(page.data) || Number(page.current_page) !== pageNumber + 1) {
+          throw new Error('صفحات طلاب ناظم غير مكتملة أو مكررة.');
+        }
+        const rows = page.data;
         rows.forEach((profile) => profiles.push(normalizeNazemStudentProfile(profile)));
-        if (!page.next_page_url || Number(page.current_page || 0) >= Number(page.last_page || 0)) break;
+        if (Number(page.current_page) >= Number(page.last_page)) {
+          const ids = new Set(profiles.map((profile) => profile.id));
+          if (ids.size !== profiles.length || (page.total != null && Number(page.total) !== ids.size)) {
+            throw new Error('قائمة طلاب ناظم غير مكتملة أو تحتوي معرّفات مكررة.');
+          }
+          return profiles.filter((profile) => profile.id && profile.name);
+        }
+        if (!page.next_page_url) throw new Error('تعذر الوصول إلى بقية صفحات طلاب ناظم.');
         responsePromise = this.page.waitForResponse(matchesStudentsResponse);
         await this.page.getByRole('button', { name: 'Next page', exact: true }).click();
         response = await responsePromise;
       }
-      return profiles.filter((profile) => profile.id && profile.name);
+      throw new Error('تجاوز جلب طلاب ناظم الحد الأقصى للصفحات.');
     } catch (cause) {
       throw transientNazemError(
         'تعذر تحميل بيانات الطلاب التفصيلية من ناظم.',
@@ -879,11 +902,13 @@ export class NazemAdapter {
       this.page.off('response', capture);
     }
     const namedApiObjects = apiPayloads.flatMap((payload) => collectNamedObjects(payload));
-    const idForName = (name) => namedApiObjects.find((item) => item.name === cleanText(name))?.id || null;
+    const idForName = (name) => {
+      const ids = [...new Set(namedApiObjects.filter((item) => item.name === cleanText(name)).map((item) => item.id))];
+      return ids.length === 1 ? ids[0] : null;
+    };
     students.forEach((student) => {
-      student.externalId = idForName(student.name) || student.externalId;
-      student.organization.id = idForName(student.organization.name) || student.organization.id;
-      student.circle.id = idForName(student.circle.name) || student.circle.id;
+      student.organization.id ||= idForName(student.organization.name);
+      student.circle.id ||= idForName(student.circle.name);
     });
     const profiles = await this.getStudentProfiles();
     return mergeNazemStudentSources(students, profiles, availableContexts);
@@ -1280,9 +1305,10 @@ export class NazemAdapter {
     const rows = [];
     const scheduled = new Map();
     const attendance = [];
-    for (let daysAgo = 0; daysAgo < Math.max(1, Number(days || 7)); daysAgo += 1) {
+    // Historical reads can regenerate pending days in Nazem. Capture current identity last.
+    for (let daysAgo = Math.max(1, Number(days || 7)) - 1; daysAgo >= 0; daysAgo -= 1) {
       const date = endDate ? shiftDateOnly(endDate, -daysAgo) : saudiDate(daysAgo);
-      const payload = await this.openFollowUp(externalPlanId, date, { fresh: daysAgo === 0 && freshCurrent });
+      const payload = await this.openFollowUp(externalPlanId, date, { fresh: daysAgo === 0 && (freshCurrent || Number(days) > 1) });
       const { student: attendanceStudent } = findFollowUpDay(payload, studentLink, 'conserve');
       if ([2, 3, 4, 5].includes(Number(attendanceStudent?.attendance_status))) {
         attendance.push({ date, attendanceStatus: Number(attendanceStudent.attendance_status) });
@@ -1291,10 +1317,12 @@ export class NazemAdapter {
     }
     const queueDate = endDate || saudiDate();
     for (const remoteType of ['conserve', 'revision', 'master']) {
-      const pending = [...scheduled.values()].filter(day => day.remoteType === remoteType);
+      const pending = [...scheduled.values()].filter(day => day.remoteType === remoteType)
+        .sort((first, second) => String(second.date).localeCompare(String(first.date)));
       const late = pending.filter(day => day.nazemLate).sort((a, b) => String(a.date).localeCompare(String(b.date)));
       const blocked = pending.filter(day => day.nazemPendingDay).sort((a, b) => String(a.date).localeCompare(String(b.date)));
-      const actionableDate = late[0]?.date || blocked[0]?.date || pending[0]?.date || null;
+      const overdueDates = [late[0]?.date, blocked[0]?.date].filter(Boolean).sort();
+      const actionableDate = overdueDates[0] || pending[0]?.date || null;
       for (const day of [...rows, ...pending].filter(day => day.remoteType === remoteType)) {
         day.nazemQueueDate = queueDate;
         day.nazemActionableDate = actionableDate;
@@ -1505,11 +1533,7 @@ export class NazemAdapter {
         `keys=${Object.keys(data || {}).slice(0, 8).join(',')}`,
         remoteDetails ? JSON.stringify(remoteDetails).slice(0, 500) : '',
       ].filter(Boolean).join(' '));
-      throw reviewNazemError(
-        cleanText(data?.message) || 'رفض ناظم حفظ بيانات المتابعة.',
-        'NAZEM_FOLLOW_UP_SAVE_REJECTED',
-        cause,
-      );
+      throw nazemWriteFailure(response.status(), cleanText(data?.message), cause);
     }
     return data;
   }
@@ -1526,6 +1550,10 @@ export class NazemAdapter {
     this.planDetailsCache.delete(String(planLink.nazemPlanId));
     const details = await this.getPlanGroupDetails(planLink.nazemPlanId);
     if (resolveNazemApiPlanStudent(details, studentLink)) {
+      const activity = await readNazemStudentActivity(path => this.getPlanApi(path), studentLink.nazemStudentId);
+      if (activity === 'inactive') {
+        throw blockedNazemError('الطالب مصنف «غير مستمر» في ناظم، لذلك لا يظهر في المتابعة. يلزم اعتماد إعادته إلى «مستمر» في ناظم قبل إعادة المزامنة.', 'NAZEM_STUDENT_INACTIVE');
+      }
       throw blockedNazemError(
         'الطالب موجود في خطة ناظم لكنه غير ظاهر في متابعة هذا التاريخ. راجع المتابعة في ناظم ثم أعد المزامنة؛ النتيجة محفوظة.',
         'NAZEM_FOLLOW_UP_STUDENT_MISSING',
@@ -1560,7 +1588,7 @@ export class NazemAdapter {
   async resolveRecitationFollowUp(studentLink, planLink, mapped, { fresh = true } = {}) {
     const followUpDate = saudiDate();
     const payload = await this.readStudentFollowUp(studentLink, planLink, followUpDate, { fresh });
-    const current = findFollowUpDay(payload, studentLink, mapped.remoteType || 'conserve', { sourceDayId: mapped.nazemSourceDayId });
+    const current = findFollowUpDay(payload, studentLink, mapped.remoteType || 'conserve', { sourceDayId: mapped.nazemSourceDayId, sourceItemId: mapped.nazemSavedTarget?.nazemItemId });
     const late = mapped.taskType === 'link' ? null : findMatchingNazemLate(normalizeNazemFollowUpItems(current.item?.late_items), mapped);
     if (late) return { ...current, payload, late, followUpDate };
     const pendingDay = current.item?.pending_day;
@@ -1572,13 +1600,25 @@ export class NazemAdapter {
     }
     if (mapped.date !== followUpDate) {
       const historical = await this.readStudentFollowUp(studentLink, planLink, mapped.date, { fresh });
-      const target = findFollowUpDay(historical, studentLink, mapped.remoteType || 'conserve', { sourceDayId: mapped.nazemSourceDayId });
+      const target = findFollowUpDay(historical, studentLink, mapped.remoteType || 'conserve', { sourceDayId: mapped.nazemSourceDayId, sourceItemId: mapped.nazemSavedTarget?.nazemItemId });
       if (matchesNazemTarget(target.day, mapped, mapped.date)) {
         return { ...target, payload: historical, late: null, followUpDate: mapped.date,
           executionAttendanceStatus: current.student?.attendance_status, executionDate: followUpDate };
       }
     }
-    // A stored snapshot proves what was intended, never what Nazem currently holds.
+    const replacement = findRegeneratedPendingDay(normalizeNazemFollowUpItems(current.student?.items), mapped);
+    if (replacement) {
+      const replacementId = String(replacement.day.id);
+      // A second independent read must still identify the same unique pending day.
+      const checked = await this.readStudentFollowUp(studentLink, planLink, followUpDate, { fresh: true });
+      const verified = findFollowUpDay(checked, studentLink, mapped.remoteType);
+      const confirmed = findRegeneratedPendingDay(normalizeNazemFollowUpItems(verified.student?.items), mapped);
+      if (confirmed && String(confirmed.day.id) === replacementId) {
+        return { ...verified, ...confirmed, payload: checked, late: null, followUpDate,
+          replacedRecordId: mapped.nazemSourceDayId };
+      }
+    }
+    // A stored snapshot alone never replaces independent remote verification.
     if (mapped.nazemSourceDayId || current.day) {
       const error = reviewNazemError('تعذر مطابقة سجل ناظم الأصلي بالتقييم المحفوظ. النتيجة محفوظة وتحتاج مطابقة.', 'NAZEM_SAVED_TARGET_CHANGED');
       error.details = { stage: 'target-resolution', expectedRecordId: mapped.nazemSourceDayId,
@@ -1596,7 +1636,7 @@ export class NazemAdapter {
     const attendanceStatus = [2, 3, 4, 5].includes(Number(attendanceValue)) ? Number(attendanceValue) : null;
     const _resolveDay = () => {
       if (day) {
-        return { ...day, date: mapped.date, remoteType: mapped.remoteType,
+        return { ...day, ...(item?.id ? { nazemItemId: String(item.id) } : {}), date: mapped.date, remoteType: mapped.remoteType,
         taskType: mapped.remoteType === 'revision' ? 'review' : 'memorization', attendanceStatus };
       }
       return null;
@@ -1672,7 +1712,13 @@ export class NazemAdapter {
 
   async postRecitationApi(path, payload) {
     await this.recitationJournal?.before(path);
-    const response = await this.postFollowUpApi(path, payload);
+    let response;
+    try {
+      response = await this.postFollowUpApi(path, payload);
+    } catch (error) {
+      if (error.confirmedRejection === true) await this.recitationJournal?.rejected(path, error.code);
+      throw error;
+    }
     await this.recitationJournal?.accepted(path);
     return response;
   }
@@ -1693,7 +1739,7 @@ export class NazemAdapter {
 
   async verifySubmittedRecitation(studentLink, planLink, mapped) {
     return this.verifyAfterRecitationWrite(mapped, async () => {
-      const target = await this.resolveRecitationFollowUp(studentLink, planLink, mapped, { fresh: true });
+      const target = await this.resolveRecitationFollowUp(studentLink, planLink, { ...mapped, allowPendingTargetReplacement: false }, { fresh: true });
       return this.verifyResolvedRecitation(target, studentLink, mapped);
     });
   }
@@ -1772,7 +1818,7 @@ export class NazemAdapter {
         if (!force || error?.syncStatus !== 'conflict') throw error;
       }
       if (existing) return { ...existing, alreadyRecorded: true };
-      if (initial.item.is_blocked_by_late || (initial.item.is_blocked_by_previous_days && !initial.pendingDay)) {
+      if (!initial.pendingDay && (initial.item.is_blocked_by_late || initial.item.is_blocked_by_previous_days)) {
         throw blockedNazemError('يجب إنهاء الأيام السابقة أو المتأخرات في ناظم أولًا.', 'NAZEM_PREVIOUS_DAYS_BLOCKING');
       }
       const _resolveMetrics = () => {
@@ -2077,7 +2123,7 @@ async function collectRemoteFollowUpTypes({ adapter, payload, studentLink, confi
 for (const remoteType of ['conserve', 'revision', 'master']) {
         const { student, item, day } = findFollowUpDay(payload, studentLink, remoteType, { confirmedRecordIds });
         const pendingDay = item?.pending_day;
-        collectCurrentPendingDay(daysAgo, pendingDay, remoteType, date, scheduled);
+        collectCurrentPendingDay(daysAgo, pendingDay, remoteType, date, scheduled, item?.id);
         const lateItems = await loadCurrentLateItems({ daysAgo, endDate, adapter, item, externalPlanId, studentLink, remoteType });
         (daysAgo === 0 && (!endDate || endDate === saudiDate(0)) ? mapNazemPendingFollowUps({ ...item, late_items: lateItems }, {
           remoteType,
@@ -2090,6 +2136,7 @@ for (const remoteType of ['conserve', 'revision', 'master']) {
         if (!day) continue;
         const normalized = {
           ...day,
+          ...(item?.id ? { nazemItemId: String(item.id) } : {}),
           date: normalizeDateOnly(day.date) || date,
           remoteType,
           taskType: remoteType === 'revision' ? 'review' : 'memorization',
@@ -2111,11 +2158,11 @@ async function loadCurrentLateItems({ daysAgo, endDate, adapter, item, externalP
 }
 
 /** Preserve the current unfinished remote day as its own scheduled identity. */
-function collectCurrentPendingDay(daysAgo, pendingDay, remoteType, date, scheduled) {
+function collectCurrentPendingDay(daysAgo, pendingDay, remoteType, date, scheduled, itemId) {
   if (daysAgo === 0 && pendingDay?.id && normalizeDateOnly(pendingDay.date)
     && !FINAL_FOLLOW_UP_STATUSES.has(String(pendingDay.status || ''))) {
     const pending = {
-      ...pendingDay, date: normalizeDateOnly(pendingDay.date), remoteType,
+      ...pendingDay, ...(itemId ? { nazemItemId: String(itemId) } : {}), date: normalizeDateOnly(pendingDay.date), remoteType,
       taskType: remoteType === 'revision' ? 'review' : 'memorization',
       attendanceStatus: null, nazemLate: false, nazemPendingDay: true,
       nazemLateAvailableOn: date,

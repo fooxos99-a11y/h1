@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Building2, Flag, MapPin, Plus, Route, Trash2 } from 'lucide-react';
+import { Building2, Flag, MapPin, Plus, Trash2 } from 'lucide-react';
 import SummitMapEventFields from '@/components/dashboard/SummitMapEventFields';
 import SummitCitySceneFields from '@/components/dashboard/SummitCitySceneFields';
 import SummitMapTextInput from '@/components/dashboard/SummitMapTextInput';
@@ -42,7 +42,6 @@ const SummitMapEditor = ({ value, onChange }) => {
   const config = useMemo(() => normalizeSummitMapConfig(value), [value]);
   const [selectedCityId, setSelectedCityId] = useState(config.cities[0]?.id || '');
   const [selectedStationId, setSelectedStationId] = useState(config.stations[0]?.id || '');
-  const [selectedSignId, setSelectedSignId] = useState(config.signs[0]?.id || '');
   const [previewKilometer, setPreviewKilometer] = useState(0);
   const totalKilometers = getSummitMapTotalKilometers(config);
   const entityMaximumKilometer = config.goal.enabled
@@ -52,8 +51,7 @@ const SummitMapEditor = ({ value, onChange }) => {
   useEffect(() => {
     if (!config.cities.some(({ id }) => id === selectedCityId)) setSelectedCityId(config.cities[0]?.id || '');
     if (!config.stations.some(({ id }) => id === selectedStationId)) setSelectedStationId(config.stations[0]?.id || '');
-    if (!config.signs.some(({ id }) => id === selectedSignId)) setSelectedSignId(config.signs[0]?.id || '');
-  }, [config, selectedCityId, selectedSignId, selectedStationId]);
+  }, [config, selectedCityId, selectedStationId]);
 
   useEffect(() => {
     setPreviewKilometer((current) => Math.min(current, totalKilometers));
@@ -65,7 +63,6 @@ const SummitMapEditor = ({ value, onChange }) => {
       ...entity,
       ...patch,
       ...(patch.kilometer !== undefined ? { kilometer: clampKilometer(patch.kilometer, entityMaximumKilometer) } : {}),
-      ...(patch.visibleFromKilometer !== undefined ? { visibleFromKilometer: clampKilometer(patch.visibleFromKilometer, entityMaximumKilometer) } : {}),
       ...(patch.rewardPoints !== undefined ? { rewardPoints: clampReward(patch.rewardPoints) } : {}),
     } : entity),
   });
@@ -84,24 +81,19 @@ const SummitMapEditor = ({ value, onChange }) => {
     update({ stations: [...config.stations, { id, name: 'محطة جديدة', kilometer, notificationEnabled: false, notificationText: 'وصلت إلى المحطة', challengeEnabled: false, challengeType: 'summit_forest', rewardPoints: 50 }] });
     setSelectedStationId(id);
   };
-  const addSign = () => {
-    const id = createId('sign');
-    update({ signs: [...config.signs, { id, kilometer: previewKilometer, visibleFromKilometer: Math.max(0, previewKilometer - 1000), text: 'لوحة جديدة', side: 'right', enabled: true }] });
-    setSelectedSignId(id);
-  };
 
   const eventLocations = getSummitMapEventLocations(config);
   const previewJourney = {
     points: previewKilometer,
     totalKilometers,
     mapConfig: config,
+    activeStation: config.stations.find(({ id }) => id === config.activeStationId) || null,
     stages: eventLocations.map((location) => ({ ...location, key: location.id, points: location.kilometer, unlocked: previewKilometer >= location.kilometer, completed: false })),
     nextStage: eventLocations.find((location) => location.kilometer > previewKilometer),
     reachedSummit: config.goal.enabled && previewKilometer >= totalKilometers,
   };
   const selectedCity = config.cities.find(({ id }) => id === selectedCityId);
   const selectedStation = config.stations.find(({ id }) => id === selectedStationId);
-  const selectedSign = config.signs.find(({ id }) => id === selectedSignId);
 
   return <div className="space-y-5 [font-family:var(--font-ui)]" dir="rtl">
     <div className="overflow-hidden rounded-2xl border border-primary/20 bg-[#e9e7da]">
@@ -138,14 +130,6 @@ const SummitMapEditor = ({ value, onChange }) => {
       />}
     </EntityPicker>
 
-    <EntityPicker label="اللوحات" icon={Route} entities={config.signs} selectedId={selectedSignId} onSelect={setSelectedSignId} onAdd={addSign} onDelete={() => deleteEntity('signs', selectedSignId)}>
-      {selectedSign && <div className="grid gap-4 sm:grid-cols-2">
-      <div className="space-y-1.5 sm:col-span-2"><Label htmlFor={`sign-text-${selectedSign.id}`}>نص اللوحة</Label><SummitMapTextInput id={`sign-text-${selectedSign.id}`} value={selectedSign.text} maxLength={180} onCommit={(text) => updateEntity('signs', selectedSign.id, { text })} /></div>
-      <div className="space-y-1.5"><Label htmlFor={`sign-km-${selectedSign.id}`}>كيلومتر الهدف</Label><Input id={`sign-km-${selectedSign.id}`} type="number" min="0" max={entityMaximumKilometer} value={selectedSign.kilometer} onChange={(event) => updateEntity('signs', selectedSign.id, { kilometer: event.target.value })} /></div>
-      <div className="space-y-1.5"><Label htmlFor={`sign-visible-from-${selectedSign.id}`}>تظهر من كيلومتر</Label><Input id={`sign-visible-from-${selectedSign.id}`} type="number" min="0" max={entityMaximumKilometer} value={selectedSign.visibleFromKilometer} onChange={(event) => updateEntity('signs', selectedSign.id, { visibleFromKilometer: event.target.value })} /></div>
-      <div className="flex min-h-11 items-center justify-between gap-3 rounded-full border border-primary/15 bg-card px-4 sm:col-span-2"><Label>إظهار اللوحة</Label><ToggleSwitch ariaLabel="إظهار اللوحة" checked={selectedSign.enabled} onCheckedChange={(enabled) => updateEntity('signs', selectedSign.id, { enabled })} /></div>
-      </div>}
-    </EntityPicker>
   </div>;
 };
 

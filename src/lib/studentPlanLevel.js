@@ -15,11 +15,3 @@ export function studentPlanLevel(plan) {
   }
   return 0;
 }
-
-
-// A shorter milestone gives visible movement without changing earned plan levels.
-export function studentLevelStage(plan) {
-  const level = studentPlanLevel(plan);
-  const target = Math.min(100, (Math.floor(level / 10) + 1) * 10);
-  return { target, progress: level === 100 ? 100 : (level % 10) * 10 };
-}

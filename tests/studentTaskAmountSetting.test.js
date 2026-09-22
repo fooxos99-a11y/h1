@@ -29,7 +29,7 @@ test('fixed task amount removes student controls and is enforced by the server',
 
   assert.match(server, /studentReviewAmountEditable: Boolean\(settings\.studentReviewAmountEditable\)[\s\S]*executionAyahs/);
   assert.match(server, /canStudentSetQuranTaskEnd\(settings, first\.taskType, endComparison\)/);
-  assert.match(server, /Math\.min\(expectedRepeatCount, Math\.max\(1/);
+  assert.match(server, /practiceCompletionCount\(req\.body\.repeatCount, expectedRepeatCount\)/);
   assert.match(execution, /canStudentSetQuranTaskEnd/);
   assert.match(execution, /const canAdjust = options\.some/);
   assert.match(toggle, /description = ''/);

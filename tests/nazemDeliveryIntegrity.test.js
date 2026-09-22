@@ -95,13 +95,14 @@ test('captured targets are independent of future imported snapshots and reject r
 });
 
 test('a conflicting imported outcome cannot delete teacher marks, replace attempts or dismiss their delivery', async () => {
+  const { latestNazemScheduleSql, preservesPendingNazemLate } = await import('../server/integrations/nazem/scheduleAuthority.js');
   const source = readFileSync(new URL('../server/integrations/nazem/service.js', import.meta.url), 'utf8');
   const start = source.indexOf('async function saveRemoteFollowUp(');
   const end = source.indexOf('\nconst NAZEM_ATTENDANCE_TO_RUWASI', start);
   assert.ok(end > start);
-  const run = new Function('nazemTaskTrack', 'safeJson', 'loadDailyFollowUp', 'mapRuwasiRecitationGroupToNazem',
+  const run = new Function('latestNazemScheduleSql', 'preservesPendingNazemLate', 'nazemTaskTrack', 'safeJson', 'loadDailyFollowUp', 'mapRuwasiRecitationGroupToNazem',
     'remoteFollowUpMatchesLocal', 'hasLocalRecitation', 'recitationIdentityFromReceipt', `${source.slice(start, end)}; return saveRemoteFollowUp;`)(
-    () => 'memorization', value => value, async () => ({ recitations: [{ id: 7, requestId: 'teacher-local:7' }] }),
+    latestNazemScheduleSql, preservesPendingNazemLate, () => 'memorization', value => value, async () => ({ recitations: [{ id: 7, requestId: 'teacher-local:7' }] }),
     () => ({ completed: true }), () => false, hasLocalRecitation, recitationIdentityFromReceipt,
   );
   const writes = [];
@@ -126,10 +127,12 @@ test('unverified per-student results never trip the shared adapter circuit', asy
 });
 
 test('matched imports confirm only the current official attempts and preserve their results', async () => {
+  const { latestNazemScheduleSql, preservesPendingNazemLate } = await import('../server/integrations/nazem/scheduleAuthority.js');
   const source = readFileSync(new URL('../server/integrations/nazem/service.js', import.meta.url), 'utf8');
   const start = source.indexOf('async function saveRemoteFollowUp(');
   const end = source.indexOf('\nconst NAZEM_ATTENDANCE_TO_RUWASI', start);
   const deps = {
+    latestNazemScheduleSql, preservesPendingNazemLate,
     recitationIdentityFromReceipt,
     nazemTaskTrack: () => 'memorization', safeJson: value => value,
     loadDailyFollowUp: async () => ({ recitations: [{ id: 7 }, { id: 9 }] }),

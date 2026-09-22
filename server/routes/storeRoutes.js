@@ -1,3 +1,4 @@
+import { decideStoreOrder } from '../services/storeOrderDecision.js';
 import express from 'express';
 import { db } from '../db.js';
 import { requirePermission } from '../services/dashboardPermissions.js';
@@ -224,6 +225,7 @@ export function createStoreRouter({
           o.product_name AS productName,
           o.points_price AS pointsPrice,
           o.fulfilled_at AS fulfilledAt,
+          o.rejected_at AS rejectedAt,
           DATE_FORMAT(o.created_at, '%Y-%m-%d %H:%i') AS createdAt,
           s.name AS studentName,
           c.name AS committeeName
@@ -238,39 +240,39 @@ export function createStoreRouter({
         id: Number(row.id),
         pointsPrice: Number(row.pointsPrice || 0),
         fulfilled: Boolean(row.fulfilledAt),
+        status: row.rejectedAt ? 'rejected' : row.fulfilledAt ? 'accepted' : 'pending',
       })));
     } catch (error) {
       return next(error);
     }
   });
 
-  router.patch('/orders/:id/fulfilled', requireStoreManagement, async (req, res, next) => {
+  const decideOrder = async (req, res, next) => {
+    const connection = await db().getConnection();
     try {
-      const fulfilled = req.body.fulfilled === true;
-      const [result] = await db().query(
-        `UPDATE store_orders
-         SET fulfilled_at = ${fulfilled ? 'COALESCE(fulfilled_at, NOW())' : 'NULL'},
-             fulfilled_by_role = ?,
-             fulfilled_by_id = ?
-         WHERE id = ?`,
-        [fulfilled ? req.auth?.role || null : null, fulfilled ? req.auth?.id || null : null, req.params.id],
-      );
-      if (!result.affectedRows) return res.status(404).json({ message: 'الطلب غير موجود.' });
-      return res.json({ ok: true, fulfilled });
+      const settings = await loadSettings();
+      await connection.beginTransaction();
+      const result = await decideStoreOrder(connection, {
+        id: Number(req.params.id), status: req.body.status,
+        actor: req.auth, settings, date: getToday(), applyStudentPointDelta, logStudentPointTransaction,
+      });
+      await connection.commit();
+      return res.json(result);
     } catch (error) {
+      await connection.rollback();
       return next(error);
+    } finally {
+      connection.release();
     }
+  };
+  router.patch('/orders/:id/decision', requireStoreManagement, decideOrder);
+  router.patch('/orders/:id/fulfilled', requireStoreManagement, (req, res, next) => {
+    req.body.status = req.body.fulfilled === true ? 'accepted' : '';
+    return decideOrder(req, res, next);
   });
-
-  router.delete('/orders/:id', requireStoreManagement, async (req, res, next) => {
-    try {
-      const [result] = await db().query('DELETE FROM store_orders WHERE id = ?', [req.params.id]);
-      if (!result.affectedRows) return res.status(404).json({ message: 'الطلب غير موجود.' });
-      return res.json({ ok: true });
-    } catch (error) {
-      return next(error);
-    }
-  });
+  router.delete('/orders/:id', requireStoreManagement, (_req, res) => (
+    res.status(409).json({ message: 'استخدم رفض الطلب لإعادة النقاط مع حفظ سجله.' })
+  ));
 
   router.post('/purchase', async (req, res, next) => {
     const connection = await db().getConnection();
@@ -337,9 +339,9 @@ export function createStoreRouter({
 
       const [orderResult] = await connection.query(
         `INSERT INTO store_orders
-          (student_id, product_id, product_name, points_price, order_date, request_id)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [student.id, product.id, product.name, price, purchaseDate, requestId],
+          (student_id, product_id, product_name, points_price, order_date, request_id, stock_reserved)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [student.id, product.id, product.name, price, purchaseDate, requestId, product.stock !== null ? 1 : 0],
       );
       await connection.query(
         'UPDATE students SET store_balance = store_balance - ? WHERE id = ?',

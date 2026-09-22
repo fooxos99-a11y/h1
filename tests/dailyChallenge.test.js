@@ -43,7 +43,7 @@ test('daily challenge is configurable, student-only, database-backed, and resets
   assert.match(portal, /isDailyChallengeAvailable\(settings, saudiClock\)/);
   assert.match(portal, /isImmersiveRouteLoading/);
   assert.match(portal, /\['dailyChallenge', 'summit'\]\.includes\(requestedSection\)/);
-  assert.match(portal, /hasDashboard \|\| isLoading \|\| !activeSection/);
+  assert.match(portal, /hasDashboard \|\| isLoading \|\| waitingForAttendance \|\| !activeSection/);
   assert.match(portal, /fixed inset-0 z-\[100\].*dailyChallenge/s);
   assert.match(portal, /!isOnline[\s\S]*list\.push\(\{ key: 'dailyChallenge'/);
   assert.match(gateway, /showDailyChallenge=\{dailyChallengeAvailable\}/);

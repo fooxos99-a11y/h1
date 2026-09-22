@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, RotateCcw, UserCheck, X } from 'lucide-react';
+import { importableNazemPlans as importablePlans, needsNazemStudentImport } from '../../../shared/nazem-import-selection.js';
+import { normalizeArabicPersonName } from '../../../shared/nazem-integration.js';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,14 +14,6 @@ import { nazemIntegrationApi } from '@/services/nazemIntegrationApi';
 import { useToast } from '@/components/ui/use-toast';
 
 const circleKey = (candidate) => `${candidate.circleName || 'بدون حلقة'}|${candidate.organizationName || ''}`;
-const importablePlans = (candidate) => candidate.plans.filter((plan) => (
-  ['discovered', 'requires_review'].includes(plan.status)
-));
-const isActionableCandidate = (candidate) => (
-  !candidate.linkedStudentId
-  || importablePlans(candidate).length > 0
-  || candidate.plans.some((plan) => Boolean(plan.lastError))
-);
 const planStateLabel = (candidate, availablePlans, failed) => {
   if (availablePlans.some((plan) => plan.changeType === 'changed')) return 'تغيّرت خطة ناظم';
   if (availablePlans.some((plan) => plan.changeType === 'new')) return 'توجد خطة جديدة في ناظم';
@@ -54,6 +49,7 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
   const { toast } = useToast();
   const prepared = teacher?.preparedImport;
   const preparedCircle = prepared?.preview?.candidates?.[0];
+  const [search, setSearch] = useState('');
   const [data, setData] = useState(prepared?.preview || null);
   const [mode, setMode] = useState(prepared?.mode || 'new');
   const [committeeId, setCommitteeId] = useState(prepared?.committeeId || '');
@@ -78,7 +74,7 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
   const requestRef = useRef(null);
 
   const applyPreview = useCallback((preview, preferredCircle = '') => {
-    const circles = [...new Set(preview.candidates.filter(isActionableCandidate).map(circleKey))];
+    const circles = [...new Set(preview.candidates.map(circleKey))];
     const nextCircle = circles.includes(preferredCircle) ? preferredCircle : circles[0] || '';
     setData(preview);
     setSelectedCircle(nextCircle);
@@ -139,7 +135,7 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
   }, [applyPreview, prepared]);
 
   const circles = useMemo(() => (
-    data ? [...new Map(data.candidates.filter(isActionableCandidate).map((candidate) => [circleKey(candidate), {
+    data ? [...new Map(data.candidates.map((candidate) => [circleKey(candidate), {
       key: circleKey(candidate),
       name: candidate.circleName || 'بدون حلقة',
       organization: candidate.organizationName || '',
@@ -147,11 +143,11 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
   ), [data]);
   const visibleCandidates = useMemo(() => (
     data?.candidates.filter((candidate) => (
-      isActionableCandidate(candidate) && circleKey(candidate) === selectedCircle
+      circleKey(candidate) === selectedCircle
     )) || []
   ), [data, selectedCircle]);
   const includedCandidates = useMemo(() => (
-    visibleCandidates.filter((candidate) => !excludedCandidateIds.includes(candidate.id))
+    visibleCandidates.filter((candidate) => needsNazemStudentImport(candidate) && !excludedCandidateIds.includes(candidate.id))
   ), [excludedCandidateIds, visibleCandidates]);
 
   const chooseCommittee = async (value) => {
@@ -205,7 +201,7 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
   };
 
   const submit = async () => {
-    const submittedCandidates = includedCandidates.filter((candidate) => importablePlans(candidate).length > 0);
+    const submittedCandidates = includedCandidates;
     const needsConfirmation = submittedCandidates.some((candidate) => (
       selections[candidate.id]?.requiresConfirmation && !selections[candidate.id]?.confirmed
     ));
@@ -224,7 +220,7 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
       };
     });
     if (mode === 'existing' && !committeeId) {
-      toast({ title: 'اختر حلقة مدارج أولًا', variant: 'destructive' });
+      toast({ title: 'اختر حلقة الحبيب ماب أولًا', variant: 'destructive' });
       return;
     }
     if (mode === 'new' && newCommitteeName.trim().length < 2) {
@@ -234,7 +230,7 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
     try {
       setSaving(true);
       const nextResult = await nazemIntegrationApi.importStudentsAndPlans(teacher.teacherId, {
-        importMode: 'with_plans',
+        importMode: 'selected',
         committeeId: mode === 'existing' ? Number(committeeId) : null,
         newCommitteeName: mode === 'new' ? newCommitteeName.trim() : '',
         selections: payloadSelections,
@@ -249,7 +245,7 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
     }
   };
 
-  const candidatesWithPlans = includedCandidates.filter((candidate) => importablePlans(candidate).length > 0);
+  const candidatesToImport = includedCandidates;
   const hasBlockingSelection = (candidates) => candidates.some((candidate) => (
     (selections[candidate.id]?.requiresConfirmation && !selections[candidate.id]?.confirmed)
     || selections[candidate.id]?.requiresPlanChoice
@@ -299,7 +295,7 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
       return <div className="space-y-4">
         <NazemPlanRefreshSummary result={refreshResult} />
         <div className="rounded-xl border border-primary/15 bg-muted/30 p-4 text-sm font-bold text-muted-foreground">
-          {data.candidates.length ? 'كل الطلاب والخطط المستوردة مرتبطة مسبقًا.' : 'لم يُكتشف أي طالب في حساب ناظم.'}
+          {data.candidates.length ? 'لا يوجد طلاب في الحلقة المحددة.' : 'لم يُكتشف أي طالب في حساب ناظم.'}
         </div>
         <DialogFooter><Button type="button" variant="outline" className="min-h-11" onClick={() => onOpenChange(false)}>إلغاء</Button></DialogFooter>
       </div>;
@@ -315,7 +311,7 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
         </div>
       )}
       <div className="space-y-1.5">
-        <label className="text-sm font-black" htmlFor="nazem-committee">حلقة مدارج</label>
+        <label className="text-sm font-black" htmlFor="nazem-committee">حلقة الحبيب ماب</label>
         <Select value={mode === 'new' ? 'new' : committeeId} onValueChange={chooseCommittee}>
           <SelectTrigger id="nazem-committee" className="min-h-11"><SelectValue placeholder="اختر الحلقة" /></SelectTrigger>
           <SelectContent>
@@ -324,8 +320,11 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
           </SelectContent>
         </Select>
       </div>
+      <Input aria-label="البحث عن طالب" placeholder="البحث عن طالب" value={search}
+        onChange={(event) => setSearch(event.target.value)} className="min-h-11" />
       <div className="space-y-2">
-        {visibleCandidates.map((candidate) => {
+        {visibleCandidates.filter((candidate) => normalizeArabicPersonName(candidate.nazemStudentName)
+          .includes(normalizeArabicPersonName(search))).map((candidate) => {
           const selection = selections[candidate.id] || {};
           const suggestedStudent = data.localStudents.find((student) => (
             Number(student.id) === Number(candidate.suggestedStudentId)
@@ -343,19 +342,7 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
             if (candidate.linkedStudentId) {
               return <div className="flex flex-col items-start gap-2">
                 <div className="text-sm font-bold text-emerald-600">مرتبط بـ {candidate.linkedStudentName}</div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={isExcluded ? 'outline' : 'ghost'}
-                  className="min-h-11 gap-2"
-                  onClick={() => toggleCandidate(candidate.id)}
-                >
-                  {isExcluded
-                    ? <RotateCcw className="h-4 w-4" />
-                    : <X className="h-4 w-4" />}
-                  {isExcluded ? 'إعادة إلى الاستيراد' : 'استبعاد من الاستيراد'}
-                </Button>
-                {isExcluded && <div className="text-xs font-bold text-muted-foreground">مستبعد من هذه الدفعة فقط</div>}
+
               </div>;
             }
             if (suggestedStudent) {
@@ -374,7 +361,7 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
                 </Button>
               </div>;
             }
-            if (importablePlans(candidate).length > 0) {
+            if (!candidate.linkedStudentId) {
               return <div className="flex min-h-11 items-center text-xs font-bold leading-5 text-emerald-600">سيُنشأ في المنصة ويُطابق بناظم تلقائيًا</div>;
             }
             return null;
@@ -435,6 +422,21 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
                   {planIssue && <div className="text-xs font-bold leading-5 text-destructive">{planIssue}</div>}
                 </div>
               </div>
+              {needsNazemStudentImport(candidate) && <div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={isExcluded ? 'outline' : 'ghost'}
+                  className="min-h-11 gap-2"
+                  onClick={() => toggleCandidate(candidate.id)}
+                >
+                  {isExcluded
+                    ? <RotateCcw className="h-4 w-4" />
+                    : <X className="h-4 w-4" />}
+                  {isExcluded ? 'إعادة إلى الاستيراد' : 'استبعاد من الاستيراد'}
+                </Button>
+                {isExcluded && <div className="text-xs font-bold text-muted-foreground">مستبعد من هذه الدفعة فقط</div>}
+              </div>}
               {studentConflicts.map((row) => (
                 <NazemConflictCard
                   key={row.id}
@@ -453,10 +455,10 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
         <Button
           type="button"
           className="min-h-11"
-          disabled={saving || !candidatesWithPlans.length || hasBlockingSelection(candidatesWithPlans)}
+          disabled={saving || !candidatesToImport.length || hasBlockingSelection(candidatesToImport)}
           onClick={submit}
         >
-          {saving ? 'جاري الاستيراد...' : `استيراد الطلاب ذوي الخطط (${candidatesWithPlans.length})`}
+          {saving ? 'جاري الاستيراد...' : `استيراد الطلاب والخطط المحددة (${candidatesToImport.length})`}
         </Button>
       </DialogFooter>
     </div>;

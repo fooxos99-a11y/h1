@@ -1,7 +1,7 @@
 import { groupProgramSections } from '../../shared/program-sections.js';
 import { countTrailingCharacter } from '../../shared/string-suffix.js';
 import { saveProgramSections } from '../services/programSections.js';
-import { saveManualProgramPoints } from '../services/manualProgramPoints.js';
+import { saveManualProgramPoints, saveManualProgramPointsBatch } from '../services/manualProgramPoints.js';
 import express from 'express';
 import { deleteProgram } from '../services/deleteProgram.js';
 import { db } from '../db.js';
@@ -251,6 +251,19 @@ export function createProgramRouter({ loadSettings, applyStudentPointDelta, logS
         ORDER BY s.name, s.id`, scope ? [req.params.id, req.auth.id] : [req.params.id]);
       res.json({ students });
     } catch (error) { next(error); }
+  });
+  router.put('/:id/grades', requireProgramManagement, async (req, res, next) => {
+    const connection = await db().getConnection();
+    try {
+      const settings = await loadSettings();
+      await connection.beginTransaction();
+      const result = await saveManualProgramPointsBatch(connection, {
+        programId: Number(req.params.id), grades: req.body.grades,
+        actor: req.auth, settings, date: getToday(),
+      }, { applyStudentPointDelta, logStudentPointTransaction });
+      await connection.commit();
+      res.json(result);
+    } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }
   });
   router.put('/:id/grades/:studentId', requireProgramManagement, async (req, res, next) => {
     const connection = await db().getConnection();

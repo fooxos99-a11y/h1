@@ -36,7 +36,7 @@ test('remote reward settlement uses the shared score, repeat and listening setti
     teacherCompleted: 1, evaluatedAt: '2026-09-08', evaluationScore: 12 };
   const repeat = { id: 2, taskType: 'repeat', track: 'memorization', actualRepeatCount: 30, actualListeningCount: 1 };
   const calculate = () => calculateNazemRewardGroups({}, { taskType: 'memorization', track: 'memorization' }, [primary, repeat], settings);
-  assert.deepEqual((await calculate()).map((group) => group.points), [12, 40]);
+  assert.deepEqual((await calculate()).map((group) => group.points), [12, 11]);
   assert.deepEqual(await calculate(), await calculate());
   primary.teacherCompleted = 0;
   assert.deepEqual((await calculate()).map((group) => group.points), [0, 0]);

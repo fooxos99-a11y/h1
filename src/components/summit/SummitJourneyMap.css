@@ -74,70 +74,6 @@
   background-repeat: repeat-x, repeat-x, repeat-x, no-repeat;
 }
 
-.qassim-road-scene.is-night .qassim-road-sign {
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 14%), 0 1rem 2rem rgb(0 10 18 / 54%);
-}
-
-.qassim-road-sign {
-  position: absolute;
-  top: 57%;
-  left: 77%;
-  z-index: 15;
-  display: flex;
-  width: clamp(7.7rem, 27vw, 11rem);
-  flex-direction: column;
-  gap: .2rem;
-  padding: .58rem .68rem;
-  border: 2px solid rgb(255 255 255 / 92%);
-  border-radius: .28rem;
-  background: #176b47;
-  box-shadow: 0 .9rem 1.6rem rgb(21 42 45 / 28%);
-  color: #fff;
-  text-align: right;
-  transform: translate(-50%, -100%) scale(.78);
-  transform-origin: center bottom;
-}
-
-.qassim-road-sign.is-left {
-  right: 77%;
-  left: auto;
-}
-
-.qassim-road-sign.is-left::after {
-  right: auto;
-  left: 1.25rem;
-  box-shadow: -1.1rem 0 #747c7d;
-}
-
-.qassim-road-sign::after {
-  position: absolute;
-  right: 1.25rem;
-  bottom: -4.8rem;
-  width: .3rem;
-  height: 4.8rem;
-  background: #747c7d;
-  box-shadow: 1.1rem 0 #747c7d;
-  content: '';
-}
-
-.qassim-road-sign > span { color: rgb(255 255 255 / 72%); font-size: .67rem; font-weight: 800; }
-.qassim-road-sign > strong { font-size: 1.08rem; line-height: 1.35; }
-.qassim-road-sign > small { font-weight: 900; }
-.qassim-road-sign button {
-  position: relative;
-  z-index: 2;
-  min-height: 2.5rem;
-  margin-top: .35rem;
-  border: 1px solid rgb(255 255 255 / 52%);
-  background: #fff;
-  color: #14563c !important;
-  box-shadow: none;
-}
-
-.qassim-road-sign button:hover { background: #f2f5ef; color: #103f2e !important; }
-.qassim-road-sign.is-arrived { background: #134f72; }
-.qassim-road-sign.is-arrived button { color: #134f72 !important; }
-
 .qassim-road-station {
   position: absolute;
   top: calc(env(safe-area-inset-top) + 1rem);
@@ -532,7 +468,6 @@
 @media (min-width: 640px) {
   .summit-map-controls { bottom: 1.5rem; left: 1.5rem; }
   .summit-view-toggle { right: 1.5rem; bottom: calc(env(safe-area-inset-bottom) + 1.5rem); }
-  .qassim-road-sign { top: 61%; left: 79%; transform: translate(-50%, -100%) scale(.92); }
 }
 
 @media (prefers-reduced-motion: reduce) {

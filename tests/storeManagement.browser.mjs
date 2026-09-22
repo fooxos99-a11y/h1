@@ -43,7 +43,7 @@ try {
     assert.ok(savedProduct);
     assert.equal(Object.hasOwn(savedProduct, 'imageData'), false);
     await page.getByRole('button', { name: 'طلبات الطلاب' }).click();
-    await page.getByRole('checkbox', { name: 'تحديد الطلب كمكتمل' }).click();
+    await page.getByRole('button', { name: 'قبول', exact: true }).click();
     await page.getByText('لا توجد طلبات طلاب.').waitFor();
     assert.equal(fulfilled, true);
     await page.reload();

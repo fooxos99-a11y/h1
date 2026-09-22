@@ -64,6 +64,36 @@ export function validateRecitationTarget(target, recitations, studentLink, planL
 
 export const hasLocalRecitation = recitations => recitations.some(item => !String(item.requestId || '').startsWith('nazem:'));
 
+export function applyRecitationWriteIdentity(mapped, job, verificationOnly) {
+  const sent = (job.payload?.deliveryWrites || []).filter(write => !write.rejectedAt);
+  mapped.allowPendingTargetReplacement = !verificationOnly && sent.length === 0;
+  const ids = [...new Set(sent.map(write => /^\/educational-plans\/item-days\/(\d+)\/(?:partial|not-completed)$/.exec(write.path)?.[1]).filter(Boolean))];
+  if (ids.length === 1) {
+    mapped.nazemOriginalSourceDayId = mapped.nazemSourceDayId;
+    mapped.nazemSourceDayId = ids[0];
+  }
+}
+
+// Older workers recorded rejected requests as uncertain sends. Recover only a
+// single unfinished write with a subsequent, explicit HTTP 422 validation event.
+export async function recoverRejectedRecitationWrite(connection, job) {
+  const writes = job.payload?.deliveryWrites || [];
+  const pending = writes.filter(write => !write.acceptedAt && !write.rejectedAt);
+  if (pending.length !== 1) return false;
+  const startedAt = Date.parse(pending[0].startedAt);
+  if (!Number.isFinite(startedAt)) return false;
+  const [[event]] = await connection.query(`SELECT error_code AS code, message, metadata_json AS metadata,
+    UNIX_TIMESTAMP(created_at) * 1000 AS occurredAt FROM nazem_sync_events
+    WHERE job_id = ? AND status IN ('blocked','requires_review','failed') ORDER BY id DESC LIMIT 1`, [job.id]);
+  const metadata = parse(event?.metadata) || {};
+  if (!event || Number(event.occurredAt) < startedAt || Number(metadata.diagnostics?.httpStatus) !== 422
+    || !['NAZEM_FOLLOW_UP_SAVE_REJECTED', 'NAZEM_PREVIOUS_DAYS_BLOCKING'].includes(event.code)
+    || !/إنهاء.*الأيام السابقة|أول يوم معلّق|اليوم غير موجود/.test(event.message || '')) return false;
+  await recitationWriteJournal(connection, job).rejected(pending[0].path,
+    /اليوم غير موجود/.test(event.message) ? 'NAZEM_SAVED_TARGET_CHANGED' : 'NAZEM_PREVIOUS_DAYS_BLOCKING');
+  return true;
+}
+
 export function recitationWriteJournal(connection, job) {
   const persist = async writes => {
     const [result] = await connection.query(
@@ -77,14 +107,18 @@ export function recitationWriteJournal(connection, job) {
   return {
     before: async path => {
       const writes = job.payload.deliveryWrites || [];
-      if (writes.some(write => write.path === path)) {
+      if (writes.some(write => write.path === path && !write.rejectedAt)) {
         throw reviewNazemError('سبق بدء إرسال هذا التقييم. يلزم إثبات نتيجته في ناظم قبل تكرار الإرسال.', 'NAZEM_DELIVERY_UNVERIFIED');
       }
       await persist([...writes, { path, startedAt: new Date().toISOString() }]);
     },
     accepted: async path => {
-      await persist((job.payload.deliveryWrites || []).map(write => write.path === path
+      await persist((job.payload.deliveryWrites || []).map(write => write.path === path && !write.rejectedAt
         ? { ...write, acceptedAt: new Date().toISOString() } : write));
+    },
+    rejected: async (path, code) => {
+      await persist((job.payload.deliveryWrites || []).map(write => write.path === path && !write.acceptedAt && !write.rejectedAt
+        ? { ...write, rejectedAt: new Date().toISOString(), rejectionCode: code } : write));
     },
   };
 }

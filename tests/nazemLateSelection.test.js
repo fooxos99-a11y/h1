@@ -33,7 +33,7 @@ test('a new surah is allowed only after its predecessor ends, and tracks stay se
 
 test('server accepts only an ordered prefix of whole late days, including replay', async () => {
   const mock = rows => ({ query: async (sql, params) => [sql.includes('WHERE t.id IN')
-    ? rows.filter(row => params.slice(0, -1).includes(row.id))
+    ? rows.filter(row => params.slice(1, -1).includes(row.id))
     : rows.map(row => ({ ...row, availableOn: '2026-09-22', remoteStatus: 'pending' }))] });
   const connection = mock(tasks);
   const session = ids => ({ studentId: 99, sessionDate: '2026-09-22', sessionId: 'test', tasks: ids.map(taskId => ({taskId})) });
@@ -88,4 +88,28 @@ test('a later late record cannot be sent while an earlier one remains unconfirme
   adapter.postRecitationApi = async () => assert.fail('must not send out of order');
   await assert.rejects(adapter.submitRecitation({}, {}, {taskType: 'memorization', remoteType: 'conserve', completed: true}),
     {code: 'NAZEM_PREVIOUS_DAYS_BLOCKING'});
+});
+
+test('old pending day precedes later late entries and remains sendable when both remote blocking flags are set', async () => {
+  const adapter = new NazemAdapter();
+  const pending = { id: 770342, date: '2026-08-31', status: 'pending', surah_from: 57, verse_from: 7, surah_to: 57, verse_to: 10 };
+  const item = { id: 10813, type: 'conserve', is_active: true, is_blocked_by_previous_days: true, is_blocked_by_late: true,
+    pending_day: pending, today: { ...pending, id: 770358, date: '2026-09-22' },
+    late_items: [{ id: 5289, source_date: '2026-09-08', source_day_id: 770348, status: 'pending', surah_from: 57, verse_from: 26, surah_to: 57, verse_to: 28 }] };
+  const payload = { data: { students: [{ student_id: 10559, attendance_status: 2, items: [item] }] } };
+  adapter.openFollowUp = async () => payload;
+  adapter.readStudentFollowUp = async () => payload;
+  const history = await adapter.readStudentFollowUpHistory('393', { nazemStudentId: '10559' }, 1);
+  assert.ok(history.scheduledFollowUps.every(day => day.nazemActionableDate === '2026-08-31'));
+  const source = history.scheduledFollowUps.find(day => day.id === pending.id);
+  const mapped = mapRuwasiRecitationToNazem({ taskType: 'memorization', teacherCompleted: 1, attendanceStatus: 'present',
+    taskDate: pending.date, fromSurah: 57, fromAyah: 7, toSurah: 57, toAyah: 10, actualToSurah: 57, actualToAyah: 10 });
+  mapped.nazemSourceDayId = pending.id; mapped.nazemSavedTarget = source;
+  let writes = 0;
+  adapter.postRecitationApi = async (path) => {
+    assert.equal(path, '/educational-plans/item-days/770342/partial'); writes++;
+  };
+  adapter.verifySubmittedRecitation = async () => ({ externalId: '770342', status: 'completed' });
+  await adapter.submitRecitation({ nazemStudentId: '10559' }, { nazemPlanId: '393' }, mapped);
+  assert.equal(writes, 1);
 });

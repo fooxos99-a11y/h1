@@ -1,6 +1,5 @@
 import { isStudentAmountHidden } from '../../../shared/student-amount-visibility.js';
 import { cleanQuranPreview as cleanPreview } from '../../../shared/quran-display-text.js';
-import LoadingSpinner from '@/components/ui/loading-spinner';
 import { getRecitationStatusLabel } from '@/lib/recitationEvaluation';
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -232,14 +231,13 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
     })
     .map((type) => {
     const tasks = (data?.tasks || []).filter((task) => task.taskType === type);
-    const repeatCount = Math.max(1, Number(data?.repeatCount || 1));
     const trackLabel = tasks[0]?.trackLabel || data?.plan?.trackLabel || (data?.plan?.track === 'mastery' ? 'إتقان' : 'حفظ');
     const _resolveLabel = () => {
       if (type === 'memorization') {
         return trackLabel;
       }
       if (type === 'repeat') {
-        return `التكرار ${repeatCount} مرة${data?.listeningEnabled ? ' والسماع ' + Number(data?.listeningCount || 0) + ' مرة' : ''}`;
+        return `التكرار${data?.listeningEnabled ? ' والسماع' : ''}`;
       }
       return typeLabels[type];
     };
@@ -342,7 +340,7 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
   };
 
   const _resolveContent = () => {
-    if (isLoading) {
+    if (isLoading && !data) {
       return <DashboardLoader />;
     }
     if (!data?.plan) {
@@ -427,7 +425,7 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
   const content = _resolveContent();
 
   if (inline && compact) {
-    if (!data) return isLoading ? <LoadingSpinner /> : <Button variant="outline" onClick={() => load()}>إعادة المحاولة</Button>;
+    if (!data) return isLoading ? <DashboardLoader /> : <Button variant="outline" onClick={() => load()}>إعادة المحاولة</Button>;
     return <div className="student-home-task-grid">{taskGroups.filter((group) => group.type !== 'repeat' && group.tasks.length).map((group) => {
       const completed = ['done', 'partial', 'extra'].includes(group.status);
       return <div key={group.type} className="student-home-execution-task"><Button variant="ghost" className="student-home-task" aria-pressed={completed} aria-busy={Boolean(savingTypes[group.type])} disabled={isLoading || Boolean(savingTypes[group.type])} onClick={() => updateTasks(group, completed ? 'not_done' : 'done', completed ? null : getSelectedEnd(group))}><span>{group.label}{completed && <CheckCircle2 size={15} />}</span></Button><div className="student-home-execution-amount">{renderEndSelector(group)}</div></div>;

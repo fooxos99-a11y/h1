@@ -15,13 +15,14 @@ test('student in plan details but absent from follow-up is blocked without sugge
     return { data: { students: [] } };
   };
   adapter.getPlanGroupDetails = async () => ({ students: [remoteStudent] });
+  adapter.getPlanApi = async () => ({ data: { current_page: 1, last_page: 1, data: [{ id: 17829, status: 1 }] } });
   adapter.postFollowUpApi = async () => assert.fail('must not submit');
   await assert.rejects(adapter.submitAttendance(student, plan, { date: '2026-09-06', attendanceStatus: 2 }), {
     code: 'NAZEM_FOLLOW_UP_STUDENT_MISSING', syncStatus: 'blocked',
   });
   assert.equal(freshReads, 1);
   assert.match(nazemSyncStatusLabel('NAZEM_FOLLOW_UP_STUDENT_MISSING'), /متابعة ناظم/);
-  assert.match(nazemIssueMessage({ errorCode: 'NAZEM_FOLLOW_UP_STUDENT_MISSING' }), /التسميع محفوظ/);
+  assert.match(nazemIssueMessage({ errorCode: 'NAZEM_FOLLOW_UP_STUDENT_MISSING', operationType: 'attendance.submit' }), /الحضور محفوظ/);
 });
 
 test('stale follow-up is refreshed before declaring the student absent', async () => {

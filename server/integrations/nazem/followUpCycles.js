@@ -1,5 +1,6 @@
-export function selectNazemFollowUpItem(items, type, { sourceDayId, confirmedRecordIds = [] } = {}) {
+export function selectNazemFollowUpItem(items, type, { sourceDayId, sourceItemId, confirmedRecordIds = [] } = {}) {
   const candidates = items.filter(item => item.type === type);
+  if (sourceItemId) return candidates.find(item => String(item.id) === String(sourceItemId));
   const identified = sourceDayId && candidates.find(item => [item.today?.id, item.pending_day?.id]
     .some(id => String(id || '') === String(sourceDayId)));
   if (identified) return identified;

@@ -1,11 +1,12 @@
 import ReportsArchiveView from './ReportsArchiveView';
+import PageLoadingBoundary from '@/components/ui/page-loading-boundary';
 import DashboardDateRange from '@/components/dashboard/DashboardDateRange';
 import DashboardHeaderFilters from '@/components/dashboard/DashboardHeaderFilters';
 import { formatClockTime } from '../../../shared/clock-time.js';
 import NazemReconciliationReport from './NazemReconciliationReport';
 import ErrorState from '@/components/ui/error-state';
 import StudentPointsReport from '@/components/dashboard/StudentPointsReport';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, ChevronDown, FileDown, FileSpreadsheet, FileText, Send } from 'lucide-react';
 import { DashboardDatePicker, DashboardSecondaryButton } from '@/components/dashboard/DashboardControls';
 import { Button } from '@/components/ui/button';
@@ -75,6 +76,7 @@ const ReportsSection = ({
   const studentId = 'all';
   const [recitationStatus, setRecitationStatus] = useState('all');
   const [committees, setCommittees] = useState([]);
+  const [metadataReady, setMetadataReady] = useState(false);
   const [rows, setRows] = useState([]);
   const [studentPointRows, setStudentPointRows] = useState([]);
   const [studentPointsError, setStudentPointsError] = useState('');
@@ -85,6 +87,9 @@ const ReportsSection = ({
   const [archiveId, setArchiveId] = useState('');
   const [archive, setArchive] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadedTarget, setLoadedTarget] = useState(null);
+  const [reportError, setReportError] = useState('');
+  const normalizedRequest = useRef(null);
   const [isDeletingArchive, setIsDeletingArchive] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
@@ -104,15 +109,18 @@ const ReportsSection = ({
   ), [accountId, actorRole]);
 
   useEffect(() => {
+    let active = true;
     Promise.all([
       canViewStandardReports ? cachedReport('scoped-committees', () => studentsApi.getReportCommittees()) : Promise.resolve([]),
       teacherScoped ? Promise.resolve([]) : cachedReport('archives', () => studentsApi.getReportArchives()).catch(() => []),
     ]).then(([committeeRows, archiveRows]) => {
+      if (!active) return;
       setCommittees(committeeRows);
       setArchives(archiveRows);
     }).catch((error) => {
-      toast({ title: 'تعذر تحميل البيانات', description: error.message, variant: 'destructive' });
-    });
+      if (active) toast({ title: 'تعذر تحميل البيانات', description: error.message, variant: 'destructive' });
+    }).finally(() => { if (active) setMetadataReady(true); });
+    return () => { active = false; };
   }, [cachedReport, canViewStandardReports, teacherScoped, toast]);
 
   useEffect(() => {
@@ -140,6 +148,13 @@ const ReportsSection = ({
   }, [canViewExecutionFollowup, canViewStandardReports, canViewTeacherPoints, target]);
 
   useEffect(() => {
+    const requestKey = (from = fromDate, to = toDate) => JSON.stringify([
+      target, date, from, to, committeeId, archiveId, teacherScoped, reportRetry, accountId, actorRole,
+    ]);
+    // The server supplies the initial period. Reflect it in the filters without
+    // issuing the same report again or briefly replacing its results with a loader.
+    if (normalizedRequest.current === requestKey()) return;
+    normalizedRequest.current = null;
     let active = true;
     // Each loader owns its response shape and ignores results after effect cleanup.
     const reportLoaders = new Map([
@@ -173,6 +188,7 @@ const ReportsSection = ({
           const report = await cachedReport(`overview:${fromDate}:${toDate}:${committeeId}`, () => studentsApi.getOverviewReport({ ...(fromDate ? { from: fromDate, to: toDate } : {}), committeeId }));
           if (!active) return;
           setOverview(report);
+          normalizedRequest.current = requestKey(fromDate || report?.period?.from || '', report?.period?.to || toDate);
           if (!fromDate && report?.period?.from) setFromDate(report.period.from);
           if (report?.period?.to && report.period.to !== toDate) setToDate(report.period.to);
           setRows([]);
@@ -193,7 +209,6 @@ const ReportsSection = ({
       ['studentPoints', async () => {
           setArchive(null);
           setOverview(null);
-          setStudentPointRows([]);
           setStudentPointsError('');
           const report = await cachedReport(`student-points:${reportFromDate}:${reportToDate}:${committeeId}`, () => studentsApi.getStudentPointTransactionsReport({
             from: reportFromDate, to: reportToDate, committeeId,
@@ -217,6 +232,7 @@ const ReportsSection = ({
           const report = await cachedReport(`recitation:${fromDate}:${toDate}:${committeeId}`, () => studentsApi.getRecitationSessionsReport({ from: fromDate, to: toDate, committeeId }));
           if (!active) return;
           setRows(report.rows || []);
+          normalizedRequest.current = requestKey(fromDate || report?.period?.from || '');
           if (!fromDate && report?.period?.from) setFromDate(report.period.from);
         }],
       ['studentSaved', async () => {
@@ -241,8 +257,10 @@ const ReportsSection = ({
     ]);
     const loadReport = async () => {
       setIsLoading(true);
+      setReportError('');
       try {
         await reportLoaders.get(target)?.();
+        if (active) setLoadedTarget(target);
       } finally {
         if (active) setIsLoading(false);
       }
@@ -250,11 +268,12 @@ const ReportsSection = ({
 
     loadReport().catch((error) => {
       if (!active) return;
+      setReportError(error.message || 'تعذر تحميل التقرير');
       if (target === 'studentPoints') setStudentPointsError(error.message || 'تعذر تحميل نقاط الطلاب.');
       toast({ title: 'تعذر تحميل التقرير', description: error.message, variant: 'destructive' });
     });
     return () => { active = false; };
-  }, [reportRetry, target, date, reportFromDate, reportToDate, fromDate, toDate, committeeId, studentId, archiveId, teacherScoped, toast, cachedReport]);
+  }, [reportRetry, target, date, reportFromDate, reportToDate, fromDate, toDate, committeeId, studentId, archiveId, teacherScoped, toast, cachedReport, accountId, actorRole]);
 
   const isOverviewReport = target === 'overview';
   const isStudentsReport = target === 'students';
@@ -454,8 +473,9 @@ const ReportsSection = ({
   ) : null;
 
   const _resolveReportsSection = () => {
+    if (reportError && loadedTarget !== target) return <ErrorState message={reportError} onRetry={() => setReportRetry(value => value + 1)} />;
     // These reports share loading presentation; specialist reports manage their own requests.
-    if (isLoading && (isOverviewReport || isArchiveReport || isRecitationSessionsReport
+    if (isLoading && loadedTarget !== target && (isOverviewReport || isArchiveReport || isRecitationSessionsReport
       || isStudentSavedReport || isStudentsReport || isStudentPointsReport || isTeacherPointsReport)) {
       return <DashboardLoader className="p-8" />;
     }
@@ -488,7 +508,7 @@ const ReportsSection = ({
       return <TeacherPointsReport rows={rows} showTeacher={!teacherScoped} />;
     }
     const _resolve_resolveReportsSection = () => {
-      if (isLoading) {
+      if (isLoading && loadedTarget !== target) {
         return <DashboardLoader className="p-8" />;
       }
       if (rows.length === 0) {
@@ -518,7 +538,10 @@ const ReportsSection = ({
             </div>;
   };
   return (
-    <div className="space-y-6">
+    <PageLoadingBoundary key={target}>
+    <div className="space-y-6" aria-busy={isLoading}>
+      {!metadataReady && <DashboardLoader />}
+      {reportError && loadedTarget === target && <ErrorState message={reportError} onRetry={() => setReportRetry(value => value + 1)} />}
       {!isOnline && !isNazemReconciliationReport && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-700 dark:text-amber-200">
           تعرض التقارير المحفوظة فقط دون إنترنت. التصدير والإرسال والحذف متاحة بعد عودة الاتصال.
@@ -711,6 +734,7 @@ const ReportsSection = ({
         </DialogContent>
       </Dialog>
     </div>
+    </PageLoadingBoundary>
   );
 };
 

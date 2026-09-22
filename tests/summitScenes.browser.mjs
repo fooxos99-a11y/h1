@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
+import process from 'node:process';
 const browser = await chromium.launch({ headless: true });
 try {
   for (const width of [360, 768, 1440]) {
@@ -16,8 +17,9 @@ try {
       const id = route.request().url().split('/').at(-1);
       return route.fulfill({ json: { imageData: images.get(id) } });
     });
-    await page.goto('http://127.0.0.1:3011/tests/fixtures/summit-scenes.html');
+    await page.goto(`${process.env.PORTAL_TEST_URL || 'http://127.0.0.1:3011'}/tests/fixtures/summit-scenes.html`);
     await page.getByLabel('نهاية مشهد المدينة (كم)').waitFor();
+    assert.equal(await page.locator('.qassim-road-station-board').count(), 0, 'map preview has no journey board');
     assert.ok(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth));
     await page.getByRole('button', { name: 'إضافة طريق', exact: true }).click();
     await page.getByText('الطريق: 501–750 كم', { exact: true }).waitFor();
@@ -27,6 +29,7 @@ try {
     await page.locator('input[type=file]').nth(1).setInputFiles('public/summit/qassim-road-desert.webp');
     await page.waitForFunction(() => globalThis.document.querySelector('img[alt="اختيار صورة الطريق 1"]')?.src.startsWith('data:'));
     await page.getByLabel('العودة إلى منظور الطريق').click();
+    assert.equal(await page.locator('.qassim-road-station-board').count(), 0, 'road preview has no journey board');
     await page.getByLabel('معاينة عند').fill('500');
     await page.waitForFunction(() => globalThis.document.querySelector('.qassim-road-scene')?.classList.contains('is-city-interior') && globalThis.document.querySelector('.qassim-road-backdrop')?.src.startsWith('data:'));
     await page.getByLabel('معاينة عند').fill('501');

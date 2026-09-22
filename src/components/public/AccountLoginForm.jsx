@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { normalizeNumericInput } from '@/lib/numericInput';
 
-export default function AccountLoginForm({ onLogin, loading }) {
+export default function AccountLoginForm({ onLogin, loading, autoFocus = true }) {
   const inputId = useId();
   const [loginNumber, setLoginNumber] = useState('');
   const submit = (event) => { event.preventDefault(); if (!loading && loginNumber.trim()) onLogin(loginNumber.trim()); };
@@ -25,7 +25,7 @@ export default function AccountLoginForm({ onLogin, loading }) {
                 autoCapitalize="none"
                 spellCheck={false}
                 enterKeyHint="done"
-                autoFocus
+                autoFocus={autoFocus}
                 placeholder="اكتب رقم الحساب"
                 className="h-12 rounded-2xl pl-4 pr-11 text-right text-base font-bold"
               />

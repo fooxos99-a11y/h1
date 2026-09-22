@@ -51,9 +51,9 @@ export function normalizeRecitationRewardSettings(settings = {}) {
     masteryRepeatCount: normalizeRepeatCount(settings.masteryRepeatCount, 1),
     memorizationListeningCount: normalizeRepeatCount(settings.memorizationListeningCount || settings.listeningCount, 3),
     masteryListeningCount: normalizeRepeatCount(settings.masteryListeningCount || settings.listeningCount, 3),
-    memorizationRepeatPointValue: Math.max(0, Math.trunc(Number(settings.memorizationRepeatPointValue ?? settings.repeatPointValue ?? 1))),
-    masteryRepeatPointValue: Math.max(0, Math.trunc(Number(settings.masteryRepeatPointValue ?? settings.repeatPointValue ?? 1))),
-    memorizationListeningPointValue: Math.max(0, Math.trunc(Number(settings.memorizationListeningPointValue ?? settings.listeningPointValue ?? 10))),
-    masteryListeningPointValue: Math.max(0, Math.trunc(Number(settings.masteryListeningPointValue ?? settings.listeningPointValue ?? 10))),
+    memorizationRepeatPointValue: Math.max(0, Math.trunc(Number(settings.memorizationRepeatPointValue ?? settings.repeatPointValue ?? 5))),
+    masteryRepeatPointValue: Math.max(0, Math.trunc(Number(settings.masteryRepeatPointValue ?? settings.repeatPointValue ?? 5))),
+    memorizationListeningPointValue: Math.max(0, Math.trunc(Number(settings.memorizationListeningPointValue ?? settings.listeningPointValue ?? 5))),
+    masteryListeningPointValue: Math.max(0, Math.trunc(Number(settings.masteryListeningPointValue ?? settings.listeningPointValue ?? 5))),
   };
 }

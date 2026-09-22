@@ -60,6 +60,8 @@ const offlineOutcome = (task, payload, policies) => {
   return { warningCount, mistakeCount, evaluatedFaces, score, completed };
 };
 
+import { subscribeRecitationResume } from '@/lib/recitationResume';
+
 const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inline = false }) => {
   const { toast } = useToast();
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -95,14 +97,12 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
   }, [quranChapters.length, shouldLoad, toast]);
 
   useEffect(() => {
-    if (!shouldLoad || navigator.onLine === false) return undefined;
-    const refreshEvaluation = () => {
-      if (document.visibilityState === 'visible') void load({ silent: true });
-    };
-    window.addEventListener('focus', refreshEvaluation);
-    return () => {
-      window.removeEventListener('focus', refreshEvaluation);
-    };
+    if (!shouldLoad) return undefined;
+    return subscribeRecitationResume({
+      windowTarget: window, documentTarget: document,
+      isOnline: () => navigator.onLine !== false,
+      refresh: () => { void load({ fresh: true }); },
+    });
   }, [load, shouldLoad]);
 
   useEffect(() => {

@@ -1,3 +1,4 @@
+import StartupProvider from '@/components/startup/StartupProvider';
 import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { Redirect, Route, Switch } from 'wouter';
 import ScreenLoadingProvider from '@/components/ui/screen-loading-provider';
@@ -33,7 +34,7 @@ function App() {
   }, []);
 
   return (
-    <AppErrorBoundary><ScreenLoadingProvider>
+    <AppErrorBoundary><StartupProvider><ScreenLoadingProvider>
       <RouteThemeController />
       {syncEnabled && (
         <Suspense fallback={null}><OfflineRecitationSyncBridge /></Suspense>
@@ -58,7 +59,7 @@ function App() {
         <Route><Redirect to="/" replace /></Route>
         </Switch>
       </Suspense>
-    </ScreenLoadingProvider></AppErrorBoundary>
+    </ScreenLoadingProvider></StartupProvider></AppErrorBoundary>
   );
 }
 

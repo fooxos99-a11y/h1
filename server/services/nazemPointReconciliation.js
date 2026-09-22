@@ -62,6 +62,7 @@ export async function calculateNazemRewardGroups(connection, daily, tasks, setti
       { ...settings, allowQuranCompensation: false, allowQuranExtra: !Number(first.nazemLate) },
       { treatScheduledAsNormal: true, adjacentPosition: adjacent, rangeFaces: missingRange });
     reward = calculateSegmentedPlanPoints({ basePoints: reward, dailyAmount: Number(first.dailyPages || 1), segments,
+      normalCompleted: compareQuranPositionInDirection(end, context.normalEnd, direction) >= 0,
       compensationPercent: settings.quranCompensationPointsPercent, extraPercent: settings.quranExtraPointsPercent }).total;
   }
   const groups = [{ taskType: daily.taskType, tasks: primary, points: reward }];

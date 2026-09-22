@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import React, { useEffect, useRef, useState } from 'react';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import CheckboxOption from '@/components/ui/checkbox-option';
+import { Check } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import DashboardLoader from '@/components/dashboard/DashboardLoader';
 import { studentsApi } from '@/services/studentsApi';
@@ -11,39 +13,81 @@ export default function ProgramGradesDialog({ program, onClose }) {
   const [students, setStudents] = useState([]);
   const [values, setValues] = useState({});
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [selected, setSelected] = useState([]);
+  const [bulkPoints, setBulkPoints] = useState('');
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!program) return;
     let active = true;
-    setLoading(true); setError(''); setStudents([]);
+    setLoading(true); setError(''); setStudents([]); setSelected([]); setBulkPoints(''); setValues({});
     studentsApi.getProgramGrades(program.id).then(({ students: rows }) => {
       if (!active) return;
       setStudents(rows); setValues(Object.fromEntries(rows.map(row => [row.id, row.completedAt ? String(row.earnedPoints) : ''])));
     }).catch(error_ => { if (active) setError(error_.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [program, retry]);
-  const save = async (student) => {
-    setSaving(student.id); setError('');
+  // Dialog children are evaluated even when closed; the previous roster survives
+  // closing until the next load, while program has already become null.
+  if (!program) return null;
+  const valid = value => String(value ?? '').trim() !== '' && Number.isSafeInteger(Number(value))
+    && Number(value) >= 0 && Number(value) <= Number(program?.pointsReward);
+  const changed = students.filter(student => String(values[student.id] ?? '').trim() !== ''
+    && (!student.completedAt || Number(values[student.id]) !== Number(student.earnedPoints)));
+  const save = async () => {
+    if (savingRef.current) return;
+    const useBulk = bulkPoints.trim() !== '';
+    const targets = selected.length ? students.filter(student => selected.includes(student.id)) : changed;
+    const nextValues = useBulk ? { ...values, ...Object.fromEntries(selected.map(id => [id, bulkPoints])) } : values;
+    if (useBulk && !selected.length) { setError('حدد الطلاب أولًا.'); return; }
+    if (!targets.length) { setError('حدد الطلاب وأدخل النقاط المراد حفظها.'); return; }
+    if (targets.some(student => !valid(nextValues[student.id]))) {
+      setError(`أدخل نقاطًا صحيحة من 0 إلى ${program.pointsReward}.`); return;
+    }
+    setValues(nextValues);
+    savingRef.current = true; setSaving(true); setError('');
     try {
-      const result = await studentsApi.saveProgramGrade(program.id, student.id, Number(values[student.id]));
-      setStudents(rows => rows.map(row => row.id === student.id ? { ...row, earnedPoints: result.earnedPoints, completedAt: true } : row));
-    } catch (error_) { setError(error_.message); } finally { setSaving(null); }
+      const result = await studentsApi.saveProgramGrades(program.id, targets.map(student => ({ studentId: Number(student.id), points: Number(nextValues[student.id]) })));
+      const saved = new Map(result.grades.map(row => [Number(row.studentId), row.earnedPoints]));
+      setStudents(rows => rows.map(row => saved.has(Number(row.id)) ? { ...row, earnedPoints: saved.get(Number(row.id)), completedAt: true } : row));
+    } catch (error_) { setError(error_.message); } finally { savingRef.current = false; setSaving(false); }
   };
+  const toggle = (id, checked) => setSelected(current => checked ? [...new Set([...current, id])] : current.filter(value => value !== id));
+  const selectAll = students.length > 0 && selected.length === students.length;
   return <Dialog open={Boolean(program)} onOpenChange={open => { if (!open && !saving) onClose(); }}>
     <DialogContent dir="rtl" className="max-h-[90dvh] max-w-2xl overflow-y-auto [font-family:var(--font-ui)]">
       <DialogHeader><DialogTitle>{program?.title} — تسجيل النقاط</DialogTitle></DialogHeader>
       {error && <div role="alert" className="space-y-2 text-sm text-destructive"><p>{error}</p>{!students.length && <Button variant="outline" onClick={() => setRetry(value => value + 1)}>إعادة المحاولة</Button>}</div>}
-      {loading ? <DashboardLoader /> : <div className="space-y-3">{students.map(student => {
-        const value = values[student.id] ?? '';
-        const valid = value !== '' && Number.isSafeInteger(Number(value)) && Number(value) >= 0 && Number(value) <= program.pointsReward;
-        const unchanged = student.completedAt && Number(value) === Number(student.earnedPoints);
-        return <div key={student.id} className="space-y-3 rounded-xl border border-border p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2"><label htmlFor={`program-grade-${student.id}`} className="text-sm font-bold">{student.name}</label>{student.completedAt && <span className="text-xs text-primary">المسجل: {units.format(student.earnedPoints)}</span>}</div>
-          <div className="flex items-center gap-2"><Input id={`program-grade-${student.id}`} type="number" min="0" max={program.pointsReward} step="1" value={value} disabled={saving !== null} onChange={event => setValues(current => ({ ...current, [student.id]: event.target.value }))} className="h-11 min-w-0 flex-1" /><span className="shrink-0 text-xs text-muted-foreground">/ {program.pointsReward}</span><Button className="min-h-11" disabled={!valid || unchanged || saving !== null} onClick={() => save(student)}>{saving === student.id ? 'جارٍ الحفظ' : 'حفظ'}</Button></div>
-        </div>;
-      })}{!students.length && !error && <p className="text-sm text-muted-foreground">لا يوجد طلاب.</p>}</div>}
+      {loading ? <DashboardLoader /> : <>
+        {students.length > 0 && <fieldset disabled={saving} className="space-y-3 rounded-xl border p-3">
+          <CheckboxOption checked={selectAll} onCheckedChange={checked => setSelected(checked ? students.map(student => student.id) : [])} label="تحديد الكل" className="flex items-center gap-2 px-2">
+            <span className={`grid h-5 w-5 place-items-center rounded border ${selectAll ? 'bg-primary text-primary-foreground' : 'text-transparent'}`}><Check size={16} /></span><span>تحديد الكل</span>
+          </CheckboxOption>
+          <div className="flex flex-wrap gap-2">
+            <Input type="number" aria-label="نقاط المحددين" min="0" max={program?.pointsReward} step="1" value={bulkPoints} onChange={event => setBulkPoints(event.target.value)} className="min-h-11 min-w-0 flex-1" />
+            <Button className="min-h-11" disabled={saving} onClick={save}>{saving ? 'جارٍ الحفظ...' : 'حفظ'}</Button>
+          </div>
+        </fieldset>}
+        <fieldset disabled={saving} className="space-y-3">{students.map(student => {
+          const value = values[student.id] ?? '';
+          const checked = selected.includes(student.id);
+          return <div key={student.id} className="space-y-3 rounded-xl border border-border p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CheckboxOption checked={checked} onCheckedChange={next => toggle(student.id, next)} label={`تحديد ${student.name}`} className="flex items-center gap-2 px-2">
+                <span className={`grid h-5 w-5 place-items-center rounded border ${checked ? 'bg-primary text-primary-foreground' : 'text-transparent'}`}><Check size={16} /></span><span className="text-sm font-bold">{student.name}</span>
+              </CheckboxOption>
+              {student.completedAt && <span className="text-xs text-primary">المسجل: {units.format(student.earnedPoints)}</span>}
+            </div>
+            <div className="flex items-center gap-2"><Input aria-label={`نقاط ${student.name}`} id={`program-grade-${student.id}`} type="number" min="0" max={program.pointsReward} step="1" value={value} aria-invalid={value !== '' && !valid(value)} onChange={event => setValues(current => ({ ...current, [student.id]: event.target.value }))} className="h-11 min-w-0 flex-1" /><span className="shrink-0 text-xs text-muted-foreground">/ {program.pointsReward}</span></div>
+          </div>;
+        })}</fieldset>
+        {!students.length && !error && <p className="text-sm text-muted-foreground">لا يوجد طلاب.</p>}
+        <DialogFooter className="sticky bottom-0 border-t bg-card py-3">
+          <Button variant="outline" className="min-h-11" disabled={saving} onClick={onClose}>إغلاق</Button>
+        </DialogFooter>
+      </>}
     </DialogContent>
   </Dialog>;
 }

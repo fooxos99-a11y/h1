@@ -59,6 +59,7 @@ export function calculateSegmentedPlanPoints({
   segments = [],
   compensationPercent = 100,
   extraPercent = 50,
+  normalCompleted = false,
 }) {
   const base = Math.max(0, Number(basePoints || 0));
   const daily = Math.max(0.0001, Number(dailyAmount || 0));
@@ -70,7 +71,7 @@ export function calculateSegmentedPlanPoints({
   const details = segments.map((segment) => {
     const amount = Math.max(0, Number(segment.amount || 0));
     const percent = rates[segment.type] ?? 0;
-    const points = base * (amount / daily) * (percent / 100);
+    const points = normalCompleted && segment.type === 'normal' ? base : base * (amount / daily) * (percent / 100);
     return { ...segment, amount, percent, points };
   });
   return {

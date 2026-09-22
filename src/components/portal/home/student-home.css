@@ -1,3 +1,5 @@
+@import "./student-home-theme.css";
+
 .student-home,.student-home-window,.student-home-account-menu,.student-home-notifications{--background:195 24% 97%;--foreground:195 52% 20%;--card:0 0% 100%;--primary:186 83% 27%;--primary-dark:190 86% 22%;--primary-foreground:0 0% 100%;--border:195 24% 86%;--muted-foreground:195 16% 42%;--secondary:195 32% 92%;--muted:195 20% 94%;--ring:186 83% 27%}
 .student-home{--home-ink:#173f4b;--home-muted:#71858c;--home-line:#dce7eb;--home-teal:#0a8e97;min-height:100svh;background:#f5f8fa;color:var(--home-ink);font-family:var(--font-ui);padding-bottom:calc(28px + env(safe-area-inset-bottom))}
 .student-home-header{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid #e7eef1;padding-top:env(safe-area-inset-top)}
@@ -86,8 +88,8 @@
 .student-home-window-header{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;padding:13px 18px;border-bottom:1px solid hsl(var(--border))}
 .student-home-window-header>button{margin:0;width:44px;height:44px}
 .student-home-window-body{padding:16px;overflow-y:auto;overscroll-behavior:contain;min-height:0;touch-action:pan-y;-webkit-overflow-scrolling:touch}
-.student-home-window-body>[aria-label='مصحف الطالب']{height:min(78dvh,950px)}
-.student-home-window-body:has(>[aria-label='مصحف الطالب']){padding:0;overflow:hidden}
+.student-home-window-body [aria-label='مصحف الطالب']{height:min(78dvh,950px)}
+.student-home-window-body:has([aria-label='مصحف الطالب']){padding:0;overflow:hidden}
 .student-home-window .student-plan{display:grid;gap:14px}
 .student-home-memorized{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
 .student-home-juz>summary{cursor:pointer;list-style:none;padding:15px;display:grid;grid-template-columns:minmax(0,1fr) auto;min-height:100px;gap:12px;font-weight:800;font-size:13px}
@@ -120,8 +122,8 @@
   .student-mobile-screen .student-home-window-header{justify-content:flex-start;padding:8px 12px;min-height:62px;gap:10px}
   .student-mobile-screen .student-home-window-header h1{font-size:18px;font-weight:800;outline:none}
   .student-mobile-screen .student-home-window-body{flex:1;padding:14px;min-height:0}
-  .student-mobile-screen .student-home-window-body:has(>[aria-label='مصحف الطالب']){padding:0}
-  .student-mobile-screen .student-home-window-body>[aria-label='مصحف الطالب']{height:100%}
+  .student-mobile-screen .student-home-window-body:has([aria-label='مصحف الطالب']){padding:0}
+  .student-mobile-screen .student-home-window-body [aria-label='مصحف الطالب']{height:100%}
   .student-home-challenge{min-height:120px;padding:17px 20px;gap:12px}
   .student-home-challenge-main{gap:10px}.student-home-challenge h2{font-size:17px}
   .student-home-challenge .student-home-puzzle{padding:3px;grid-template-columns:repeat(2,12px)}.student-home-challenge .student-home-puzzle i{width:12px;height:12px}
@@ -139,7 +141,7 @@
 .student-home-entry-loading{min-height:100svh;display:grid;place-items:center;color:#087d89;background:#f6f8f9;font-family:var(--font-ui)}
 .student-home>.student-full-page{position:fixed;inset:0;z-index:90;width:100%;height:100dvh;max-width:none;max-height:none;border:0;border-radius:0;box-shadow:none;transform:none}
 .student-full-page .student-home-window-body{flex:1;padding:0;min-height:0}
-.student-full-page .student-home-window-body>[aria-label='مصحف الطالب']{height:100%}
+.student-full-page .student-home-window-body [aria-label='مصحف الطالب']{height:100%}
 .student-home-header-actions>button:not(.student-home-store){border-radius:13px;background:#eaf5f5;border-color:#cce5e8;color:#086b76;box-shadow:none}
 
 .student-home-juz{border:1px solid hsl(var(--border));border-radius:15px;background:hsl(var(--background));min-width:0;box-shadow:0 4px 14px hsl(var(--primary)/.04)}
@@ -177,3 +179,6 @@
 .student-home-execution-task:focus-within{outline:2px solid var(--home-teal);outline-offset:3px}
 .student-home-execution-amount{padding:0 6px 8px;overflow-wrap:anywhere;font-family:var(--font-ui)}
 .student-home-execution-amount>div{justify-content:center;text-align:center;gap:2px}
+
+.student-full-page .student-home-window-body > .page-loading-boundary { height: 100%; }
+.student-home-window-body > .page-loading-boundary { min-height: 100%; }

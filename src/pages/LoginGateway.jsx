@@ -1,3 +1,4 @@
+import { useStartup } from '@/components/startup/StartupProvider';
 import React, { lazy, Suspense, useEffect, useState } from 'react';
 import LoadingIndicator from '@/components/ui/loading-indicator';
 import { Toaster } from '@/components/ui/toaster';
@@ -36,6 +37,7 @@ const redirectForUser = (user, navigate, studentHome) => {
 
 const LoginGateway = ({ loginPage = false, deletionPage = false }) => {
   const site = useSiteConfig();
+  const startup = useStartup();
   const navigate = useNavigate();
   const { toast } = useToast();
   const saudiClock = useSaudiClock();
@@ -61,6 +63,9 @@ const LoginGateway = ({ loginPage = false, deletionPage = false }) => {
       dashboardPermissions: readStoredDashboardPermissions(),
     };
   });
+  useEffect(() => {
+    if (storedUser && featuresReady) startup?.finish();
+  }, [storedUser, featuresReady, startup]);
   useEffect(() => {
     if (!deletionPage && storedUser && (loginPage || storedUser.role !== 'student' || !site.features?.studentHome)) redirectForUser(storedUser, navigate, site.features?.studentHome);
   }, [deletionPage, loginPage, storedUser, navigate, site.features?.studentHome]);

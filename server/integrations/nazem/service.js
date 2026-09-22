@@ -1,6 +1,7 @@
 import { importNazemLinkResult } from './linkResultImport.js';
 import { loadConfirmedNazemRecordIds, recitationIdentityFromReceipt } from './followUpCycles.js';
-import { hasLocalRecitation, recitationWriteJournal, resolveLegacyRecitationTarget, validateRecitationTarget } from './recitationSubmission.js';
+import { applyRecitationWriteIdentity, hasLocalRecitation, recitationWriteJournal, recoverRejectedRecitationWrite, resolveLegacyRecitationTarget, validateRecitationTarget } from './recitationSubmission.js';
+import { recoverNazemAuthenticationJobs } from './authenticationRecovery.js';
 import { reconcileConfirmedRecitationJobs } from './confirmedRecitationJobs.js';
 import { nazemFollowUpMetricsMatch } from './followUpMetrics.js';
 import { loadRecitationRewardSettings } from '../../services/recitationRewards.js';
@@ -38,6 +39,7 @@ import { syncNazemScheduledTaskRange } from './dailyTasks.js';
 import { nazemTaskTrack } from './taskTrack.js';
 import { describeNazemFollowUpIssues, importNazemFollowUpHistory, markNazemFollowUpRefreshSucceeded } from './followUpImport.js';
 import { recordNazemStudentRefresh } from './refreshState.js';
+import { latestNazemScheduleSql, preservesPendingNazemLate } from './scheduleAuthority.js';
 import { findNazemLateSourceDate } from './lateSourceDate.js';
 import { submitWithNazemAuthority } from './recitationAuthority.js';
 import { getNazemQuranPosition } from './quranPosition.js';
@@ -243,6 +245,7 @@ async function persistNazemSession(connection, teacherId, adapter) {
       last_error_code = NULL, last_error = NULL WHERE teacher_id = ?`,
     [encryptNazemJson(await adapter.getSessionState()), teacherId],
   );
+  await recoverNazemAuthenticationJobs(connection, teacherId);
 }
 
 async function restoreImportedNazemPlanLink(connection, {
@@ -1027,6 +1030,8 @@ async function syncRecitation(connection, job) {
     throw reviewNazemError('هذا تقييم سابق لا يملك إيصال إرسال موثقًا. يلزم مطابقة وصوله قبل إعادة الإرسال.', 'NAZEM_DELIVERY_UNVERIFIED');
   };
   try {
+    if (!verificationOnly) await recoverRejectedRecitationWrite(connection, job);
+    applyRecitationWriteIdentity(mapped, job, verificationOnly);
     await adapter.login();
     await persistNazemSession(connection, job.teacherId, adapter);
     const remote = await submitWithNazemAuthority({
@@ -1421,12 +1426,12 @@ async function saveRemoteFollowUp(connection, link, day) {
        nazem_record_id, sync_status, last_remote_checked_at, remote_snapshot)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW(3), ?)
      ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), nazem_record_id = IF(local_snapshot IS NULL, VALUES(nazem_record_id), nazem_record_id),
-       last_remote_checked_at = NOW(3), remote_snapshot = IF(local_snapshot IS NULL, VALUES(remote_snapshot), remote_snapshot)`,
+       last_remote_checked_at = NOW(3), remote_snapshot = ${latestNazemScheduleSql}`,
     [link.planId, link.studentId, link.teacherId, day.date, day.taskType, track, String(day.id), JSON.stringify(day)],
   );
   const dailyFollowUpId = Number(dailyResult.insertId || 0);
   const [[daily]] = await connection.query(
-    `SELECT id, sync_status AS syncStatus, local_snapshot AS localSnapshot,
+    `SELECT id, sync_status AS syncStatus, local_snapshot AS localSnapshot, remote_snapshot AS remoteSnapshot,
       EXISTS(
         SELECT 1 FROM nazem_recitation_links recitationLink
         WHERE recitationLink.daily_follow_up_id = nazem_daily_follow_up_links.id
@@ -1436,6 +1441,9 @@ async function saveRemoteFollowUp(connection, link, day) {
     [dailyFollowUpId],
   );
   let local = safeJson(daily?.localSnapshot, null);
+  if (preservesPendingNazemLate(safeJson(daily?.remoteSnapshot, null), day)) {
+    return { synced: 0, conflicts: 0, imported: 0 };
+  }
   let existingGrouped = null;
   try {
     existingGrouped = await loadDailyFollowUp(connection, dailyFollowUpId);

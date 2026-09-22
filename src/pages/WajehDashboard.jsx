@@ -1,3 +1,4 @@
+import PageLoadingBoundary from '@/components/ui/page-loading-boundary';
 import { defaultAccountSection } from '@/lib/defaultAccountSection';
 import useStaffAttendance from '@/hooks/useStaffAttendance';
 import NotificationButton from '@/components/notifications/NotificationButton';
@@ -267,6 +268,8 @@ const WajehDashboard = () => {
   const staffAttendanceActive = settings.staffAttendanceSource === 'teacher' && (isSupervisor || isAdmin || isReciter);
   const staffAttendanceState = useStaffAttendance(staffAttendanceActive);
   const { alreadyPresentToday } = staffAttendanceState;
+  const waitingForAttendance = staffAttendanceActive && !staffAttendanceState.attendance && !staffAttendanceState.error;
+  const navigationLoading = isDashboardLoading || waitingForAttendance;
 
   const sections = useMemo(() => {
     const localizeSections = (items) => items.map((item) => ({
@@ -324,12 +327,12 @@ const WajehDashboard = () => {
     : defaultAccountSection(role, sections);
 
   useEffect(() => {
-    if (isDashboardLoading || !hasDashboardAccess || !visibleActiveSection) return;
+    if (navigationLoading || !hasDashboardAccess || !visibleActiveSection) return;
     const canonicalSlug = dashboardSectionRoutes.getSlug(visibleActiveSection);
     if (sectionSlug !== canonicalSlug) {
       navigate(`/dashboard/${canonicalSlug}`, { replace: true });
     }
-  }, [hasDashboardAccess, isDashboardLoading, navigate, sectionSlug, visibleActiveSection]);
+  }, [hasDashboardAccess, navigationLoading, navigate, sectionSlug, visibleActiveSection]);
 
   const changeSection = useCallback((key) => {
     const slug = dashboardSectionRoutes.getSlug(key);
@@ -394,7 +397,7 @@ const WajehDashboard = () => {
     );
   };
 
-  if (isDashboardLoading) {
+  if (navigationLoading) {
     return (
       <div className="min-h-screen bg-background text-foreground [font-family:var(--font-ui)]" dir="rtl">
         <CustomCursor />
@@ -429,9 +432,9 @@ const WajehDashboard = () => {
     const returnSection = sections.find((section) => section.key !== 'mushaf');
     return (
       <div className="fixed inset-0 z-[100] h-dvh overflow-hidden bg-background [font-family:var(--font-ui)]" dir="rtl">
-        <Suspense fallback={<DashboardLoader mode="screen" className="h-dvh" />}>
+        <PageLoadingBoundary><Suspense fallback={<DashboardLoader mode="screen" className="h-dvh" />}>
           <StudentMushafSection onBack={() => returnSection && changeSection(returnSection.key)} />
-        </Suspense>
+        </Suspense></PageLoadingBoundary>
       </div>
     );
   }

@@ -18,7 +18,7 @@ const statusLabel = (status) => {
 export default function StaffAttendanceSection({ attendanceState }) {
   const { toast } = useToast();
   const { attendance, loading, pending, error, refresh, checkIn } = attendanceState;
-  if (loading) return <DashboardLoader className="min-h-[320px]" />;
+  if (loading && !attendance) return <DashboardLoader className="min-h-[320px]" />;
 
   return (
     <Card className="mx-auto max-w-xl border-primary/25 bg-card [font-family:var(--font-ui)]">

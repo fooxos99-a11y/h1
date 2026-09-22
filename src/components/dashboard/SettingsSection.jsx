@@ -15,7 +15,6 @@ import DashboardLoader from '@/components/dashboard/DashboardLoader';
 import AccountDeletionRequestsDialog from '@/components/dashboard/AccountDeletionRequestsDialog';
 import AccountPolicyLinks from '@/components/dashboard/AccountPolicyLinks';
 import DailyChallengePreviewDialog from '@/components/dashboard/DailyChallengePreviewDialog';
-import CountPointsSettingField from '@/components/dashboard/CountPointsSettingField';
 import EvaluationScalingHelp from '@/components/dashboard/EvaluationScalingHelp';
 import NazemIntegrationSettings from '@/components/dashboard/NazemIntegrationSettings';
 import SummitMapEditor from '@/components/dashboard/SummitMapEditor';
@@ -156,10 +155,10 @@ const defaultSettings = {
   masteryRepeatCount: 1,
   memorizationListeningCount: 3,
   masteryListeningCount: 3,
-  memorizationRepeatPointValue: 1,
-  masteryRepeatPointValue: 1,
-  memorizationListeningPointValue: 10,
-  masteryListeningPointValue: 10,
+  memorizationRepeatPointValue: 5,
+  masteryRepeatPointValue: 5,
+  memorizationListeningPointValue: 5,
+  masteryListeningPointValue: 5,
   allowRepeatCountEditing: false,
   allowListeningCountEditing: false,
 };
@@ -499,12 +498,12 @@ const SettingsSection = ({
             {['student', 'both'].includes(settings.memorizationExecutionSource) && (
               <div className="grid gap-3 sm:grid-cols-2">
                 <SettingToggle
-                  label="السماح للطالب بتعديل عدد التكرارات"
+                  label="السماح للطالب بتعديل التكرار"
                   checked={Boolean(settings.allowRepeatCountEditing)}
                   onCheckedChange={(checked) => setSettings({ ...settings, allowRepeatCountEditing: checked })}
                 />
                 <SettingToggle
-                  label="السماح للطالب بتعديل عدد مرات السماع"
+                  label="السماح للطالب بتعديل السماع"
                   checked={Boolean(settings.allowListeningCountEditing)}
                   onCheckedChange={(checked) => setSettings({ ...settings, allowListeningCountEditing: checked })}
                 />
@@ -583,46 +582,20 @@ const SettingsSection = ({
               <ScoreSettingField label="خصم التنبيه" settingKey={`${evaluationSettingPrefix}WarningDeduction`} settings={settings} setSettings={setSettings} />
               <ScoreSettingField label="حد النجاح" settingKey={`${evaluationSettingPrefix}PassingScore`} settings={settings} setSettings={setSettings} min={1} />
               {selectedEvaluationType.repeatKey && (
-                settings.nazemIntegrationEnabled ? (
-                  <ScoreSettingField
-                    label={rewardUnits.text('كيلومترات كل تكرار')}
-                    settingKey={selectedEvaluationType.repeatPointsKey}
-                    settings={settings}
-                    setSettings={setSettings}
-                  />
-                ) : (
-                  <CountPointsSettingField
-                    label="عدد التكرارات"
-                    countKey={selectedEvaluationType.repeatKey}
-                    pointsKey={selectedEvaluationType.repeatPointsKey}
-                    unitLabel="تكرار"
-                    settings={settings}
-                    setSettings={setSettings}
-                    defaultCount={1}
-                    defaultPoints={1}
-                  />
-                )
+                <ScoreSettingField
+                  label={rewardUnits.text('كيلومترات التكرار عند اختيار نعم')}
+                  settingKey={selectedEvaluationType.repeatPointsKey}
+                  settings={settings}
+                  setSettings={setSettings}
+                />
               )}
               {selectedEvaluationType.listeningKey && (
-                settings.nazemIntegrationEnabled ? (
-                  <ScoreSettingField
-                    label={rewardUnits.text('كيلومترات السماع عند اختيار نعم')}
-                    settingKey={selectedEvaluationType.listeningPointsKey}
-                    settings={settings}
-                    setSettings={setSettings}
-                  />
-                ) : (
-                  <CountPointsSettingField
-                    label="عدد مرات السماع"
-                    countKey={selectedEvaluationType.listeningKey}
-                    pointsKey={selectedEvaluationType.listeningPointsKey}
-                    unitLabel="سماع"
-                    settings={settings}
-                    setSettings={setSettings}
-                    defaultCount={3}
-                    defaultPoints={10}
-                  />
-                )
+                <ScoreSettingField
+                  label={rewardUnits.text('كيلومترات السماع عند اختيار نعم')}
+                  settingKey={selectedEvaluationType.listeningPointsKey}
+                  settings={settings}
+                  setSettings={setSettings}
+                />
               )}
             </div>
           </SettingsGroup>

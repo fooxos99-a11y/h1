@@ -13,9 +13,7 @@ export function calculateStudentExecutionPoints({
   completedAmount,
   expectedAmount,
   completedRepeatCount = 0,
-  expectedRepeatCount = 0,
   completedListeningCount = 0,
-  expectedListeningCount = 0,
   settings = {},
 }) {
   const _resolveCategoryPoints = () => {
@@ -36,20 +34,20 @@ export function calculateStudentExecutionPoints({
     : calculateProportionalPoints(categoryPoints, completedAmount, expectedAmount);
   const _resolveRepeatPoints = () => {
     if (taskType === 'memorization') {
-      return Math.max(0, Math.min(Number(completedRepeatCount || 0), Number(expectedRepeatCount || 0)))
+      return Number(Number(completedRepeatCount) > 0)
       * Math.max(0, Math.trunc(Number(track === 'mastery'
-        ? settings.masteryRepeatPointValue ?? 1
-        : settings.memorizationRepeatPointValue ?? 1)));
+        ? settings.masteryRepeatPointValue ?? 5
+        : settings.memorizationRepeatPointValue ?? 5)));
     }
     return 0;
   };
   const repeatPoints = _resolveRepeatPoints();
   const _resolveListeningPoints = () => {
     if (taskType === 'memorization') {
-      return Math.max(0, Math.min(Number(completedListeningCount || 0), Number(expectedListeningCount || 0)))
+      return Number(Number(completedListeningCount) > 0)
       * Math.max(0, Math.trunc(Number(track === 'mastery'
-        ? settings.masteryListeningPointValue ?? 10
-        : settings.memorizationListeningPointValue ?? 10)));
+        ? settings.masteryListeningPointValue ?? 5
+        : settings.memorizationListeningPointValue ?? 5)));
     }
     return 0;
   };

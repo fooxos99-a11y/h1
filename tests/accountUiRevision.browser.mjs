@@ -15,7 +15,8 @@ try {
     const heights = await page.locator('h3').evaluateAll(nodes => nodes.map(node => node.parentElement.parentElement.getBoundingClientRect().height));
     assert.equal(heights.length, 4);
     assert.ok(Math.max(...heights) - Math.min(...heights) < 1, JSON.stringify(heights));
-    assert.equal(await page.locator('.student-home-level').innerText(), '30');
+    assert.equal(await page.locator('.student-home-level').innerText(), '');
+    assert.equal(await page.locator('.student-home-level svg').count(), 1);
     const bar = await page.locator('.student-home-header-progress').boundingBox();
     assert.equal(bar.width, 130);
     assert.equal(bar.height, 10);
@@ -35,8 +36,8 @@ try {
     assert.match(await button.evaluate(node => globalThis.getComputedStyle(node).backgroundImage), /linear-gradient\(105deg/);
     await button.click();
     await page.locator('[data-loading-indicator]').waitFor();
-    assert.equal(await page.locator('.animate-spin').count(), 1);
-    assert.equal((await page.locator('main, [data-loading-indicator]').first().innerText()).trim(), '');
+    assert.equal(await page.locator('.animate-spin:visible').count(), 1);
+    assert.equal((await page.locator('main:visible, [data-loading-indicator]:visible').first().innerText()).trim(), '');
     assert.deepEqual(errors, []);
     await page.close();
   }

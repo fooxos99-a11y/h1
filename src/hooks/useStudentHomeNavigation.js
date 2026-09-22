@@ -9,9 +9,14 @@ const readView = () => {
 export default function useStudentHomeNavigation() {
   const [view, setView] = useState(readView);
   const open = useCallback((next) => {
-    if (next === readView()) return;
+    const url = new URL(window.location.href);
+    const hasProgramSelection = url.searchParams.has('program') || url.searchParams.has('section');
+    if (next === readView() && !(next === 'programs' && hasProgramSelection)) return;
+    url.searchParams.delete('program');
+    url.searchParams.delete('section');
     const depth = Number(window.history.state?.studentHomeDepth || 0);
-    window.history.pushState({ ...window.history.state, studentHomeDepth: depth + 1 }, '', `${window.location.pathname}${window.location.search}${next ? '#student/' + next : ''}`);
+    window.history.pushState({ ...window.history.state, studentHomeDepth: depth + 1 }, '', `${url.pathname}${url.search}${next ? '#student/' + next : ''}`);
+    window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));
     setView(next);
   }, []);
   const back = useCallback(() => {

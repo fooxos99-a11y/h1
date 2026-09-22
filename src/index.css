@@ -377,6 +377,11 @@ input[type='date']::-webkit-calendar-picker-indicator {
   background-color: hsl(var(--background) / 0.92) !important;
 }
 
+/* Loading must fully cover the page, independent of translucent theme surfaces. */
+.screen-loading-surface {
+  background-color: hsl(var(--background) / 1);
+}
+
 .light .select-trigger-solid,
 .light .select-content-solid {
   background-color: #ffffff !important;

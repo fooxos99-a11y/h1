@@ -39,7 +39,7 @@ try {
         return route.fulfill({ json: { success: true } });
       }
       if (path.endsWith('/site-config')) body = { key: 'madarij', features: { studentHome: true } };
-      if (path.endsWith('/programs')) body = { programs: [{ id: 1, title: 'القيم', pointsReward: 179, contents: [], questions: [], sectionsEnabled: true, sections: [{ id: 11, title: 'قسم تجريبي', pointsReward: 179, contents: [], questions: [] }] }, { id: 2, title: 'برنامج بعنوان طويل لاختبار تناسق البطاقة', pointsReward: 50, contents: [], questions: [], sections: [] }] };
+      if (path.endsWith('/programs')) body = { programs: [{ id: 1, title: 'القيم', pointsReward: 179, contents: [], questions: [], sectionsEnabled: true, sections: [{ id: 11, title: 'قسم تجريبي', pointsReward: 179, contents: [{ type: 'text', value: 'محتوى القسم التجريبي' }], questions: [] }] }, { id: 2, title: 'برنامج بعنوان طويل لاختبار تناسق البطاقة', pointsReward: 50, contents: [], questions: [], sections: [] }] };
       if (path.endsWith('/public-settings')) body = { learningPathsEnabled: true, hasStudentQuranExecution: true, pointsSystemEnabled: true, storeEnabled: true, summitEnabled: true, dailyChallengeEnabled: true, dailyChallengeDays: [2], studentRankingsVisible: true, familyRankingsVisible: true, rankingPointsVisible: true };
       if (path.endsWith('/quran-today')) body = { date, plan: { id: 1, progressPercent: 44 }, todayAmounts: tasks, tasks, repeatCount: 10, listeningCount: 3 };
       if (path.endsWith('/quran-sessions')) body = { rows: tasks, points: { total: 1234, days: [{ date, earned: 43, maximum: 45, pending: false, details: [{ label: 'الحضور', earned: 25 }, { label: 'تقييم الحفظ', earned: 18 }] }] } };
@@ -58,7 +58,7 @@ try {
     await task.waitFor();
     await page.waitForFunction(() => globalThis.document.querySelector('.student-home-level svg'));
     assert.equal(await page.locator('.student-home-level').innerText(), '');
-    assert.equal(await page.locator('.student-home-header-progress').count(), 0);
+    assert.equal(await page.getByRole('progressbar', { name: 'تقدم الخطة الحالية' }).getAttribute('value'), '44');
     await page.addStyleTag({content: '*, *::before, *::after { transition: none !important; animation: none !important; }'});
     const selected = await task.evaluate(el => ({ outer: globalThis.getComputedStyle(el).backgroundColor, button: globalThis.getComputedStyle(el.querySelector('button')).backgroundColor, shadow: globalThis.getComputedStyle(el.querySelector('button')).boxShadow }));
     assert.equal(selected.outer, 'rgb(225, 243, 238)');

@@ -1,4 +1,5 @@
 import './dashboard-header-filters.css';
+import PageLoadingBoundary from '@/components/ui/page-loading-boundary';
 import React, { useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -28,6 +29,7 @@ const DashboardShell = ({
   const site = useSiteConfig();
   const dashboardTitle = title || site.name;
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [entered, setEntered] = useState(false);
 
   const activeItem = useMemo(
     () => sections.flatMap((section) => [section, ...(section.children || [])])
@@ -118,17 +120,9 @@ const DashboardShell = ({
       >
         <div className={`mx-auto w-full ${maxWidthClass}`}>
           {persistentContent}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={contentKey}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              transition={{ duration: 0.18, ease: 'easeOut' }}
-            >
+          <PageLoadingBoundary key={contentKey} scope="dashboard" initialScreen={!entered} onReady={() => setEntered(true)}>
               {children}
-            </motion.div>
-          </AnimatePresence>
+          </PageLoadingBoundary>
         </div>
       </main>
 

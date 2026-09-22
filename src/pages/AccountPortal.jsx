@@ -1,3 +1,4 @@
+import PageLoadingBoundary from '@/components/ui/page-loading-boundary';
 import RankingPointsValue from '@/components/points/RankingPointsValue';
 import { defaultAccountSection } from '@/lib/defaultAccountSection';
 import useStaffAttendance from '@/hooks/useStaffAttendance';
@@ -75,7 +76,7 @@ const AccountPortal = () => {
     staffAttendanceSource: 'supervisor',
   });
   const studentExecutionLivesOnPublicHome = !Capacitor.isNativePlatform();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [storeBalance, setStoreBalance] = useState(0);
   const [planPoints, setPlanPoints] = useState(null);
   const [readerTarget, setReaderTarget] = useState(null);
@@ -83,6 +84,7 @@ const AccountPortal = () => {
   const hasDashboard = session.role === 'manager'
     || session.role === 'reciter'
     || (['supervisor', 'admin'].includes(session.role) && session.dashboardPermissions.length > 0);
+  const [permissionsReady, setPermissionsReady] = useState(!['supervisor', 'admin'].includes(session.role) || !session.supervisorId || hasDashboard);
   const dailyChallengeAvailable = site.features?.dailyChallenge !== false
     && isDailyChallengeAvailable(settings, saudiClock);
   useEffect(() => {
@@ -121,19 +123,22 @@ const AccountPortal = () => {
   }, [dailyChallengeAvailable, session.role, settings.summitEnabled, site.features]);
 
   useEffect(() => {
-    if (!isOnline || !['supervisor', 'admin'].includes(session.role) || !session.supervisorId || hasDashboard) return;
+    if (!isOnline) { setPermissionsReady(true); return; }
+    if (!['supervisor', 'admin'].includes(session.role) || !session.supervisorId || hasDashboard) return;
     studentsApi.getMyDashboardPermissions()
       .then((data) => {
         const permissions = data.permissions || [];
         storeDashboardPermissions(permissions);
         if (permissions.length > 0) navigate('/dashboard', { replace: true });
       })
-      .catch(() => {});
+      .catch(() => undefined)
+      .finally(() => setPermissionsReady(true));
   }, [hasDashboard, isOnline, navigate, session.role, session.supervisorId]);
 
   const staffAttendanceActive = settings.staffAttendanceSource === 'teacher' && session.role === 'supervisor' && !hasDashboard;
   const staffAttendanceState = useStaffAttendance(staffAttendanceActive);
   const { alreadyPresentToday } = staffAttendanceState;
+  const waitingForAttendance = staffAttendanceActive && !staffAttendanceState.attendance && !staffAttendanceState.error;
 
   const sections = useMemo(() => {
     const list = [];
@@ -165,12 +170,12 @@ const AccountPortal = () => {
   const activeSection = _resolveActiveSection();
 
   useEffect(() => {
-    if (!session.token || hasDashboard || isLoading || !activeSection) return;
+    if (!session.token || hasDashboard || isLoading || waitingForAttendance || !activeSection || !permissionsReady) return;
     const canonicalSlug = portalSectionRoutes.getSlug(activeSection);
     if (sectionSlug !== canonicalSlug) {
       navigate(`/portal/${canonicalSlug}`, { replace: true });
     }
-  }, [activeSection, hasDashboard, isLoading, navigate, sectionSlug, session.token]);
+  }, [activeSection, hasDashboard, isLoading, waitingForAttendance, permissionsReady, navigate, sectionSlug, session.token]);
 
   const updateStoreBalance = useCallback((balance) => setStoreBalance(Number(balance || 0)), []);
 
@@ -259,7 +264,7 @@ const AccountPortal = () => {
 
   if (!session.token || hasDashboard) return null;
 
-  if (isImmersiveRouteLoading) {
+  if (isLoading || waitingForAttendance || !permissionsReady || isImmersiveRouteLoading) {
     return (
       <div className="fixed inset-0 z-[100] h-dvh overflow-hidden bg-[#001f2d] [font-family:var(--font-ui)]" dir="rtl">
         <DashboardLoader mode="screen" className="h-dvh" />
@@ -270,9 +275,9 @@ const AccountPortal = () => {
   if (activeSection === 'mushaf') {
     return (
       <div className="fixed inset-0 z-[100] h-dvh overflow-hidden bg-background [font-family:var(--font-ui)]" dir="rtl">
-        <Suspense fallback={<DashboardLoader mode="screen" className="h-dvh" />}>
+        <PageLoadingBoundary key={activeSection}><Suspense fallback={<DashboardLoader mode="screen" className="h-dvh" />}>
           <StudentMushafSection studentId={session.studentId} onBack={leaveMushaf} initialTarget={readerTarget} />
-        </Suspense>
+        </Suspense></PageLoadingBoundary>
         <Toaster />
       </div>
     );
@@ -282,11 +287,11 @@ const AccountPortal = () => {
   if (['dailyChallenge', 'summit'].includes(activeSection)) {
     return (
       <div className="fixed inset-0 z-[100] h-dvh overflow-hidden bg-[#001f2d] [font-family:var(--font-ui)]" dir="rtl">
-        <Suspense fallback={<DashboardLoader mode="screen" className="h-dvh" />}>
+        <PageLoadingBoundary key={activeSection}><Suspense fallback={<DashboardLoader mode="screen" className="h-dvh" />}>
           {activeSection === 'dailyChallenge'
             ? <StudentDailyChallengeSection onBack={leaveDailyChallenge} />
             : <SummitJourneySection onBack={leaveSummit} />}
-        </Suspense>
+        </Suspense></PageLoadingBoundary>
         <Toaster />
       </div>
     );

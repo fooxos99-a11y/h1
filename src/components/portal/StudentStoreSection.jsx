@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import DashboardLoader from '@/components/dashboard/DashboardLoader';
 import ErrorState from '@/components/ui/error-state';
+import StorePurchaseDialog from '@/components/store/StorePurchaseDialog';
 import StoreProductCard from '@/components/store/StoreProductCard';
 import {
   loadOfflineStudentStore,
@@ -19,6 +20,7 @@ const StudentStoreSection = ({ onBalanceChange, embedded = false }) => {
   const [loadError, setLoadError] = useState('');
   const [buyingId, setBuyingId] = useState(null);
   const purchasing = useRef(false);
+  const [confirmProduct, setConfirmProduct] = useState(null);
   const [pendingSync, setPendingSync] = useState(false);
 
   const load = useCallback(async () => {
@@ -59,9 +61,10 @@ const StudentStoreSection = ({ onBalanceChange, embedded = false }) => {
           .map((item) => item.id === product.id ? { ...item, stock: Math.max(0, Number(item.stock || 0) - 1) } : item)
           .filter((item) => item.stock === null || item.stock > 0));
       }
+      setConfirmProduct(null);
       toast({
-        title: result.pendingSync ? 'حُفظ الشراء محليًا' : 'تم الشراء بنجاح',
-        description: result.pendingSync ? 'سيُعتمد تلقائيًا فور عودة الاتصال.' : undefined,
+        title: result.pendingSync ? 'حُفظ الطلب محليًا' : 'أُرسل الطلب للمراجعة',
+        description: result.pendingSync ? 'سيُرسل للمراجعة فور عودة الاتصال.' : undefined,
         duration: 3000,
       });
     } catch (error) {
@@ -77,6 +80,7 @@ const StudentStoreSection = ({ onBalanceChange, embedded = false }) => {
 
   return (
     <div className="space-y-5 [font-family:var(--font-ui)]">
+      <StorePurchaseDialog product={confirmProduct} busy={buyingId !== null} onClose={() => setConfirmProduct(null)} onConfirm={purchase} />
       {pendingSync ? (
         <Card className="border-primary/20 bg-primary/5">
           <CardContent className="p-4 text-center text-sm font-black text-primary">
@@ -95,7 +99,7 @@ const StudentStoreSection = ({ onBalanceChange, embedded = false }) => {
                   variant="purchase"
                   className="h-11 w-full rounded-xl font-black"
                   disabled={buyingId !== null || balance < product.pointsPrice}
-                  onClick={() => purchase(product)}
+                  onClick={() => setConfirmProduct(product)}
                 >
                   <ShoppingBag className="h-4 w-4" />
                   {buyingId === product.id ? 'جاري الشراء...' : 'شراء'}

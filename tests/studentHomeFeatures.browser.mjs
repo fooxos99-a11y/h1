@@ -77,11 +77,13 @@ try {
       const buy = page.getByRole('button', { name: 'شراء', exact: true });
       assert.equal(await buy.nth(1).isDisabled(), true);
       await buy.first().click();
-      await page.getByText('تم الشراء بنجاح', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'تأكيد الشراء', exact: true }).click();
+      await page.getByText('أُرسل الطلب للمراجعة', { exact: true }).waitFor();
       assert.equal(purchased, 1);
       assert.equal(await buy.first().isEnabled(), true);
       assert.equal(await buy.first().evaluate(el => globalThis.getComputedStyle(el).color), 'rgb(255, 255, 255)');
       await buy.first().click();
+      await page.getByRole('button', { name: 'تأكيد الشراء', exact: true }).click();
       await page.waitForFunction(() => globalThis.document.querySelectorAll('button:disabled').length > 0);
       await page.waitForTimeout(300);
       assert.equal(purchased, 2);

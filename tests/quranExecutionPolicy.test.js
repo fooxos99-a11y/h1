@@ -105,11 +105,11 @@ test('execution ownership and configured count limits are enforced on the server
   assert.match(server, /execution_actor_role = 'teacher'/);
   assert.match(server, /!nazemManaged && settings\.allowRepeatCountEditing[\s\S]*req\.body\.repeatCount/);
   assert.match(server, /!nazemManaged && settings\.allowListeningCountEditing[\s\S]*req\.body\.listeningCount/);
-  assert.match(server, /Math\.min\(expectedRepeatCount, Math\.max\(1/);
-  assert.match(server, /Math\.min\(expectedListeningCount, Math\.max\(1/);
+  assert.match(server, /practiceCompletionCount\(req\.body\.repeatCount, expectedRepeatCount\)/);
+  assert.match(server, /practiceCompletionCount\(req\.body\.listeningCount, expectedListeningCount\)/);
   assert.match(server, /const QURAN_EXTRA_FORWARD_FACES = 50/);
   assert.match(server, /allowRepeatCountEditing: !nazemManaged[\s\S]*canStudentExecuteQuranTask\(settings, 'memorization'\)/);
-  assert.match(selector, /Array\.from\(\{ length: selectableMaximum \}/);
+  assert.match(selector, /ListeningChoice[\s\S]*disabled=\{!editable\}/);
 });
 
 test('Nazem isolates linked plans and restores normal settings when disabled', async () => {

@@ -2,11 +2,14 @@ import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useScreenLoading } from './screen-loading-provider';
 import LoadingSpinner from '@/components/ui/loading-spinner';
+import { usePageLoading } from './page-loading-boundary';
 
 const LoadingIndicator = ({ className, mode = 'inline', delayMs = 180 }) => {
   const isScreen = mode === 'screen';
   const acquire = useScreenLoading();
-  useLayoutEffect(() => { if (isScreen && acquire) return acquire(); }, [isScreen, acquire]);
+  const acquirePage = usePageLoading();
+  const register = acquirePage || (isScreen ? acquire : null);
+  useLayoutEffect(() => register?.(), [register]);
   const [isVisible, setIsVisible] = useState(delayMs <= 0);
 
   useEffect(() => {
@@ -18,12 +21,12 @@ const LoadingIndicator = ({ className, mode = 'inline', delayMs = 180 }) => {
     return () => window.clearTimeout(timer);
   }, [delayMs]);
 
-  if (isScreen && acquire) return null;
+  if (register) return null;
   return (
     <div
       className={cn(
         isScreen
-          ? 'fixed inset-0 z-[100] grid place-items-center bg-background p-6'
+          ? 'screen-loading-surface fixed inset-0 z-[100] grid place-items-center p-6'
           : 'flex items-center justify-center py-12',
         className,
       )}

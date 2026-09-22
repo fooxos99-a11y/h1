@@ -1,5 +1,5 @@
 import { SUMMIT_MAP_CHALLENGES, normalizeSummitChallengeType } from './summit.js';
-import { normalizeSummitCityScenes } from './summit-scenes.js';
+import { normalizeSummitCityScenes, normalizeSummitImageId } from './summit-scenes.js';
 
 export const SUMMIT_TOTAL_KILOMETERS = 8000;
 export const SUMMIT_MAX_CONFIGURABLE_KILOMETERS = 100000;
@@ -87,9 +87,9 @@ const normalizeMapLocation = (location, index, kind, fallback = {}, maximum = SU
     locationType: kind,
     name,
     kilometer,
-    notificationEnabled: Boolean(location?.notificationEnabled),
+    notificationEnabled: kind !== 'station' && Boolean(location?.notificationEnabled),
     notificationText: cleanText(location?.notificationText, `وصلت إلى ${name}`, 180) || `وصلت إلى ${name}`,
-    challengeEnabled: Boolean(location?.challengeEnabled),
+    challengeEnabled: kind !== 'station' && Boolean(location?.challengeEnabled),
     challengeType,
     rewardPoints: clampRewardPoints(location?.rewardPoints ?? 50),
   };
@@ -141,33 +141,8 @@ export function normalizeSummitMapConfig(value) {
     usedStationIds.add(id);
     if (usedKilometers.has(kilometer)) return null;
     usedKilometers.add(kilometer);
-    return { ...normalized, id };
+    return { ...normalized, id, imageId: normalizeSummitImageId(station.imageId) };
   }).filter(Boolean).sort((a, b) => a.kilometer - b.kilometer);
-
-  const rawSigns = Array.isArray(source.signs) ? source.signs : [];
-  const usedSignIds = new Set();
-  const signs = rawSigns.slice(0, 48).map((sign, index) => {
-    const fallbackId = `sign-${index + 1}`;
-    let id = safeId(sign?.id, fallbackId);
-    while (usedSignIds.has(id)) id = `${id}-${index + 1}`;
-    usedSignIds.add(id);
-    const kilometer = clampKilometer(sign?.kilometer, { allowStart: true, maximum: locationMaximum });
-    const visibleFromKilometer = Math.min(
-      kilometer,
-      clampKilometer(sign?.visibleFromKilometer ?? Math.max(0, kilometer - 1000), {
-        allowStart: true,
-        maximum: locationMaximum,
-      }),
-    );
-    return {
-      id,
-      kilometer,
-      visibleFromKilometer,
-      text: cleanText(sign?.text, '', 180),
-      side: sign?.side === 'left' ? 'left' : 'right',
-      enabled: sign?.enabled !== false,
-    };
-  }).sort((a, b) => a.kilometer - b.kilometer);
 
   const requestedActiveStationId = cleanText(source.activeStationId, '', 80);
   const activeStationId = stations.some(({ id }) => id === requestedActiveStationId)
@@ -179,7 +154,7 @@ export function normalizeSummitMapConfig(value) {
     goal,
     cities,
     stations,
-    signs,
+    signs: [],
     activeStationId,
   };
 }

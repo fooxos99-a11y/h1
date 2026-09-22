@@ -11,7 +11,7 @@ test('repetition points are proportional to the completed count', () => {
   assert.equal(calculateProportionalPoints(10, 0, 30), 0);
 });
 
-test('student execution awards one point for every completed repetition', () => {
+test('repetition earns five points once regardless of the historical count', () => {
   assert.deepEqual(calculateStudentExecutionPoints({
     taskType: 'memorization',
     track: 'memorization',
@@ -22,14 +22,14 @@ test('student execution awards one point for every completed repetition', () => 
     settings: { memorizationEvaluationMaxScore: 10 },
   }), {
     taskPoints: 0,
-    repeatPoints: 27,
+    repeatPoints: 5,
     listeningPoints: 0,
-    total: 27,
+    total: 5,
     label: 'الحفظ والتكرار والسماع',
   });
 });
 
-test('each completed listening earns its configured ten points', () => {
+test('each practice uses its configured score once', () => {
   assert.deepEqual(calculateStudentExecutionPoints({
     taskType: 'memorization',
     track: 'memorization',
@@ -44,14 +44,14 @@ test('each completed listening earns its configured ten points', () => {
     },
   }), {
     taskPoints: 0,
-    repeatPoints: 30,
-    listeningPoints: 20,
-    total: 50,
+    repeatPoints: 1,
+    listeningPoints: 10,
+    total: 11,
     label: 'الحفظ والتكرار والسماع',
   });
 });
 
-test('Nazem repetition rewards every selected repetition and listening only once for yes', () => {
+test('Nazem repetition and listening both reward yes once', () => {
   assert.deepEqual(calculateStudentExecutionPoints({
     taskType: 'memorization',
     track: 'memorization',
@@ -65,9 +65,9 @@ test('Nazem repetition rewards every selected repetition and listening only once
     },
   }), {
     taskPoints: 0,
-    repeatPoints: 30,
+    repeatPoints: 1,
     listeningPoints: 10,
-    total: 40,
+    total: 11,
     label: 'الحفظ والتكرار والسماع',
   });
 });
@@ -95,4 +95,18 @@ test('proportional Quran points are always whole numbers', () => {
 
   assert.equal(points, 2);
   assert.equal(Number.isInteger(points), true);
+});
+
+
+test('yes/no practice awards are independent across both tracks', () => {
+  for (const track of ['memorization', 'mastery']) {
+    for (const repeat of [0, 1, 10, 30]) {
+      for (const listening of [0, 1, 3]) {
+        const reward = calculateStudentExecutionPoints({ taskType: 'memorization', track,
+          completedRepeatCount: repeat, completedListeningCount: listening });
+        assert.equal(reward.repeatPoints, repeat > 0 ? 5 : 0);
+        assert.equal(reward.listeningPoints, listening > 0 ? 5 : 0);
+      }
+    }
+  }
 });

@@ -1,3 +1,4 @@
+import { selectedNazemPlanCandidateIds } from '../../shared/nazem-import-selection.js';
 import { loadNazemReconciliationReport } from '../services/nazemReconciliationReport.js';
 import crypto from 'node:crypto';
 import express from 'express';
@@ -474,6 +475,8 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
           COALESCE(student.name, teacher.name) AS studentName,
           NULL AS circleName, NULL AS planExternalId,
           job.last_error_code AS errorCode, job.last_error AS message,
+          job.operation_type AS operationType,
+          COALESCE(JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.taskDate')), JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.date'))) AS taskDate,
           DATE_FORMAT(job.updated_at, '%Y-%m-%d %H:%i') AS lastSeenAt
          FROM nazem_sync_jobs job
          JOIN supervisors teacher ON teacher.id = job.teacher_id
@@ -1000,7 +1003,7 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
       const newCommitteeName = cleanCommitteeName(req.body.newCommitteeName);
       const importMode = String(req.body.importMode || 'with_plans');
       const selections = Array.isArray(req.body.selections) ? req.body.selections : [];
-      if (importMode !== 'with_plans') throw invalid('يسمح باستيراد الطلاب ذوي الخطط فقط؛ حدّث الصفحة.');
+      if (!['with_plans', 'selected'].includes(importMode)) throw invalid('طريقة الاستيراد غير صحيحة.');
       assertImportCommitteeChoice(requestedCommitteeId, newCommitteeName);
       if (!selections.length || selections.length > 200) throw invalid('اختر طالبًا واحدًا على الأقل للاستيراد.');
       const { candidateIds, normalizedSelections } = normalizeImportSelections(selections);
@@ -1043,7 +1046,7 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
       );
       if (candidateRows.length !== candidateIds.length) throw invalid('بعض طلاب ناظم لم تعد متاحة؛ حدّث المعاينة.');
       const candidates = new Map(candidateRows.map((candidate) => [Number(candidate.id), candidate]));
-      await assertSelectedNazemPlans(importMode, connection, candidateIds, teacherId, normalizedSelections);
+      await assertSelectedNazemPlans(importMode, connection, teacherId, normalizedSelections);
       const externalIds = candidateRows.map((candidate) => String(candidate.nazemStudentId || ''));
       if (externalIds.some((externalId) => !isNazemExternalStudentId(externalId))
         || new Set(externalIds).size !== externalIds.length) {
@@ -1435,7 +1438,9 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
           event.operation_type AS operationType,
           JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.taskType')) AS taskType,
           JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.track')) AS track,
-          JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.taskDate')) AS taskDate,
+          COALESCE(JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.taskDate')), JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.date'))) AS taskDate,
+          job.teacher_id AS teacherId, job.student_id AS studentId,
+          JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.planId')) AS planId,
           event.status, event.attempt_number AS attemptNumber,
           JSON_UNQUOTE(JSON_EXTRACT(event.metadata_json, '$.alreadyRecorded')) AS alreadyRecorded,
           JSON_UNQUOTE(JSON_EXTRACT(event.metadata_json, '$.authoritative')) AS authoritative,
@@ -1453,7 +1458,9 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
           job.operation_type AS operationType, job.status,
           JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.taskType')) AS taskType,
           JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.track')) AS track,
-          JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.taskDate')) AS taskDate,
+          COALESCE(JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.taskDate')), JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.date'))) AS taskDate,
+          job.teacher_id AS teacherId, job.student_id AS studentId,
+          JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.planId')) AS planId,
           job.attempt_count AS attemptNumber, job.last_error_code AS errorCode,
           job.last_error AS message,
           (SELECT JSON_UNQUOTE(JSON_EXTRACT(latest.metadata_json, '$.alreadyRecorded'))
@@ -1468,6 +1475,11 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
          JOIN supervisors teacher ON teacher.id = job.teacher_id
          LEFT JOIN students student ON student.id = job.student_id
          WHERE job.status IN ('pending','syncing','retrying','blocked','failed','requires_review','conflict','synced')
+           AND NOT EXISTS (
+             SELECT 1 FROM nazem_sync_jobs newer WHERE newer.teacher_id = job.teacher_id
+               AND newer.operation_type = job.operation_type AND newer.entity_type = job.entity_type
+               AND newer.entity_id <=> job.entity_id AND newer.id > job.id
+           )
          ORDER BY CASE job.status
            WHEN 'conflict' THEN 0 WHEN 'requires_review' THEN 1 WHEN 'failed' THEN 2
            WHEN 'retrying' THEN 3 WHEN 'syncing' THEN 4 WHEN 'pending' THEN 5
@@ -1841,9 +1853,10 @@ async function ignoreRemotePlanConflict(connection, conflict) {
   );
 }
 
-/** Require an importable remote plan for every selected candidate. */
-async function assertSelectedNazemPlans(importMode, connection, candidateIds, teacherId, normalizedSelections) {
-  if (importMode === 'with_plans') {
+/** Validate every requested plan; student-only selections need no plan. */
+async function assertSelectedNazemPlans(importMode, connection, teacherId, normalizedSelections) {
+  const planCandidateIds = selectedNazemPlanCandidateIds(importMode, normalizedSelections);
+  if (planCandidateIds.length) {
     const [plannedCandidates] = await connection.query(
       `SELECT DISTINCT studentCandidate.id AS candidateId
            FROM nazem_student_candidates studentCandidate
@@ -1852,12 +1865,13 @@ async function assertSelectedNazemPlans(importMode, connection, candidateIds, te
             AND planCandidate.nazem_student_id = studentCandidate.nazem_student_id
             AND planCandidate.discovery_status IN ('discovered', 'requires_review')
            WHERE studentCandidate.teacher_id = ?
-             AND studentCandidate.id IN (${candidateIds.map(() => '?').join(', ')})`,
-      [teacherId, ...candidateIds]
+             AND studentCandidate.id IN (${planCandidateIds.map(() => '?').join(', ')})`,
+      [teacherId, ...planCandidateIds]
     );
     const plannedCandidateIds = new Set(plannedCandidates.map((row) => Number(row.candidateId)));
     if (normalizedSelections.some((selection) => (
-      !plannedCandidateIds.has(selection.candidateId) || !selection.importPlan
+      (importMode === 'with_plans' || selection.importPlan)
+      && (!plannedCandidateIds.has(selection.candidateId) || !selection.importPlan)
     ))) {
       throw invalid('استيراد الطلاب ذوي الخطط يقبل فقط طالبًا لديه خطة ناظم قابلة للاستيراد.');
     }
@@ -1953,6 +1967,9 @@ async function importSelectedNazemStudents({ normalizedSelections, candidates, c
 
 /** Keep, match or create only the requested student, retaining committee and login uniqueness checks. */
 async function resolveImportedStudent({ selection, candidate, student, connection, summary, committee, usedLoginNumbers, profile }) {
+  if (candidate.linkedStudentId && selection.action !== 'keep') {
+    throw invalid(`الطالب ${candidate.nazemStudentName} مرتبط بالفعل؛ حدّث المعاينة قبل الاستيراد.`);
+  }
   if (selection.action === 'keep') {
     if (!candidate.linkedStudentId) throw invalid(`الطالب ${candidate.nazemStudentName} غير مرتبط بعد.`);
     [[student]] = await connection.query(

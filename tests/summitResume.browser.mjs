@@ -24,6 +24,11 @@ try {
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => globalThis.summitResume.saved === 120, { timeout: 5000 });
     await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    assert.equal(await page.locator('.qassim-road-station-board').count(), 1, 'student road retains the remaining-distance board');
+    await page.getByLabel('عرض خريطة القصيم من الأعلى').click();
+    assert.equal(await page.locator('.qassim-road-station-board').count(), 0, 'student overview map hides the board');
+    await page.getByLabel('العودة إلى منظور الطريق').click();
+    assert.equal(await page.locator('.qassim-road-station-board').count(), 1, 'returning to the road restores the board');
     assert.ok(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth));
     await page.screenshot({ path: `outputs/summit-resume-${width}.png`, fullPage: true });
     assert.deepEqual(errors, []);

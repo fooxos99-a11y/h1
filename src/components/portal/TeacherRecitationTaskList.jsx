@@ -45,10 +45,8 @@ const TeacherRecitationTaskList = ({
   teacherExecutionMode = false,
   teacherAttendanceMode = false,
   recitationAttendanceSource = 'teacher',
-  allowRepeatCountEditing = false,
   listeningEnabled = false,
   listeningCount = 3,
-  allowListeningCountEditing = false,
   executionSources,
   showMarks = false,
   showAmounts = true,
@@ -151,20 +149,14 @@ const TeacherRecitationTaskList = ({
           const nazemSubmissionLocked = nazemManaged
             && action.tasks.some((task) => task.nazemSubmissionLocked);
           const repeatClaimedByStudent = action.tasks[0]?.repeatExecutionActorRole === 'student';
-          const defaultRepeatCount = Math.min(nazemManaged ? 30 : Number.MAX_SAFE_INTEGER, Math.max(1, Number(
-            !nazemManaged && repeatClaimedByStudent
-              ? action.tasks[0]?.actualRepeatCount
-              : action.tasks[0]?.expectedRepeatCount,
-          ) || 1));
+          const defaultRepeatCount = Number((!nazemManaged && repeatClaimedByStudent
+            ? action.tasks[0]?.actualRepeatCount
+            : action.tasks[0]?.expectedRepeatCount) ?? 1);
           const _resolveDefaultListeningCount = () => {
-            if (nazemManaged) {
-              return 1;
-            }
-            return Math.max(1, Number(
-              repeatClaimedByStudent
-                ? action.tasks[0]?.actualListeningCount
-                : action.tasks[0]?.expectedListeningCount || listeningCount,
-            ) || 1);
+            if (nazemManaged) return 1;
+            return Number((repeatClaimedByStudent
+              ? action.tasks[0]?.actualListeningCount
+              : action.tasks[0]?.expectedListeningCount ?? listeningCount) ?? 1);
           };
           const defaultListeningCount = _resolveDefaultListeningCount();
           const actionAmount = action.empty ? 'لا يوجد محفوظ للربط' : formatContinuousRecitationRange(action.tasks);
@@ -210,26 +202,15 @@ const TeacherRecitationTaskList = ({
             : null;
           const repeatEditable = teacherExecutionMode && (nazemManaged || ['teacher', 'both'].includes(executionSources?.repeat || 'teacher')) && action.key === 'saved';
           const repeatControl = action.key === 'saved' ? (
-            <RepeatCountSelector label="" editable={repeatEditable && (nazemManaged || (allowRepeatCountEditing && !repeatClaimedByStudent))}
-              max={Number(action.tasks[0]?.expectedRepeatCount || 1)} optionMax={nazemManaged ? 30 : undefined}
-              ariaLabel={`عدد تكرارات حفظ ${student.studentName}`} value={selectedRepeatCounts[actionKey] ?? defaultRepeatCount}
+            <RepeatCountSelector label="" editable={repeatEditable && (nazemManaged || !repeatClaimedByStudent)}
+              ariaLabel={`هل كرر ${student.studentName}؟`} value={selectedRepeatCounts[actionKey] ?? defaultRepeatCount}
               onChange={(value) => setSelectedRepeatCounts((current) => ({ ...current, [actionKey]: value }))} compact />
           ) : null;
-          const _resolveListeningControl = () => {
-            if (action.key === 'saved' && listeningEnabled) {
-              if (nazemManaged) {
-                return <ListeningChoice label="" value={selectedListeningCounts[actionKey] ?? defaultListeningCount}
-              disabled={!repeatEditable} ariaLabel={`هل استمع ${student.studentName}؟`}
-              onChange={(value) => updateListeningCount(actionKey, value)} compact />;
-              }
-              return <RepeatCountSelector label="" editable={repeatEditable && allowListeningCountEditing && !repeatClaimedByStudent}
-              max={Number(action.tasks[0]?.expectedListeningCount || listeningCount || 3)} ariaLabel={`عدد مرات سماع ${student.studentName}`}
-              value={selectedListeningCounts[actionKey] ?? defaultListeningCount}
-              onChange={(value) => updateListeningCount(actionKey, value)} compact />;
-            }
-            return null;
-          };
-          const listeningControl = _resolveListeningControl();
+          const listeningControl = action.key === 'saved' && listeningEnabled ? (
+            <ListeningChoice label="" value={selectedListeningCounts[actionKey] ?? defaultListeningCount}
+              disabled={!repeatEditable || (!nazemManaged && repeatClaimedByStudent)} ariaLabel={`هل استمع ${student.studentName}؟`}
+              onChange={(value) => updateListeningCount(actionKey, value)} compact />
+          ) : null;
           return {
             action,
             actionKey,

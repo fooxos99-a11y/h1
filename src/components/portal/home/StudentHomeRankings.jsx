@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import SectionTabs from '@/components/ui/section-tabs';
-import LoadingSpinner from '@/components/ui/loading-spinner';
+import LoadingIndicator from '@/components/ui/loading-indicator';
 import StudentRankingList from './StudentRankingList';
 import { loadStudentHomeRankings } from '@/services/studentHomeService';
 import StudentHomeStatus from './StudentHomeStatus';
@@ -34,7 +34,7 @@ export default function StudentHomeRankings({ studentId, onReady }) {
       return retry;
     }
     if (!state) {
-      return <div className="student-home-loading"><LoadingSpinner /></div>;
+      return <div className="student-home-loading"><LoadingIndicator /></div>;
     }
     return <>
       <SectionTabs className="student-home-rank-mobile" items={items} value={selected} onChange={setTab} label="الترتيب">{panel(selected)}</SectionTabs>
