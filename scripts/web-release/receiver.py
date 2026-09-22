@@ -4,6 +4,7 @@ The deploy key has no shell, forwarding, or database access. Releases never repl
 runtime data. Database migrations require an independent reviewed release.
 """
 import hashlib
+from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -15,6 +16,7 @@ import tarfile
 import tempfile
 import time
 import urllib.request
+from urllib.parse import urljoin, urlparse
 
 ROOTS = {'server', 'shared', 'src', 'scripts', 'config', 'public', 'dist'}
 FILES = {'package.json', 'package-lock.json', 'index.html', 'vite.config.js',
@@ -125,6 +127,41 @@ def wait_for_health(url):
             time.sleep(1)
 
 
+class Assets(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.urls = []
+
+    def handle_starttag(self, tag, attributes):
+        attrs = dict(attributes)
+        if tag == 'script' and attrs.get('src'):
+            self.urls.append(attrs['src'])
+        if tag == 'link' and attrs.get('rel') in {'stylesheet', 'modulepreload'}:
+            self.urls.append(attrs['href'])
+
+
+def fetch(url):
+    request = urllib.request.Request(url, headers={'Cache-Control': 'no-cache'})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return response.read()
+
+
+def verify_public_files(release, config):
+    for target in config['public_checks']:
+        base, folder = target['url'], release / target['directory']
+        html = fetch(base + '?release=' + release.name)
+        html = re.sub(rb'<script\b[^>]*src="https://static\.cloudflareinsights\.com/beacon\.min\.js/[^\"]+"[^>]*></script>\s*', b'', html)
+        if html != (folder / 'index.html').read_bytes():
+            raise RuntimeError('Published HTML does not match release')
+        parser = Assets()
+        parser.feed(html.decode())
+        for asset in parser.urls:
+            url = urljoin(base, asset)
+            relative = urlparse(url).path.removeprefix(urlparse(base).path)
+            if fetch(url) != (folder / relative).read_bytes():
+                raise RuntimeError('Published asset does not match release')
+
+
 def activate(release, config):
     current = Path(config['current'])
     previous = current.resolve(strict=True)
@@ -140,12 +177,26 @@ def activate(release, config):
         for name in services:
             if not any(p['name'] == name and p['pm2_env']['status'] == 'online' for p in live):
                 raise RuntimeError('Service did not start')
+        verify_public_files(release, config)
         (release / 'previous-release.txt').write_text(str(previous))
     except Exception:
         if current.resolve() != previous:
             switch(current, previous)
         run(['pm2', 'restart', *services, '--update-env'])
         raise
+
+
+def prune_releases(config, current):
+    root = Path(config['release_root']).resolve(strict=True)
+    previous = Path((current / 'previous-release.txt').read_text()).resolve(strict=True)
+    protected = [current, previous, Path(config['runtime_source']).resolve(), Path(config['env_source']).resolve()]
+    for candidate in root.iterdir():
+        if not re.fullmatch(r'github-\d{8}-\d{6}-[a-f0-9]{12}', candidate.name) or candidate.is_symlink():
+            continue
+        if any(path == candidate or candidate in path.parents for path in protected):
+            continue
+        if candidate.is_dir() and (candidate / 'github-release.json').is_file():
+            shutil.rmtree(candidate)
 
 
 def deploy(config, sha, digest):
@@ -163,6 +214,7 @@ def deploy(config, sha, digest):
         (release / 'github-release.json').write_text(json.dumps({'sha': sha, 'sha256': digest}))
         activate(release, config)
         print('DEPLOYED', sha, flush=True)
+        prune_releases(config, release)
 
 
 def main():
