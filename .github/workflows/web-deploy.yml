@@ -53,4 +53,4 @@ jobs:
           printf '%s\n' "$WEB_SSH_PRIVATE_KEY" > "$key"
           printf '%s\n' "$WEB_SSH_KNOWN_HOSTS" > "$hosts"
           digest=$(sha256sum "$RUNNER_TEMP/web-release.tar.gz" | cut -d ' ' -f 1)
-          ssh -T -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$hosts" "$WEB_SSH_DESTINATION" "deploy $GITHUB_SHA $digest" < "$RUNNER_TEMP/web-release.tar.gz"
+          ssh -T -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$hosts" "$WEB_SSH_DESTINATION" "deploy $GITHUB_SHA $digest" < "$RUNNER_TEMP/web-release.tar.gz"

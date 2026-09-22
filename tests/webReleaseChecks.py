@@ -6,7 +6,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 spec = importlib.util.spec_from_file_location('receiver', Path(__file__).resolve().parents[1] / 'scripts/web-release/receiver.py')
 receiver = importlib.util.module_from_spec(spec)
@@ -14,6 +14,28 @@ spec.loader.exec_module(receiver)
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_asset_probe_rejects_external_urls_and_path_escape(self):
+        with patch.object(receiver.http.client, 'HTTPSConnection') as opener:
+            for path in ['https://evil.test/file', '//evil.test/file', '../private', 'assets/%2e%2e/private', '/private']:
+                with self.assertRaises(ValueError):
+                    receiver.fetch('https://example.test/', path)
+            opener.assert_not_called()
+        with patch.object(receiver.http.client, 'HTTPSConnection') as connection:
+            connection.return_value.getresponse.return_value.status = 302
+            with self.assertRaises(ValueError):
+                receiver.fetch('https://example.test/')
+            connection.assert_called_once_with('example.test', None, timeout=30)
+
+    def test_health_uses_release_identity_for_edge_filtering(self):
+        response = MagicMock()
+        response.status = 200
+        response.read.return_value = b'{"ok":true}'
+        with patch.object(receiver.http.client, 'HTTPSConnection') as connection:
+            connection.return_value.getresponse.return_value = response
+            receiver.health('https://example.test/api/health')
+            headers = connection.return_value.request.call_args.kwargs['headers']
+            self.assertEqual(headers['User-Agent'], 'AlhabibMap-Release-Verification')
+
     def test_command_is_not_a_shell(self):
         self.assertEqual(receiver.command('deploy ' + 'a' * 40 + ' ' + 'b' * 64), ('a' * 40, 'b' * 64))
         for command in ['bash', 'deploy ../../bad x', 'deploy ' + 'a' * 40 + ' ' + 'b' * 64 + ';id']:

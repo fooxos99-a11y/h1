@@ -4,6 +4,7 @@ The deploy key has no shell, forwarding, or database access. Releases never repl
 runtime data. Database migrations require an independent reviewed release.
 """
 import hashlib
+import http.client
 from html.parser import HTMLParser
 import json
 import os
@@ -15,11 +16,11 @@ import sys
 import tarfile
 import tempfile
 import time
-import urllib.request
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 ROOTS = {'server', 'shared', 'src', 'scripts', 'config', 'public', 'dist'}
-FILES = {'package.json', 'package-lock.json', 'index.html', 'vite.config.js',
+INDEX_FILE = 'index.html'
+FILES = {'package.json', 'package-lock.json', INDEX_FILE, 'vite.config.js',
          'tailwind.config.js', 'postcss.config.js'}
 
 
@@ -105,9 +106,8 @@ def prepare_dependencies(release, config):
 
 
 def health(url):
-    with urllib.request.urlopen(url, timeout=15) as response:
-        if response.status != 200 or not json.load(response).get('ok'):
-            raise RuntimeError('Health check failed')
+    if not json.loads(fetch(url)).get('ok'):
+        raise RuntimeError('Health check failed')
 
 
 def switch(current, target):
@@ -140,25 +140,43 @@ class Assets(HTMLParser):
             self.urls.append(attrs['href'])
 
 
-def fetch(url):
-    request = urllib.request.Request(url, headers={'Cache-Control': 'no-cache'})
-    with urllib.request.urlopen(request, timeout=30) as response:
+def fetch(base, relative=''):
+    # The origin comes only from server-owned configuration, never HTML content.
+    if relative and (not re.fullmatch(r'[A-Za-z0-9_./-]+', relative) or '..' in relative or relative.startswith('/')):
+        raise ValueError('Invalid asset path')
+    origin = urlparse(base)
+    if origin.scheme not in {'http', 'https'} or not origin.hostname or origin.username:
+        raise ValueError('Invalid configured website origin')
+    connection_type = http.client.HTTPSConnection if origin.scheme == 'https' else http.client.HTTPConnection
+    connection = connection_type(origin.hostname, origin.port, timeout=30)
+    try:
+        path = origin.path + relative
+        if not relative:
+            path += '?release=' + str(time.time_ns())
+        connection.request('GET', path, headers={'Cache-Control': 'no-cache', 'User-Agent': 'AlhabibMap-Release-Verification'})
+        response = connection.getresponse()
+        if response.status != 200:
+            raise ValueError('Asset probe failed; redirects are not followed')
         return response.read()
+    finally:
+        connection.close()
 
 
 def verify_public_files(release, config):
     for target in config['public_checks']:
         base, folder = target['url'], release / target['directory']
-        html = fetch(base + '?release=' + release.name)
+        html = fetch(base)
         html = re.sub(rb'<script\b[^>]*src="https://static\.cloudflareinsights\.com/beacon\.min\.js/[^\"]+"[^>]*></script>\s*', b'', html)
-        if html != (folder / 'index.html').read_bytes():
+        if html != (folder / INDEX_FILE).read_bytes():
             raise RuntimeError('Published HTML does not match release')
         parser = Assets()
-        parser.feed(html.decode())
+        parser.feed((folder / INDEX_FILE).read_text())
         for asset in parser.urls:
-            url = urljoin(base, asset)
-            relative = urlparse(url).path.removeprefix(urlparse(base).path)
-            if fetch(url) != (folder / relative).read_bytes():
+            parsed = urlparse(asset)
+            if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
+                raise ValueError('Only local built assets can be verified')
+            relative = parsed.path.removeprefix(urlparse(base).path)
+            if fetch(base, relative) != (folder / relative).read_bytes():
                 raise RuntimeError('Published asset does not match release')
 
 
@@ -206,11 +224,14 @@ def deploy(config, sha, digest):
         release = Path(config['release_root']) / ('github-' + time.strftime('%Y%m%d-%H%M%S') + '-' + sha[:12])
         release.mkdir()
         unpack(archive, release)
+        print('PACKAGE_VERIFIED', flush=True)
         (release / '.env').symlink_to(Path(config['env_source']).resolve(strict=True))
         (release / 'runtime').symlink_to(Path(config['runtime_source']).resolve(strict=True))
         prepare_dependencies(release, config)
+        print('DEPENDENCIES_VERIFIED', flush=True)
         # Use server-owned preflight, not code supplied by the archive.
         run(['node', config['preflight'], str(release), config['config_path']])
+        print('PREFLIGHT_PASSED', flush=True)
         (release / 'github-release.json').write_text(json.dumps({'sha': sha, 'sha256': digest}))
         activate(release, config)
         print('DEPLOYED', sha, flush=True)
@@ -225,7 +246,11 @@ def main():
     sha, digest = command(os.environ.get('SSH_ORIGINAL_COMMAND', ''))
     with config_path.with_suffix('.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        deploy(config, sha, digest)
+        try:
+            deploy(config, sha, digest)
+        except Exception as error:
+            config_path.with_suffix('.error').write_text(type(error).__name__ + ': ' + str(error))
+            raise
 
 
 if __name__ == '__main__':
