@@ -105,7 +105,8 @@ def prepare_dependencies(release, config):
 
 
 def health(url):
-    with urllib.request.urlopen(url, timeout=15) as response:
+    request = urllib.request.Request(url, headers={'User-Agent': 'AlhabibMap-Release-Verification'})
+    with urllib.request.urlopen(request, timeout=15) as response:
         if response.status != 200 or not json.load(response).get('ok'):
             raise RuntimeError('Health check failed')
 
@@ -141,7 +142,7 @@ class Assets(HTMLParser):
 
 
 def fetch(url):
-    request = urllib.request.Request(url, headers={'Cache-Control': 'no-cache'})
+    request = urllib.request.Request(url, headers={'Cache-Control': 'no-cache', 'User-Agent': 'AlhabibMap-Release-Verification'})
     with urllib.request.urlopen(request, timeout=30) as response:
         return response.read()
 
@@ -206,11 +207,14 @@ def deploy(config, sha, digest):
         release = Path(config['release_root']) / ('github-' + time.strftime('%Y%m%d-%H%M%S') + '-' + sha[:12])
         release.mkdir()
         unpack(archive, release)
+        print('PACKAGE_VERIFIED', flush=True)
         (release / '.env').symlink_to(Path(config['env_source']).resolve(strict=True))
         (release / 'runtime').symlink_to(Path(config['runtime_source']).resolve(strict=True))
         prepare_dependencies(release, config)
+        print('DEPENDENCIES_VERIFIED', flush=True)
         # Use server-owned preflight, not code supplied by the archive.
         run(['node', config['preflight'], str(release), config['config_path']])
+        print('PREFLIGHT_PASSED', flush=True)
         (release / 'github-release.json').write_text(json.dumps({'sha': sha, 'sha256': digest}))
         activate(release, config)
         print('DEPLOYED', sha, flush=True)
@@ -225,7 +229,11 @@ def main():
     sha, digest = command(os.environ.get('SSH_ORIGINAL_COMMAND', ''))
     with config_path.with_suffix('.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        deploy(config, sha, digest)
+        try:
+            deploy(config, sha, digest)
+        except Exception as error:
+            config_path.with_suffix('.error').write_text(type(error).__name__ + ': ' + str(error))
+            raise
 
 
 if __name__ == '__main__':

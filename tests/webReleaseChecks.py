@@ -6,7 +6,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 spec = importlib.util.spec_from_file_location('receiver', Path(__file__).resolve().parents[1] / 'scripts/web-release/receiver.py')
 receiver = importlib.util.module_from_spec(spec)
@@ -14,6 +14,16 @@ spec.loader.exec_module(receiver)
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_health_uses_release_identity_for_edge_filtering(self):
+        response = MagicMock()
+        response.status = 200
+        response.read.return_value = b'{"ok":true}'
+        with patch.object(receiver.urllib.request, 'urlopen') as open_url:
+            open_url.return_value.__enter__.return_value = response
+            receiver.health('https://example.test/api/health')
+            request = open_url.call_args.args[0]
+            self.assertEqual(request.get_header('User-agent'), 'AlhabibMap-Release-Verification')
+
     def test_command_is_not_a_shell(self):
         self.assertEqual(receiver.command('deploy ' + 'a' * 40 + ' ' + 'b' * 64), ('a' * 40, 'b' * 64))
         for command in ['bash', 'deploy ../../bad x', 'deploy ' + 'a' * 40 + ' ' + 'b' * 64 + ';id']:
