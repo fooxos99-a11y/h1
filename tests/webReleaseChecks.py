@@ -14,6 +14,89 @@ spec.loader.exec_module(receiver)
 
 
 class ReleaseTests(unittest.TestCase):
+    def write_config(self, root):
+        control = root / 'shared' / 'github-deploy'
+        control.mkdir(parents=True)
+        config = {
+            'release_root': str(root / 'releases'),
+            'dependency_cache': str(root / 'shared' / 'dependencies'),
+            'current': str(root / 'current'),
+            'preflight': str(control / 'preflight.mjs'),
+            'runtime_source': str(root / 'releases' / 'legacy' / 'runtime'),
+            'env_source': str(control / 'runtime.env'),
+            'services': ['api', 'worker'],
+        }
+        path = control / 'config.json'
+        path.write_text(json.dumps(config))
+        return path, config
+
+    def test_config_binds_authority_to_receiver_installation(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            path, expected = self.write_config(root)
+            loaded = receiver.load_config(path)
+            self.assertEqual(loaded, {**expected, 'config_path': str(path)})
+            for field in ('release_root', 'dependency_cache', 'current', 'preflight', 'runtime_source', 'env_source'):
+                with self.subTest(field=field):
+                    path.write_text(json.dumps({**expected, field: str(root.parent / 'outside')}))
+                    with self.assertRaises(ValueError):
+                        receiver.load_config(path)
+
+    def test_config_rejects_malformed_and_linked_paths(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            path, config = self.write_config(root)
+            for value in [None, 3, {}, '/tmp/../secret', '/tmp/./file', '/tmp/file\x00', '/tmp/file;id']:
+                with self.subTest(value=value):
+                    with self.assertRaises(ValueError):
+                        receiver.configured_path(value)
+            with patch.object(Path, 'is_symlink', return_value=True):
+                with self.assertRaises(ValueError):
+                    receiver.load_config(path)
+            for services in [[], '--all', ['--all'], ['api;id'], ['../api']]:
+                path.write_text(json.dumps({**config, 'services': services}))
+                with self.assertRaises(ValueError):
+                    receiver.load_config(path)
+
+    def test_config_rejects_linked_release_or_dependency_roots(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            path, config = self.write_config(root)
+            original = Path.is_symlink
+            for field in ('release_root', 'dependency_cache', 'runtime_source', 'env_source'):
+                linked = Path(config[field])
+                with patch.object(Path, 'is_symlink', lambda value: value == linked or original(value)):
+                    with self.assertRaises(ValueError):
+                        receiver.load_config(path)
+
+    def test_operations_reject_options_and_never_execute_arbitrary_scripts(self):
+        with patch.object(receiver.subprocess, 'run') as execute:
+            for operation, services in [('stop', ['--all']), ('restart', ['api;id']), ('restart', []), ('stop', 'api'), ('shell', [])]:
+                with self.assertRaises(ValueError):
+                    receiver.run(operation, services=services)
+            execute.assert_not_called()
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            control = root / 'shared' / 'github-deploy'
+            control.mkdir(parents=True)
+            releases = root / 'releases'
+            releases.mkdir()
+            release = releases / 'github-20260924-120000-aaaaaaaaaaaa'
+            with patch.object(receiver, '__file__', str(control / 'receiver.py')), patch.object(receiver.shutil, 'which', return_value='/usr/bin/node'), patch.object(receiver.subprocess, 'run') as execute:
+                execute.return_value.returncode = 0
+                receiver.run('preflight', release=release)
+                self.assertEqual(execute.call_args.args[0], ['/usr/bin/node', str(control / 'preflight.mjs'), str(release), str(control / 'config.json')])
+                execute.reset_mock()
+                with self.assertRaises(ValueError):
+                    receiver.run('preflight', release=root / release.name)
+                execute.assert_not_called()
+
+    def test_dependency_operation_preserves_script_blocking(self):
+        with patch.object(receiver.shutil, 'which', return_value='/usr/bin/npm'), patch.object(receiver.subprocess, 'run') as execute:
+            execute.return_value.returncode = 0
+            receiver.run('dependencies')
+            self.assertEqual(execute.call_args.args[0], ['/usr/bin/npm', 'ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund'])
+
     def test_beacon_filter_preserves_application_html_exactly(self):
         prefix = '<html>مرحبا\r\n<script src="/assets/app.js"></script>\n'.encode('utf-8')
         beacon = b'<script defer src="https://static.cloudflareinsights.com/beacon.min.js/abc" data-token="test"></script>\r\n  '
@@ -99,7 +182,8 @@ class ReleaseTests(unittest.TestCase):
                     receiver.activate(release, config)
                 self.assertEqual(current.resolve(), previous)
                 self.assertEqual(switch.call_count, 2)
-                self.assertEqual(run.call_args.args[0], ['pm2', 'restart', 'api', 'worker', '--update-env'])
+                self.assertEqual(run.call_args.args[0], 'restart')
+                self.assertEqual(run.call_args.kwargs['services'], ['api', 'worker'])
 
     def test_cleanup_retains_current_previous_and_runtime_owner(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -175,7 +259,7 @@ class ReleaseTests(unittest.TestCase):
             execute.assert_not_called()
         with patch.object(receiver.shutil, 'which', return_value='/usr/bin/pm2'), patch.object(receiver.subprocess, 'run') as execute:
             execute.return_value.returncode = 0
-            receiver.run(['pm2', 'restart', 'api', 'worker', '--update-env'])
+            receiver.run('restart', services=['api', 'worker'])
             self.assertFalse(execute.call_args.kwargs['shell'])
             self.assertEqual(execute.call_args.args[0], ['/usr/bin/pm2', 'restart', 'api', 'worker', '--update-env'])
 
@@ -188,7 +272,7 @@ class ReleaseTests(unittest.TestCase):
                 (release / name).write_text('{}')
             with patch.object(receiver, 'run') as run, patch.object(Path, 'symlink_to'):
                 receiver.prepare_dependencies(release, {'release_root': str(root), 'dependency_cache': str(root / 'cache')})
-            self.assertEqual(run.call_args_list[0].args[0], ['npm', 'ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund'])
+            self.assertEqual(run.call_args_list[0].args[0], 'dependencies')
 
     def test_unpack_preserves_approved_files_and_rejects_linked_parent(self):
         with tempfile.TemporaryDirectory() as folder:

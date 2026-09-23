@@ -34,10 +34,48 @@ def checked_token(value, pattern):
 
 
 def configured_path(value):
+    if not isinstance(value, (str, Path)) or not re.fullmatch(r'(?:/[A-Za-z0-9_.-]+)+|[A-Za-z]:[\\/][A-Za-z0-9_./\\-]+', str(value)):
+        raise ValueError('Invalid configured path')
+    if any(part in {'.', '..'} for part in re.split(r'[/\\]', str(value))):
+        raise ValueError('Invalid configured path')
     path = Path(value)
-    if not path.is_absolute() or '..' in path.parts:
+    if not path.is_absolute() or any(part in {'.', '..'} for part in path.parts):
         raise ValueError('Invalid configured path')
     return path
+
+
+def load_config(config_path):
+    """Bind deployment authority to the installed receiver, not JSON-selected roots."""
+    control = config_path.parent.resolve(strict=True)
+    if control.name != 'github-deploy' or control.parent.name != 'shared':
+        raise ValueError('Invalid receiver installation directory')
+    root = control.parent.parent
+    if config_path.is_symlink():
+        raise ValueError('Linked deployment configuration is prohibited')
+    raw = json.loads(config_path.read_text())
+    if not isinstance(raw, dict):
+        raise ValueError('Expected deployment configuration object')
+    fixed_paths = {
+        'release_root': root / 'releases',
+        'dependency_cache': root / 'shared' / 'dependencies',
+        'current': root / 'current',
+        'preflight': control / 'preflight.mjs',
+    }
+    config = dict(raw)
+    for key, expected in fixed_paths.items():
+        if configured_path(raw.get(key)) != expected:
+            raise ValueError('Deployment configuration does not match installation')
+        if key != 'current':
+            inside(root, expected)
+        config[key] = str(expected)
+    for key in ('runtime_source', 'env_source'):
+        config[key] = str(inside(root, configured_path(raw.get(key))))
+    services = raw.get('services')
+    if not isinstance(services, list) or not services:
+        raise ValueError('Missing deployment services')
+    config['services'] = [checked_token(name, r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}') for name in services]
+    config['config_path'] = str(control / 'config.json')
+    return config
 
 
 def inside(root, value):
@@ -88,28 +126,31 @@ def validate_member(member):
         raise ValueError('Native downloads are managed independently')
 
 
-def run(args, cwd=None):
-    # No caller-selected command, option, JavaScript expression or shell expansion.
-    fixed = [
-        ['npm', 'ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund'],
-        ['npx', '--no-install', 'playwright', 'install', 'chromium'],
-        ['node', '--input-type=module', '-e', BROWSER_CHECK],
-        ['pm2', 'jlist'],
-    ]
-    if args not in fixed:
-        if len(args) >= 3 and args[:2] in (['pm2', 'stop'], ['pm2', 'restart']):
-            names = args[2:-1] if args[1] == 'restart' and args[-1] == '--update-env' else args[2:]
-            if not names:
-                raise ValueError('Missing service names')
-            for name in names:
-                checked_token(name, r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}')
-        elif len(args) == 4 and args[0] == 'node':
-            script, release, config = map(configured_path, args[1:])
-            if script.name != 'preflight.mjs' or config.name != 'config.json' or script.parent != config.parent:
-                raise ValueError('Invalid preflight command')
-            checked_token(release.name, RELEASE_NAME)
-        else:
-            raise ValueError('Unapproved deployment command')
+def run(operation, cwd=None, *, services=(), release=None):
+    fixed = {
+        'dependencies': ['npm', 'ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund'],
+        'browser-install': ['npx', '--no-install', 'playwright', 'install', 'chromium'],
+        'browser-check': ['node', '--input-type=module', '-e', BROWSER_CHECK],
+        'service-list': ['pm2', 'jlist'],
+    }
+    if not isinstance(operation, str):
+        raise ValueError('Unapproved deployment operation')
+    if operation in {'stop', 'restart'}:
+        if not services or isinstance(services, str):
+            raise ValueError('Missing service names')
+        names = [checked_token(name, r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}') for name in services]
+        args = ['pm2', operation, *names]
+        if operation == 'restart':
+            args.append('--update-env')
+    elif operation == 'preflight':
+        control = Path(__file__).resolve().parent
+        release = inside(control.parent.parent / 'releases', configured_path(release))
+        checked_token(release.name, RELEASE_NAME)
+        args = ['node', str(control / 'preflight.mjs'), str(release), str(control / 'config.json')]
+    elif operation in fixed:
+        args = fixed[operation]
+    else:
+        raise ValueError('Unapproved deployment operation')
     executable = shutil.which(args[0])
     if not executable:
         raise RuntimeError('Deployment executable unavailable')
@@ -172,11 +213,11 @@ def prepare_dependencies(release, config):
         folder.mkdir(parents=True, exist_ok=True)
         for name in ('package.json', LOCK_FILE):
             shutil.copyfile(manifests[name], folder / name)
-        run(['npm', 'ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund'], folder)
-        run(['npx', '--no-install', 'playwright', 'install', 'chromium'], folder)
+        run('dependencies', folder)
+        run('browser-install', folder)
         (folder / '.ready').write_text(digest)
     (release / 'node_modules').symlink_to(folder / 'node_modules')
-    run(['node', '--input-type=module', '-e', BROWSER_CHECK], release)
+    run('browser-check', release)
 
 
 def health(url):
@@ -318,13 +359,13 @@ def activate(release, config):
         checked_token(name, r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}')
     try:
         if len(services) > 1:
-            run(['pm2', 'stop', *services[1:]])
-        run(['pm2', 'stop', services[0]])
+            run('stop', services=services[1:])
+        run('stop', services=services[:1])
         switch(current, release)
-        run(['pm2', 'restart', *services, '--update-env'])
+        run('restart', services=services)
         for url in config['health_urls']:
             wait_for_health(url)
-        live = json.loads(run(['pm2', 'jlist']))
+        live = json.loads(run('service-list'))
         for name in services:
             if not any(p['name'] == name and p['pm2_env']['status'] == 'online' for p in live):
                 raise RuntimeError('Service did not start')
@@ -333,7 +374,7 @@ def activate(release, config):
     except Exception:
         if current.resolve() != previous:
             switch(current, previous)
-        run(['pm2', 'restart', *services, '--update-env'])
+        run('restart', services=services)
         raise
     return previous
 
@@ -370,7 +411,7 @@ def deploy(config, sha, digest):
         prepare_dependencies(release, config)
         print('DEPENDENCIES_VERIFIED', flush=True)
         # Use server-owned preflight, not code supplied by the archive.
-        run(['node', config['preflight'], str(release), config['config_path']])
+        run('preflight', release=release)
         print('PREFLIGHT_PASSED', flush=True)
         (release / 'github-release.json').write_text(json.dumps({'sha': sha, 'sha256': digest}))
         previous = activate(release, config)
@@ -381,8 +422,7 @@ def deploy(config, sha, digest):
 def main():
     import fcntl  # Linux server only; pure validation functions are portable.
     config_path = Path(__file__).with_name('config.json')
-    config = json.loads(config_path.read_text())
-    config['config_path'] = str(config_path)
+    config = load_config(config_path)
     sha, digest = command(os.environ.get('SSH_ORIGINAL_COMMAND', ''))
     with config_path.with_suffix('.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
