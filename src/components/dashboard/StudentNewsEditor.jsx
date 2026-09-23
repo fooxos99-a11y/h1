@@ -42,7 +42,12 @@ export default function StudentNewsEditor() {
     if (busy.current) return false;
     busy.current = true; setPending(true); setError('');
     try { setNews(await studentNewsService.save({ entries, revision: news.revision })); return true; }
-    catch (reason) { if (isActionCancelled(reason)) return false; throw reason; }
+    catch (reason) {
+      if (isActionCancelled(reason)) {
+        return false;
+      }
+      throw reason;
+    }
     finally { busy.current = false; setPending(false); }
   };
   const save = async entry => {

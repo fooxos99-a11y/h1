@@ -58,7 +58,7 @@ try {
     await choose(page, 'اختيار الكادر', 'إداري الاختبار — إداري');
     await page.getByText('تفاصيل الأيام', { exact: true }).first().waitFor();
     await page.waitForFunction(() => globalThis.document.querySelectorAll('article').length === 1);
-    const request = requests.filter(url => url.pathname.endsWith('/reports/supervisors')).at(-1);
+    const request = requests.findLast(url => url.pathname.endsWith('/reports/supervisors'));
     assert.equal(request.searchParams.get('staffId'), '8');
     assert.equal(request.searchParams.get('from'), date);
     assert.equal(request.searchParams.get('to'), date);

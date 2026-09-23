@@ -50,7 +50,7 @@ const ReportsSection = ({
   const [target, setTarget] = useState(
     canViewStandardReports ? 'overview' : 'executionFollowup'
   );
-  const [date, setDate] = useState(today());
+  const [date] = useState(today);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState(today());
   const [staffId, setStaffId] = useState('all');

@@ -1002,36 +1002,41 @@ async function initializeDatabase(databaseName, { seedDefaultData } = {}) {
   await addColumnIfMissing('student_quran_tasks', 'track', "ENUM('memorization', 'mastery') NOT NULL DEFAULT 'memorization' AFTER task_type");
   await addColumnIfMissing('student_quran_tasks', 'target_pages', 'DECIMAL(7,2) NULL');
   await modifyColumn('student_quran_tasks', 'target_pages', 'DECIMAL(7,2) NULL');
-  await addColumnIfMissing('student_quran_tasks', 'from_surah', 'INT NULL AFTER to_page');
-  await addColumnIfMissing('student_quran_tasks', 'from_ayah', 'INT NULL AFTER from_surah');
-  await addColumnIfMissing('student_quran_tasks', 'to_surah', 'INT NULL AFTER from_ayah');
-  await addColumnIfMissing('student_quran_tasks', 'to_ayah', 'INT NULL AFTER to_surah');
-  await addColumnIfMissing('student_quran_tasks', 'actual_to_page', 'INT NULL AFTER target_pages');
-  await addColumnIfMissing('student_quran_tasks', 'actual_to_surah', 'INT NULL AFTER actual_to_page');
-  await addColumnIfMissing('student_quran_tasks', 'actual_to_ayah', 'INT NULL AFTER actual_to_surah');
-  await addColumnIfMissing('student_quran_tasks', 'execution_state', "ENUM('complete', 'partial', 'extra') NULL AFTER actual_to_ayah");
-  await addColumnIfMissing('student_quran_tasks', 'teacher_rating_key', 'VARCHAR(80) NULL AFTER student_status');
-  await addColumnIfMissing('student_quran_tasks', 'teacher_rating_label', 'VARCHAR(120) NULL AFTER teacher_rating_key');
-  await addColumnIfMissing('student_quran_tasks', 'warning_count', 'INT NOT NULL DEFAULT 0 AFTER teacher_rating_label');
-  await addColumnIfMissing('student_quran_tasks', 'mistake_count', 'INT NOT NULL DEFAULT 0 AFTER warning_count');
-  await addColumnIfMissing('student_quran_tasks', 'evaluation_score', 'DECIMAL(7,2) NULL AFTER mistake_count');
-  await addColumnIfMissing('student_quran_tasks', 'evaluation_max_score', 'DECIMAL(7,2) NULL AFTER evaluation_score');
-  await addColumnIfMissing('student_quran_tasks', 'evaluation_warning_deduction', 'DECIMAL(7,2) NULL AFTER evaluation_max_score');
-  await addColumnIfMissing('student_quran_tasks', 'evaluation_mistake_deduction', 'DECIMAL(7,2) NULL AFTER evaluation_warning_deduction');
-  await addColumnIfMissing('student_quran_tasks', 'evaluation_passing_score', 'DECIMAL(7,2) NULL AFTER evaluation_mistake_deduction');
-  await addColumnIfMissing('student_quran_tasks', 'points', 'INT NOT NULL DEFAULT 0 AFTER evaluation_score');
-  await addColumnIfMissing('student_quran_tasks', 'teacher_completed', 'TINYINT(1) NULL AFTER points');
-  await addColumnIfMissing('student_quran_tasks', 'evaluated_by', 'BIGINT UNSIGNED NULL AFTER teacher_completed');
-  await addColumnIfMissing('student_quran_tasks', 'evaluated_at', 'TIMESTAMP NULL AFTER evaluated_by');
-  await addColumnIfMissing('student_quran_tasks', 'actual_repeat_count', 'INT NULL AFTER execution_state');
-  await addColumnIfMissing('student_quran_tasks', 'actual_listening_count', 'INT NULL AFTER actual_repeat_count');
-  await addColumnIfMissing('student_quran_tasks', 'actual_link_count', 'INT NULL AFTER actual_listening_count');
-  await addColumnIfMissing('student_quran_tasks', 'normal_to_page', 'INT NULL AFTER target_pages');
-  await addColumnIfMissing('student_quran_tasks', 'normal_to_surah', 'INT NULL AFTER normal_to_page');
-  await addColumnIfMissing('student_quran_tasks', 'normal_to_ayah', 'INT NULL AFTER normal_to_surah');
-  await addColumnIfMissing('student_quran_tasks', 'scheduled_to_page', 'INT NULL AFTER normal_to_ayah');
-  await addColumnIfMissing('student_quran_tasks', 'scheduled_to_surah', 'INT NULL AFTER scheduled_to_page');
-  await addColumnIfMissing('student_quran_tasks', 'scheduled_to_ayah', 'INT NULL AFTER scheduled_to_surah');
+  const taskColumns = {
+    from_surah: 'INT NULL AFTER to_page',
+    from_ayah: 'INT NULL AFTER from_surah',
+    to_surah: 'INT NULL AFTER from_ayah',
+    to_ayah: 'INT NULL AFTER to_surah',
+    actual_to_page: 'INT NULL AFTER target_pages',
+    actual_to_surah: 'INT NULL AFTER actual_to_page',
+    actual_to_ayah: 'INT NULL AFTER actual_to_surah',
+    execution_state: "ENUM('complete', 'partial', 'extra') NULL AFTER actual_to_ayah",
+    teacher_rating_key: 'VARCHAR(80) NULL AFTER student_status',
+    teacher_rating_label: 'VARCHAR(120) NULL AFTER teacher_rating_key',
+    warning_count: 'INT NOT NULL DEFAULT 0 AFTER teacher_rating_label',
+    mistake_count: 'INT NOT NULL DEFAULT 0 AFTER warning_count',
+    evaluation_score: 'DECIMAL(7,2) NULL AFTER mistake_count',
+    evaluation_max_score: 'DECIMAL(7,2) NULL AFTER evaluation_score',
+    evaluation_warning_deduction: 'DECIMAL(7,2) NULL AFTER evaluation_max_score',
+    evaluation_mistake_deduction: 'DECIMAL(7,2) NULL AFTER evaluation_warning_deduction',
+    evaluation_passing_score: 'DECIMAL(7,2) NULL AFTER evaluation_mistake_deduction',
+    points: 'INT NOT NULL DEFAULT 0 AFTER evaluation_score',
+    teacher_completed: 'TINYINT(1) NULL AFTER points',
+    evaluated_by: 'BIGINT UNSIGNED NULL AFTER teacher_completed',
+    evaluated_at: 'TIMESTAMP NULL AFTER evaluated_by',
+    actual_repeat_count: 'INT NULL AFTER execution_state',
+    actual_listening_count: 'INT NULL AFTER actual_repeat_count',
+    actual_link_count: 'INT NULL AFTER actual_listening_count',
+    normal_to_page: 'INT NULL AFTER target_pages',
+    normal_to_surah: 'INT NULL AFTER normal_to_page',
+    normal_to_ayah: 'INT NULL AFTER normal_to_surah',
+    scheduled_to_page: 'INT NULL AFTER normal_to_ayah',
+    scheduled_to_surah: 'INT NULL AFTER scheduled_to_page',
+    scheduled_to_ayah: 'INT NULL AFTER scheduled_to_surah',
+  };
+  for (const [column, definition] of Object.entries(taskColumns)) {
+    await addColumnIfMissing('student_quran_tasks', column, definition);
+  }
   await addIndexIfMissing('student_quran_tasks', 'student_quran_tasks_date_status_lookup', 'INDEX student_quran_tasks_date_status_lookup (task_date, student_status, task_type, student_id)');
 
   await pool.query(`

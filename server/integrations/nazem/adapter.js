@@ -1604,14 +1604,8 @@ export class NazemAdapter {
       return { ...current, payload, late: null, followUpDate };
     }
     if (mapped.date !== followUpDate) {
-      const historical = await this.readStudentFollowUp(studentLink, planLink, mapped.date, { fresh });
-      const target = findFollowUpDay(historical, studentLink, mapped.remoteType || 'conserve', { sourceDayId: mapped.nazemSourceDayId, sourceItemId: mapped.nazemSavedTarget?.nazemItemId });
-      if (matchesNazemTarget(target.day, mapped, mapped.date)) {
-        return { ...target, payload: historical, late: null, followUpDate: mapped.date,
-          executionAttendanceStatus: current.student?.attendance_status, executionDate: followUpDate };
-      }
-      const replacement = await this.resolveRegeneratedRecitation(studentLink, planLink, mapped, target, mapped.date);
-      if (replacement) return { ...replacement,
+      const historical = await this.resolveHistoricalRecitation(studentLink, planLink, mapped, { fresh });
+      if (historical) return { ...historical,
         executionAttendanceStatus: current.student?.attendance_status, executionDate: followUpDate };
     }
     // Never reuse a current snapshot after navigating to a historical date.
@@ -1620,17 +1614,18 @@ export class NazemAdapter {
     if (replacement) return replacement;
     // A stored snapshot alone never replaces independent remote verification.
     if (mapped.nazemSourceDayId || current.day) {
-      const missingCycle = mapped.taskType === 'review' && !mapped.nazemSavedTarget?.nazemItemId;
-      const message = missingCycle
-        ? 'التقييم القديم محفوظ دون رقم دورة المراجعة، وتغيّر رقم سجل المتابعة في ناظم. يلزم إثبات دورته الأصلية؛ هذا لا يعني تغيّر خطة الطالب.'
-        : 'تعذر مطابقة سجل ناظم الأصلي بالتقييم المحفوظ. النتيجة محفوظة وتحتاج مطابقة.';
-      const error = reviewNazemError(message, 'NAZEM_SAVED_TARGET_CHANGED');
-      error.details = { stage: 'target-resolution', expectedRecordId: mapped.nazemSourceDayId,
-        observedRecordId: current.day?.id, taskDate: mapped.date,
-        reason: missingCycle ? 'original-cycle-missing' : 'original-target-unmatched' };
-      throw error;
+      throw savedRecitationTargetError(mapped, current.day);
     }
     return { ...current, payload, late: null, followUpDate };
+  }
+
+  async resolveHistoricalRecitation(studentLink, planLink, mapped, { fresh }) {
+    const historical = await this.readStudentFollowUp(studentLink, planLink, mapped.date, { fresh });
+    const target = findFollowUpDay(historical, studentLink, mapped.remoteType || 'conserve', { sourceDayId: mapped.nazemSourceDayId, sourceItemId: mapped.nazemSavedTarget?.nazemItemId });
+    if (matchesNazemTarget(target.day, mapped, mapped.date)) {
+      return { ...target, payload: historical, late: null, followUpDate: mapped.date };
+    }
+    return this.resolveRegeneratedRecitation(studentLink, planLink, mapped, target, mapped.date);
   }
 
   async resolveRegeneratedRecitation(studentLink, planLink, mapped, target, followUpDate) {
@@ -2322,4 +2317,16 @@ function normalizeCurrentFollowUp(day, item, student, remoteType, date) {
     attendanceStatus: student?.attendance_status ?? null,
     nazemLate: false,
   };
+}
+
+function savedRecitationTargetError(mapped, day) {
+  const missingCycle = mapped.taskType === 'review' && !mapped.nazemSavedTarget?.nazemItemId;
+  const message = missingCycle
+    ? 'التقييم القديم محفوظ دون رقم دورة المراجعة، وتغيّر رقم سجل المتابعة في ناظم. يلزم إثبات دورته الأصلية؛ هذا لا يعني تغيّر خطة الطالب.'
+    : 'تعذر مطابقة سجل ناظم الأصلي بالتقييم المحفوظ. النتيجة محفوظة وتحتاج مطابقة.';
+  const error = reviewNazemError(message, 'NAZEM_SAVED_TARGET_CHANGED');
+  error.details = { stage: 'target-resolution', expectedRecordId: mapped.nazemSourceDayId,
+    observedRecordId: day?.id, taskDate: mapped.date,
+    reason: missingCycle ? 'original-cycle-missing' : 'original-target-unmatched' };
+  return error;
 }

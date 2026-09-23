@@ -20,8 +20,50 @@ from urllib.parse import urlparse
 
 ROOTS = {'server', 'shared', 'src', 'scripts', 'config', 'public', 'dist'}
 INDEX_FILE = 'index.html'
-FILES = {'package.json', 'package-lock.json', INDEX_FILE, 'vite.config.js',
+LOCK_FILE = 'package-lock.json'
+FILES = {'package.json', LOCK_FILE, INDEX_FILE, 'vite.config.js',
          'tailwind.config.js', 'postcss.config.js'}
+RELEASE_NAME = r'github-\d{8}-\d{6}-[a-f0-9]{12}'
+BROWSER_CHECK = "import { chromium } from 'playwright'; const b=await chromium.launch({headless:true}); await b.close();"
+
+
+def checked_token(value, pattern):
+    if not isinstance(value, str) or not re.fullmatch(pattern, value):
+        raise ValueError('Invalid deployment identifier')
+    return value
+
+
+def configured_path(value):
+    path = Path(value)
+    if not path.is_absolute() or '..' in path.parts:
+        raise ValueError('Invalid configured path')
+    return path
+
+
+def inside(root, value):
+    """Reject escapes and symlink aliases before filesystem probes or writes."""
+    root = configured_path(root).resolve(strict=True)
+    value = configured_path(value)
+    relative = value.relative_to(root)
+    if not relative.parts:
+        raise ValueError('Expected a child path')
+    candidate = root
+    for part in relative.parts:
+        if part in {'.', '..'} or '\\' in part or ':' in part:
+            raise ValueError('Unsafe child path')
+        candidate = candidate / part
+        if candidate.is_symlink():
+            raise ValueError('Symlink paths are prohibited')
+    candidate.resolve().relative_to(root)
+    return candidate
+
+
+def release_path(config, value):
+    root = configured_path(config['release_root']).resolve(strict=True)
+    path = inside(root, value)
+    if path.parent != root:
+        raise ValueError('Expected a direct release directory')
+    return path
 
 
 def command(value):
@@ -33,7 +75,8 @@ def command(value):
 
 def validate_member(member):
     path = PurePosixPath(member.name)
-    if path.is_absolute() or not path.parts or any(p.startswith('.') for p in path.parts):
+    if (path.is_absolute() or not path.parts or any(p.startswith('.') for p in path.parts)
+            or '\\' in member.name or ':' in member.name or '\x00' in member.name):
         raise ValueError('Unsafe archive path')
     if path.parts[0] not in ROOTS and member.name not in FILES:
         raise ValueError('Unapproved archive path')
@@ -46,8 +89,32 @@ def validate_member(member):
 
 
 def run(args, cwd=None):
+    # No caller-selected command, option, JavaScript expression or shell expansion.
+    fixed = [
+        ['npm', 'ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund'],
+        ['npx', '--no-install', 'playwright', 'install', 'chromium'],
+        ['node', '--input-type=module', '-e', BROWSER_CHECK],
+        ['pm2', 'jlist'],
+    ]
+    if args not in fixed:
+        if len(args) >= 3 and args[:2] in (['pm2', 'stop'], ['pm2', 'restart']):
+            names = args[2:-1] if args[1] == 'restart' and args[-1] == '--update-env' else args[2:]
+            if not names:
+                raise ValueError('Missing service names')
+            for name in names:
+                checked_token(name, r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}')
+        elif len(args) == 4 and args[0] == 'node':
+            script, release, config = map(configured_path, args[1:])
+            if script.name != 'preflight.mjs' or config.name != 'config.json' or script.parent != config.parent:
+                raise ValueError('Invalid preflight command')
+            checked_token(release.name, RELEASE_NAME)
+        else:
+            raise ValueError('Unapproved deployment command')
+    executable = shutil.which(args[0])
+    if not executable:
+        raise RuntimeError('Deployment executable unavailable')
     # Avoid printing service environment variables or npm configuration.
-    result = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    result = subprocess.run([executable, *args[1:]], cwd=cwd, capture_output=True, text=True, shell=False)
     if result.returncode:
         raise RuntimeError('Command failed: ' + args[0] + ' ' + args[1])
     return result.stdout
@@ -80,7 +147,7 @@ def unpack(archive, destination):
             names.add(member.name)
         # Links are prohibited and destination is a fresh directory.
         for member in members:
-            target = destination / member.name
+            target = inside(destination, destination / member.name)
             if member.isdir():
                 target.mkdir(parents=True, exist_ok=True)
             else:
@@ -91,18 +158,25 @@ def unpack(archive, destination):
 
 
 def prepare_dependencies(release, config):
-    digest = hashlib.sha256((release / 'package-lock.json').read_bytes()).hexdigest()
-    folder = Path(config['dependency_cache']) / digest
+    release = release_path(config, release)
+    manifests = {name: inside(release, release / name) for name in ('package.json', LOCK_FILE)}
+    digest = hashlib.sha256(manifests[LOCK_FILE].read_bytes()).hexdigest()
+    cache = configured_path(config['dependency_cache'])
+    cache.mkdir(parents=True, exist_ok=True)
+    cache = cache.resolve(strict=True)
+    folder = inside(cache, cache / checked_token(digest, r'[a-f0-9]{64}'))
+    if folder.exists():
+        for name in ('.ready', 'package.json', LOCK_FILE, 'node_modules'):
+            inside(folder, folder / name)
     if not (folder / '.ready').is_file():
         folder.mkdir(parents=True, exist_ok=True)
-        for name in ('package.json', 'package-lock.json'):
-            shutil.copyfile(release / name, folder / name)
-        run(['npm', 'ci', '--omit=dev', '--no-audit', '--no-fund'], folder)
+        for name in ('package.json', LOCK_FILE):
+            shutil.copyfile(manifests[name], folder / name)
+        run(['npm', 'ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund'], folder)
         run(['npx', '--no-install', 'playwright', 'install', 'chromium'], folder)
         (folder / '.ready').write_text(digest)
     (release / 'node_modules').symlink_to(folder / 'node_modules')
-    run(['node', '--input-type=module', '-e',
-         "import { chromium } from 'playwright'; const b=await chromium.launch({headless:true}); await b.close();"], release)
+    run(['node', '--input-type=module', '-e', BROWSER_CHECK], release)
 
 
 def health(url):
@@ -140,6 +214,59 @@ class Assets(HTMLParser):
             self.urls.append(attrs['href'])
 
 
+class BeaconFilter(HTMLParser):
+    """Locate only empty Cloudflare beacon elements without a backtracking regex."""
+    def __init__(self, source):
+        super().__init__()
+        self.source = source
+        self.line_offsets = [0]
+        for index, character in enumerate(source):
+            if character == '\n':
+                self.line_offsets.append(index + 1)
+        self.pending = None
+        self.removals = []
+
+    def source_offset(self):
+        line, column = self.getpos()
+        return self.line_offsets[line - 1] + column
+
+    def handle_starttag(self, tag, attributes):
+        if tag != 'script':
+            return
+        src = dict(attributes).get('src') or ''
+        prefix = 'https://static.cloudflareinsights.com/beacon.min.js/'
+        if src.startswith(prefix) and len(src) > len(prefix):
+            start = self.source_offset()
+            self.pending = (start, start + len(self.get_starttag_text()))
+
+    def handle_endtag(self, tag):
+        if tag != 'script' or self.pending is None:
+            return
+        start, content_start = self.pending
+        self.pending = None
+        end_start = self.source_offset()
+        if end_start != content_start:
+            return
+        end = self.source.find('>', end_start) + 1
+        while end < len(self.source) and self.source[end] in ' \t\n\r\f\v':
+            end += 1
+        self.removals.append((start, end))
+
+
+def strip_cloudflare_beacon(html):
+    source = html.decode('utf-8')
+    parser = BeaconFilter(source)
+    parser.feed(source)
+    parser.close()
+    parts = []
+    cursor = 0
+    for start, end in parser.removals:
+        parts.append(source[cursor:start])
+        cursor = end
+    parts.append(source[cursor:])
+    return ''.join(parts).encode('utf-8')
+
+
 def fetch(base, relative=''):
     # The origin comes only from server-owned configuration, never HTML content.
     if relative and (not re.fullmatch(r'[A-Za-z0-9_./-]+', relative) or '..' in relative or relative.startswith('/')):
@@ -166,7 +293,7 @@ def verify_public_files(release, config):
     for target in config['public_checks']:
         base, folder = target['url'], release / target['directory']
         html = fetch(base)
-        html = re.sub(rb'<script\b[^>]*src="https://static\.cloudflareinsights\.com/beacon\.min\.js/[^\"]+"[^>]*></script>\s*', b'', html)
+        html = strip_cloudflare_beacon(html)
         if html != (folder / INDEX_FILE).read_bytes():
             raise RuntimeError('Published HTML does not match release')
         parser = Assets()
@@ -181,11 +308,17 @@ def verify_public_files(release, config):
 
 
 def activate(release, config):
-    current = Path(config['current'])
-    previous = current.resolve(strict=True)
+    release = release_path(config, release)
+    current = configured_path(config['current'])
+    previous = release_path(config, current.resolve(strict=True))
     services = config['services']
+    if not isinstance(services, list) or not services:
+        raise ValueError('Missing deployment services')
+    for name in services:
+        checked_token(name, r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}')
     try:
-        run(['pm2', 'stop', *services[1:]])
+        if len(services) > 1:
+            run(['pm2', 'stop', *services[1:]])
         run(['pm2', 'stop', services[0]])
         switch(current, release)
         run(['pm2', 'restart', *services, '--update-env'])
@@ -202,40 +335,47 @@ def activate(release, config):
             switch(current, previous)
         run(['pm2', 'restart', *services, '--update-env'])
         raise
+    return previous
 
 
-def prune_releases(config, current):
-    root = Path(config['release_root']).resolve(strict=True)
-    previous = Path((current / 'previous-release.txt').read_text()).resolve(strict=True)
-    protected = [current, previous, Path(config['runtime_source']).resolve(), Path(config['env_source']).resolve()]
+def prune_releases(config, current, previous):
+    root = configured_path(config['release_root']).resolve(strict=True)
+    current = release_path(config, current)
+    previous = release_path(config, previous)
+    protected = [current, previous, configured_path(config['runtime_source']).resolve(), configured_path(config['env_source']).resolve()]
     for candidate in root.iterdir():
-        if not re.fullmatch(r'github-\d{8}-\d{6}-[a-f0-9]{12}', candidate.name) or candidate.is_symlink():
+        if not re.fullmatch(RELEASE_NAME, candidate.name) or candidate.is_symlink():
             continue
+        candidate = release_path(config, candidate)
         if any(path == candidate or candidate in path.parents for path in protected):
             continue
-        if candidate.is_dir() and (candidate / 'github-release.json').is_file():
+        if candidate.is_dir() and inside(candidate, candidate / 'github-release.json').is_file():
             shutil.rmtree(candidate)
 
 
 def deploy(config, sha, digest):
-    with tempfile.TemporaryDirectory(prefix='github-web-', dir=config['release_root']) as staging:
+    sha = checked_token(sha, r'[a-f0-9]{40}')
+    digest = checked_token(digest, r'[a-f0-9]{64}')
+    root = configured_path(config['release_root']).resolve(strict=True)
+    with tempfile.TemporaryDirectory(prefix='github-web-', dir=root) as staging:
         archive = Path(staging) / 'release.tar.gz'
         receive(sys.stdin.buffer, archive, digest)
-        release = Path(config['release_root']) / ('github-' + time.strftime('%Y%m%d-%H%M%S') + '-' + sha[:12])
+        name = checked_token('github-' + time.strftime('%Y%m%d-%H%M%S') + '-' + sha[:12], RELEASE_NAME)
+        release = release_path(config, root / name)
         release.mkdir()
         unpack(archive, release)
         print('PACKAGE_VERIFIED', flush=True)
-        (release / '.env').symlink_to(Path(config['env_source']).resolve(strict=True))
-        (release / 'runtime').symlink_to(Path(config['runtime_source']).resolve(strict=True))
+        (release / '.env').symlink_to(configured_path(config['env_source']).resolve(strict=True))
+        (release / 'runtime').symlink_to(configured_path(config['runtime_source']).resolve(strict=True))
         prepare_dependencies(release, config)
         print('DEPENDENCIES_VERIFIED', flush=True)
         # Use server-owned preflight, not code supplied by the archive.
         run(['node', config['preflight'], str(release), config['config_path']])
         print('PREFLIGHT_PASSED', flush=True)
         (release / 'github-release.json').write_text(json.dumps({'sha': sha, 'sha256': digest}))
-        activate(release, config)
+        previous = activate(release, config)
         print('DEPLOYED', sha, flush=True)
-        prune_releases(config, release)
+        prune_releases(config, release, previous)
 
 
 def main():
@@ -254,4 +394,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception:
+        # Do not expose filesystem existence, paths or tracebacks to the SSH caller.
+        print('Deployment failed', file=sys.stderr)
+        sys.exit(1)

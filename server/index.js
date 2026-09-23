@@ -1,3 +1,6 @@
+import { runCountedStatements, queryTaskGroups } from './services/queryResults.js';
+import { createBufferedPdf, REPORT_PDF_COLORS } from './services/bufferedPdf.js';
+import { sendWhatsAppResult } from './services/whatsAppResult.js';
 import { getTaskSummary, formatReportFaces } from '../shared/report-faces.js';
 import { loadStaffAttendanceReport } from './services/staffAttendanceReport.js';
 import { practiceCompletionCount } from '../shared/practice-completion.js';
@@ -65,7 +68,6 @@ import nodeFs from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import nodePath from 'node:path';
-import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 import {
   db,
@@ -2524,12 +2526,25 @@ async function normalizeQuranRangeWordMarks(connection, range, payload) {
   return normalized;
 }
 
+function normalizeAdministratorAccount(body) {
+  const account = normalizeStaffAccount(body, 'اسم الإداري');
+  const jobTitle = String(body.jobTitle || 'إداري').trim() || 'إداري';
+  const permissions = cleanAdministratorDashboardPermissions(body.permissions);
+  if (jobTitle.length > 120) throw invalidInput('المسمى الوظيفي أطول من الحد المسموح.');
+  return { ...account, jobTitle, permissions };
+}
+
+function normalizeStaffAccount(body, nameLabel) {
+  return {
+    name: normalizeAccountName(body.name, nameLabel),
+    loginNumber: normalizeAccountLoginNumber(body.loginNumber),
+    nationalId: normalizeOptionalNationalId(body.nationalId),
+    phone: normalizeAccountPhone(body.phone),
+  };
+}
+
 async function getQuranTaskAyahMarks(connection, taskIds) {
-  const ids = [...new Set((taskIds || []).map(Number).filter(Boolean))];
-  const grouped = new Map();
-  if (!ids.length) return grouped;
-  const [rows] = await connection.query(
-    `
+  return queryTaskGroups(connection, taskIds, `
     SELECT
       m.task_id AS taskId,
       m.surah_number AS surah,
@@ -2542,30 +2557,18 @@ async function getQuranTaskAyahMarks(connection, taskIds) {
     LEFT JOIN quran_surahs s ON s.surah_number = m.surah_number
     WHERE m.task_id IN (?)
     ORDER BY m.task_id ASC, m.surah_number ASC, m.ayah_number ASC, FIELD(m.mark_type, 'mistake', 'warning')
-    `,
-    [ids]
-  );
-  for (const row of rows) {
-    const taskId = Number(row.taskId);
-    if (!grouped.has(taskId)) grouped.set(taskId, []);
-    grouped.get(taskId).push({
+    `, (row) => ({
       surah: Number(row.surah),
       surahName: row.surahName || '',
       ayah: Number(row.ayah),
       textUthmani: row.textUthmani || '',
       markType: row.markType,
       occurrenceCount: Number(row.occurrenceCount || 0),
-    });
-  }
-  return grouped;
+    }));
 }
 
 async function getQuranTaskWordMarks(connection, taskIds) {
-  const ids = [...new Set((taskIds || []).map(Number).filter(Boolean))];
-  const grouped = new Map();
-  if (!ids.length) return grouped;
-  const [rows] = await connection.query(
-    `
+  return queryTaskGroups(connection, taskIds, `
     SELECT
       id,
       task_id AS taskId,
@@ -2582,13 +2585,7 @@ async function getQuranTaskWordMarks(connection, taskIds) {
     FROM student_quran_task_word_marks
     WHERE task_id IN (?)
     ORDER BY task_id ASC, id ASC
-    `,
-    [ids]
-  );
-  for (const row of rows) {
-    const taskId = Number(row.taskId);
-    if (!grouped.has(taskId)) grouped.set(taskId, []);
-    grouped.get(taskId).push({
+    `, (row) => ({
       id: Number(row.id),
       page: Number(row.page),
       startSurah: Number(row.startSurah),
@@ -2600,9 +2597,7 @@ async function getQuranTaskWordMarks(connection, taskIds) {
       selectedText: row.selectedText || '',
       markType: row.markType,
       notes: row.notes || '',
-    });
-  }
-  return grouped;
+    }));
 }
 
 async function getQuranTaskDisplayMarks(connection, taskIds) {
@@ -5849,95 +5844,47 @@ async function canUseManualAttendance(req) {
 }
 
 async function resetAllProgramPoints(connection) {
-  const summary = {};
-  const capture = (key, result) => {
-    summary[key] = Number(result.affectedRows || 0);
-  };
-
-  let result;
-  [result] = await connection.query('DELETE FROM student_point_transactions');
-  capture('pointTransactionsDeleted', result);
-  [result] = await connection.query('DELETE FROM supervisor_student_point_awards');
-  capture('studentAwardsDeleted', result);
-  [result] = await connection.query('DELETE FROM supervisor_family_point_awards');
-  capture('familyAwardsDeleted', result);
-  [result] = await connection.query('UPDATE attendance_records SET points = 0 WHERE points <> 0');
-  capture('attendanceRowsReset', result);
-  [result] = await connection.query('UPDATE student_quran_tasks SET points = 0 WHERE points <> 0');
-  capture('quranTaskRowsReset', result);
-  [result] = await connection.query('UPDATE student_quran_execution_segments SET points_awarded = 0 WHERE points_awarded <> 0');
-  capture('quranExecutionRowsReset', result);
-  [result] = await connection.query('UPDATE student_path_progress SET earned_points = 0 WHERE earned_points <> 0');
-  capture('learningPathRowsReset', result);
-  [result] = await connection.query('UPDATE family_achievements SET points = 0 WHERE points <> 0');
-  capture('familyAchievementRowsReset', result);
-  [result] = await connection.query('UPDATE students SET points = 0, store_balance = 0 WHERE points <> 0 OR store_balance <> 0');
-  capture('studentBalancesReset', result);
-  [result] = await connection.query('UPDATE committees SET points = 0, student_points_contribution = 0 WHERE points <> 0 OR student_points_contribution <> 0');
-  capture('familyBalancesReset', result);
-
-  return summary;
+  return runCountedStatements(connection, {
+    pointTransactionsDeleted: 'DELETE FROM student_point_transactions',
+    studentAwardsDeleted: 'DELETE FROM supervisor_student_point_awards',
+    familyAwardsDeleted: 'DELETE FROM supervisor_family_point_awards',
+    attendanceRowsReset: 'UPDATE attendance_records SET points = 0 WHERE points <> 0',
+    quranTaskRowsReset: 'UPDATE student_quran_tasks SET points = 0 WHERE points <> 0',
+    quranExecutionRowsReset: 'UPDATE student_quran_execution_segments SET points_awarded = 0 WHERE points_awarded <> 0',
+    learningPathRowsReset: 'UPDATE student_path_progress SET earned_points = 0 WHERE earned_points <> 0',
+    familyAchievementRowsReset: 'UPDATE family_achievements SET points = 0 WHERE points <> 0',
+    studentBalancesReset: 'UPDATE students SET points = 0, store_balance = 0 WHERE points <> 0 OR store_balance <> 0',
+    familyBalancesReset: 'UPDATE committees SET points = 0, student_points_contribution = 0 WHERE points <> 0 OR student_points_contribution <> 0',
+  });
 }
 
 async function deleteProgramDataExceptCore(connection) {
-  const summary = {};
-  const capture = (key, result) => {
-    summary[key] = Number(result.affectedRows || 0);
-  };
-
-  let result;
-  [result] = await connection.query("DELETE FROM push_subscriptions WHERE user_role <> 'manager'");
-  capture('operationalPushSubscriptionsDeleted', result);
-  [result] = await connection.query("DELETE FROM auth_sessions WHERE user_role <> 'manager'");
-  capture('operationalSessionsDeleted', result);
-  [result] = await connection.query('DELETE FROM app_notification_recipients');
-  capture('notificationRecipientsDeleted', result);
-  [result] = await connection.query('DELETE FROM app_notifications');
-  capture('notificationsDeleted', result);
-  [result] = await connection.query('DELETE FROM whatsapp_messages');
-  capture('whatsAppMessagesDeleted', result);
-  [result] = await connection.query('DELETE FROM registration_requests');
-  capture('registrationRequestsDeleted', result);
-  [result] = await connection.query('DELETE FROM attendance_records');
-  capture('studentAttendanceDeleted', result);
-  [result] = await connection.query('DELETE FROM supervisor_attendance_records');
-  capture('supervisorAttendanceDeleted', result);
-  [result] = await connection.query('DELETE FROM student_achievements');
-  capture('studentAchievementsDeleted', result);
-  [result] = await connection.query('DELETE FROM family_achievements');
-  capture('familyAchievementsDeleted', result);
-  [result] = await connection.query('DELETE FROM student_path_progress');
-  capture('studentPathProgressDeleted', result);
-  [result] = await connection.query('DELETE FROM learning_path_options');
-  capture('learningPathOptionsDeleted', result);
-  [result] = await connection.query('DELETE FROM learning_path_questions');
-  capture('learningPathQuestionsDeleted', result);
-  const [deletedProgramSections] = await connection.query('DELETE FROM learning_paths WHERE parent_path_id IS NOT NULL');
-  [result] = await connection.query('DELETE FROM learning_paths');
-  result.affectedRows += deletedProgramSections.affectedRows;
-  capture('learningPathsDeleted', result);
-  [result] = await connection.query('DELETE FROM report_archives');
-  capture('reportArchivesDeleted', result);
-  [result] = await connection.query('DELETE FROM supervisor_student_point_awards');
-  capture('studentAwardsDeleted', result);
-  [result] = await connection.query('DELETE FROM supervisor_family_point_awards');
-  capture('familyAwardsDeleted', result);
-  [result] = await connection.query('DELETE FROM supervisor_family_items');
-  capture('familyItemsDeleted', result);
-  [result] = await connection.query('DELETE FROM student_point_transactions');
-  capture('pointTransactionsDeleted', result);
-  [result] = await connection.query('DELETE FROM family_leader_accounts');
-  capture('familyLeaderAccountsDeleted', result);
-  [result] = await connection.query('DELETE FROM students');
-  capture('studentsDeleted', result);
-  [result] = await connection.query('DELETE FROM committees');
-  capture('familiesDeleted', result);
-  [result] = await connection.query("DELETE FROM supervisors WHERE role <> 'manager'");
-  capture('staffAccountsDeleted', result);
-  [result] = await connection.query('DELETE FROM activity_logs');
-  capture('activityLogsDeleted', result);
-
-  return summary;
+  return runCountedStatements(connection, {
+    operationalPushSubscriptionsDeleted: "DELETE FROM push_subscriptions WHERE user_role <> 'manager'",
+    operationalSessionsDeleted: "DELETE FROM auth_sessions WHERE user_role <> 'manager'",
+    notificationRecipientsDeleted: 'DELETE FROM app_notification_recipients',
+    notificationsDeleted: 'DELETE FROM app_notifications',
+    whatsAppMessagesDeleted: 'DELETE FROM whatsapp_messages',
+    registrationRequestsDeleted: 'DELETE FROM registration_requests',
+    studentAttendanceDeleted: 'DELETE FROM attendance_records',
+    supervisorAttendanceDeleted: 'DELETE FROM supervisor_attendance_records',
+    studentAchievementsDeleted: 'DELETE FROM student_achievements',
+    familyAchievementsDeleted: 'DELETE FROM family_achievements',
+    studentPathProgressDeleted: 'DELETE FROM student_path_progress',
+    learningPathOptionsDeleted: 'DELETE FROM learning_path_options',
+    learningPathQuestionsDeleted: 'DELETE FROM learning_path_questions',
+    learningPathsDeleted: ['DELETE FROM learning_paths WHERE parent_path_id IS NOT NULL', 'DELETE FROM learning_paths'],
+    reportArchivesDeleted: 'DELETE FROM report_archives',
+    studentAwardsDeleted: 'DELETE FROM supervisor_student_point_awards',
+    familyAwardsDeleted: 'DELETE FROM supervisor_family_point_awards',
+    familyItemsDeleted: 'DELETE FROM supervisor_family_items',
+    pointTransactionsDeleted: 'DELETE FROM student_point_transactions',
+    familyLeaderAccountsDeleted: 'DELETE FROM family_leader_accounts',
+    studentsDeleted: 'DELETE FROM students',
+    familiesDeleted: 'DELETE FROM committees',
+    staffAccountsDeleted: "DELETE FROM supervisors WHERE role <> 'manager'",
+    activityLogsDeleted: 'DELETE FROM activity_logs',
+  });
 }
 
 function isValidTimeString(value) {
@@ -8043,13 +7990,7 @@ app.get('/api/administrators', requirePermission('administrators'), async (_req,
 app.post('/api/administrators', requirePermission('administrators'), async (req, res, next) => {
   const connection = await db().getConnection();
   try {
-    const name = normalizeAccountName(req.body.name, 'اسم الإداري');
-    const loginNumber = normalizeAccountLoginNumber(req.body.loginNumber);
-    const nationalId = normalizeOptionalNationalId(req.body.nationalId);
-    const phone = normalizeAccountPhone(req.body.phone);
-    const jobTitle = String(req.body.jobTitle || 'إداري').trim() || 'إداري';
-    const permissions = cleanAdministratorDashboardPermissions(req.body.permissions);
-    if (jobTitle.length > 120) throw invalidInput('المسمى الوظيفي أطول من الحد المسموح.');
+    const { name, loginNumber, nationalId, phone, jobTitle, permissions } = normalizeAdministratorAccount(req.body);
 
     await connection.beginTransaction();
     await ensureLoginNumberIsAvailable(connection, loginNumber);
@@ -8079,13 +8020,7 @@ app.post('/api/administrators', requirePermission('administrators'), async (req,
 app.put('/api/administrators/:id', requirePermission('administrators'), async (req, res, next) => {
   const connection = await db().getConnection();
   try {
-    const name = normalizeAccountName(req.body.name, 'اسم الإداري');
-    const loginNumber = normalizeAccountLoginNumber(req.body.loginNumber);
-    const nationalId = normalizeOptionalNationalId(req.body.nationalId);
-    const phone = normalizeAccountPhone(req.body.phone);
-    const jobTitle = String(req.body.jobTitle || 'إداري').trim() || 'إداري';
-    const permissions = cleanAdministratorDashboardPermissions(req.body.permissions);
-    if (jobTitle.length > 120) throw invalidInput('المسمى الوظيفي أطول من الحد المسموح.');
+    const { name, loginNumber, nationalId, phone, jobTitle, permissions } = normalizeAdministratorAccount(req.body);
 
     await connection.beginTransaction();
     const [[administrator]] = await connection.query(
@@ -10963,26 +10898,7 @@ async function getStudentQuranReviewHistory(connection, studentId, referenceMode
 
 async function buildStudentReviewHistoryPdf({ student, rows }) {
   return await new Promise((resolve, reject) => {
-    const chunks = [];
-    const doc = new PDFDocument({ size: 'A4', margin: 36, bufferPages: true });
-    let regularFont = 'Helvetica';
-    let boldFont = 'Helvetica-Bold';
-    const fontPair = resolvePdfFontPair();
-    try {
-      if (fontPair) {
-        doc.registerFont('Arabic', fontPair.regular);
-        doc.registerFont('ArabicBold', fontPair.bold);
-        regularFont = 'Arabic';
-        boldFont = 'ArabicBold';
-      }
-    } catch {
-      regularFont = 'Helvetica';
-      boldFont = 'Helvetica-Bold';
-    }
-
-    doc.on('data', (chunk) => chunks.push(chunk));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
+    const { doc, regularFont, boldFont } = createBufferedPdf({ size: 'A4', margin: 36, bufferPages: true }, resolvePdfFontPair(), resolve, reject);
 
     const margin = 36;
     const width = doc.page.width - (margin * 2);
@@ -11745,10 +11661,7 @@ app.get('/api/reciters', requirePermission('reciters'), async (req, res, next) =
 app.post('/api/reciters', requirePermission('reciters'), async (req, res, next) => {
   const connection = await db().getConnection();
   try {
-    const name = normalizeAccountName(req.body.name, 'اسم المقرئ');
-    const loginNumber = normalizeAccountLoginNumber(req.body.loginNumber);
-    const nationalId = normalizeOptionalNationalId(req.body.nationalId);
-    const phone = normalizeAccountPhone(req.body.phone);
+    const { name, loginNumber, nationalId, phone } = normalizeStaffAccount(req.body, 'اسم المقرئ');
     const committeeIds = await ensureCommitteeIdsExist(connection, req.body.committeeIds);
     await connection.beginTransaction();
     await ensureLoginNumberIsAvailable(connection, loginNumber);
@@ -11783,10 +11696,7 @@ app.post('/api/reciters', requirePermission('reciters'), async (req, res, next) 
 app.put('/api/reciters/:id', requirePermission('reciters'), async (req, res, next) => {
   const connection = await db().getConnection();
   try {
-    const name = normalizeAccountName(req.body.name, 'اسم المقرئ');
-    const loginNumber = normalizeAccountLoginNumber(req.body.loginNumber);
-    const nationalId = normalizeOptionalNationalId(req.body.nationalId);
-    const phone = normalizeAccountPhone(req.body.phone);
+    const { name, loginNumber, nationalId, phone } = normalizeStaffAccount(req.body, 'اسم المقرئ');
     const committeeIds = await ensureCommitteeIdsExist(connection, req.body.committeeIds);
     await connection.beginTransaction();
     const [[reciter]] = await connection.query(
@@ -13276,7 +13186,7 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
       return res.status(422).json({ message: 'التقييم غير صحيح.' });
     }
     const now = getSaudiDateTimeParts();
-    const requestedDate = isValidDateOnly(req.body.date || now.date) ? String(req.body.date || now.date) : now.date;
+    const requestedDate = resolveRecitationRequestDate(req.body.date, now.date);
     if (!isRecitationSessionDay(requestedDate, settings)) {
       return res.status(422).json({ message: 'التقييم متاح في أيام جلسات التسميع فقط.' });
     }
@@ -13926,25 +13836,7 @@ app.post('/api/whatsapp/send', requirePermission('whatsappSend'), async (req, re
 
     await sendPreparedWhatsAppRecipients({ recipients, failed, messageTemplate, attachment, recipientType, prepared });
 
-    const sentCount = prepared.filter((item) => item.status === 'sent').length;
-    if (sentCount === 0) {
-      return res.status(502).json({
-        message: failed[0]?.reason || 'لم يتم إرسال أي رسالة.',
-        preparedCount: prepared.length,
-        sentCount,
-        failedCount: failed.length,
-        prepared,
-        failed,
-      });
-    }
-
-    res.json({
-      preparedCount: prepared.length,
-      sentCount,
-      failedCount: failed.length,
-      prepared,
-      failed,
-    });
+    return sendWhatsAppResult(res, prepared, failed, 'لم يتم إرسال أي رسالة.');
   } catch (error) {
     next(error);
   }
@@ -16666,26 +16558,8 @@ function resolvePdfFontPair() {
 
 async function buildProgressPdf(report) {
   return await new Promise((resolve, reject) => {
-    const chunks = [];
-    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 24, bufferPages: true });
-    let regularFont = 'Helvetica';
-    let boldFont = 'Helvetica-Bold';
-    const fontPair = resolvePdfFontPair();
-    try {
-      if (fontPair) {
-        doc.registerFont('Arabic', fontPair.regular);
-        doc.registerFont('ArabicBold', fontPair.bold);
-        regularFont = 'Arabic';
-        boldFont = 'ArabicBold';
-      }
-    } catch {
-      regularFont = 'Helvetica';
-      boldFont = 'Helvetica-Bold';
-    }
+    const { doc, regularFont, boldFont } = createBufferedPdf({ size: 'A4', layout: 'landscape', margin: 24, bufferPages: true }, resolvePdfFontPair(), resolve, reject);
     doc.font(regularFont);
-    doc.on('data', (chunk) => chunks.push(chunk));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
 
     const pageWidth = doc.page.width;
     const pageHeight = doc.page.height;
@@ -17243,37 +17117,13 @@ async function buildRecitationSessionsExcel(report) {
 
 async function buildRecitationSessionsPdf(report) {
   return await new Promise((resolve, reject) => {
-    const chunks = [];
-    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 24, bufferPages: true });
-    let regularFont = 'Helvetica';
-    let boldFont = 'Helvetica-Bold';
-    const fontPair = resolvePdfFontPair();
-    try {
-      if (fontPair) {
-        doc.registerFont('Arabic', fontPair.regular);
-        doc.registerFont('ArabicBold', fontPair.bold);
-        regularFont = 'Arabic';
-        boldFont = 'ArabicBold';
-      }
-    } catch {
-      regularFont = 'Helvetica';
-      boldFont = 'Helvetica-Bold';
-    }
-    doc.on('data', (chunk) => chunks.push(chunk));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
+    const { doc, regularFont, boldFont } = createBufferedPdf({ size: 'A4', layout: 'landscape', margin: 24, bufferPages: true }, resolvePdfFontPair(), resolve, reject);
 
     const pageWidth = doc.page.width;
     const pageHeight = doc.page.height;
     const margin = 28;
     const contentWidth = pageWidth - (margin * 2);
-    const primary = '#008aad';
-    const background = '#eff9fc';
-    const panel = '#ffffff';
-    const softPanel = '#f8fdff';
-    const border = '#b6e3ef';
-    const text = '#0f172a';
-    const muted = '#64748b';
+    const { primary, background, panel, softPanel, border, text, muted } = REPORT_PDF_COLORS;
 
     const write = createCompactPdfWriter(doc, regularFont, text);
 
@@ -17583,37 +17433,13 @@ async function buildStudentSavedExcel(report) {
 
 async function buildStudentSavedPdf(report) {
   return await new Promise((resolve, reject) => {
-    const chunks = [];
-    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 24, bufferPages: true });
-    let regularFont = 'Helvetica';
-    let boldFont = 'Helvetica-Bold';
-    const fontPair = resolvePdfFontPair();
-    try {
-      if (fontPair) {
-        doc.registerFont('Arabic', fontPair.regular);
-        doc.registerFont('ArabicBold', fontPair.bold);
-        regularFont = 'Arabic';
-        boldFont = 'ArabicBold';
-      }
-    } catch {
-      regularFont = 'Helvetica';
-      boldFont = 'Helvetica-Bold';
-    }
-    doc.on('data', (chunk) => chunks.push(chunk));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
+    const { doc, regularFont, boldFont } = createBufferedPdf({ size: 'A4', layout: 'landscape', margin: 24, bufferPages: true }, resolvePdfFontPair(), resolve, reject);
 
     const pageWidth = doc.page.width;
     const pageHeight = doc.page.height;
     const margin = 28;
     const contentWidth = pageWidth - (margin * 2);
-    const primary = '#008aad';
-    const background = '#eff9fc';
-    const panel = '#ffffff';
-    const softPanel = '#f8fdff';
-    const border = '#b6e3ef';
-    const text = '#0f172a';
-    const muted = '#64748b';
+    const { primary, background, panel, softPanel, border, text, muted } = REPORT_PDF_COLORS;
     const write = createCompactPdfWriter(doc, regularFont, text);
     const drawBase = () => {
       doc.rect(0, 0, pageWidth, pageHeight).fill(background);
@@ -17956,24 +17782,7 @@ app.post('/api/reports/send-whatsapp', requireManagementReportAccess, async (req
       : `${reportTitle}${committeeLabel}\nالفترة: ${period.from || req.body.from || '-'} إلى ${period.to || req.body.to || '-'}`;
     await sendPreparedReportRecipients({ supervisors, failed, attachments, message, reportTitle, prepared });
 
-    const sentCount = prepared.filter((item) => item.status === 'sent').length;
-    if (sentCount === 0) {
-      return res.status(502).json({
-        message: failed[0]?.reason || 'لم يتم إرسال أي تقرير.',
-        preparedCount: prepared.length,
-        sentCount,
-        failedCount: failed.length,
-        prepared,
-        failed,
-      });
-    }
-    res.json({
-      preparedCount: prepared.length,
-      sentCount,
-      failedCount: failed.length,
-      prepared,
-      failed,
-    });
+    return sendWhatsAppResult(res, prepared, failed, 'لم يتم إرسال أي تقرير.');
   } catch (error) {
     next(error);
   }
@@ -18546,8 +18355,9 @@ try {
     await ensureManagerSupervisorAccount();
     await reconcileAllTenantStartupState();
     startAutomaticAbsenceScheduler();
-    void warmupWhatsApp();
     app.listen(port);
+    try { await refreshWhatsAppState({ waitMs: 15000 }); }
+    catch (error) { console.error('WhatsApp warmup failed:', error.message); }
 } catch (error) {
     console.error('MySQL initialization failed:', error);
     process.exit(1);
@@ -19303,9 +19113,9 @@ async function rejectMissingExecutionTasks({ taskRows, taskIds, connection, res 
   return null;
 }
 
-async function warmupWhatsApp() {
-  try { await refreshWhatsAppState({ waitMs: 15000 }); }
-  catch (error) { console.error('WhatsApp warmup failed:', error.message); }
+function resolveRecitationRequestDate(requested, today) {
+  const value = requested || today;
+  return isValidDateOnly(value) ? String(value) : today;
 }
 
 async function rejectOutOfSequenceRecitation({ task, req, connection, date, taskId, supervisorId, res }) {

@@ -49,8 +49,9 @@ export function enableDashboardUndo(active) {
   dashboardActive = active;
   if (!active) deferredActions.cancelAll();
 }
-export async function waitForDashboardUndo(label = 'حفظ التغييرات', signal) {
-  if (dashboardActive) await deferredActions.wait(label, signal);
+export async function waitForDashboardUndo(label, signal) {
+  const actionLabel = label === undefined ? 'حفظ التغييرات' : label;
+  if (dashboardActive) await deferredActions.wait(actionLabel, signal);
 }
 
 export function isDeferredMutation(path, options = {}) {

@@ -419,14 +419,19 @@ router.get('/complexes/:id/overview', requirePlatformOwner, async (req, res, nex
   }
 });
 
+function normalizeComplexFields(body) {
+  const registrationNumber = normalizeText(body.registrationNumber, 32);
+  const name = normalizeText(body.name);
+  const contactName = normalizeText(body.contactName) || null;
+  const contactPhone = normalizeText(body.contactPhone, 40) || null;
+  const managerName = normalizeText(body.managerName) || `مدير ${name}`;
+  const managerLoginNumber = normalizeText(body.managerLoginNumber, 80);
+  return { registrationNumber, name, contactName, contactPhone, managerName, managerLoginNumber };
+}
+
 router.post('/complexes', requirePlatformOwner, async (req, res, next) => {
   try {
-    const registrationNumber = normalizeText(req.body.registrationNumber, 32);
-    const name = normalizeText(req.body.name);
-    const contactName = normalizeText(req.body.contactName) || null;
-    const contactPhone = normalizeText(req.body.contactPhone, 40) || null;
-    const managerName = normalizeText(req.body.managerName) || `مدير ${name}`;
-    const managerLoginNumber = normalizeText(req.body.managerLoginNumber, 80);
+    const { registrationNumber, name, contactName, contactPhone, managerName, managerLoginNumber } = normalizeComplexFields(req.body);
     if (!registrationPattern.test(registrationNumber) || name.length < 2 || !loginNumberPattern.test(managerLoginNumber)) {
       return res.status(422).json({ message: 'أدخل رقم تسجيل واسم مجمع ورقم دخول مدير صحيحًا.' });
     }
@@ -500,12 +505,7 @@ router.post('/complexes', requirePlatformOwner, async (req, res, next) => {
 router.put('/complexes/:id', requirePlatformOwner, async (req, res, next) => {
   let connection;
   try {
-    const registrationNumber = normalizeText(req.body.registrationNumber, 32);
-    const name = normalizeText(req.body.name);
-    const contactName = normalizeText(req.body.contactName) || null;
-    const contactPhone = normalizeText(req.body.contactPhone, 40) || null;
-    const managerName = normalizeText(req.body.managerName) || `مدير ${name}`;
-    const managerLoginNumber = normalizeText(req.body.managerLoginNumber, 80);
+    const { registrationNumber, name, contactName, contactPhone, managerName, managerLoginNumber } = normalizeComplexFields(req.body);
     if (!registrationPattern.test(registrationNumber) || name.length < 2 || !loginNumberPattern.test(managerLoginNumber)) {
       return res.status(422).json({ message: 'أدخل رقم مجمع واسمًا ورقم دخول مدير صحيحًا.' });
     }

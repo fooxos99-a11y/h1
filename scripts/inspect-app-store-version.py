@@ -3,7 +3,7 @@ import os
 import time
 import urllib.parse
 
-import jwt
+from app_store_auth import create_app_token, find_app_id
 from app_store_review_state import wait_for_review_cancellation
 from app_store_http import request_json
 
@@ -62,20 +62,8 @@ def main():
     issuer_id = os.environ["APPSTORE_ISSUER_ID"]
     private_key = os.environ["APPSTORE_API_PRIVATE_KEY"]
     bundle_id = os.environ["APP_IDENTIFIER"]
-    now = int(time.time())
-    token = jwt.encode(
-        {"iss": issuer_id, "iat": now, "exp": now + 1200, "aud": "appstoreconnect-v1"},
-        private_key,
-        algorithm="ES256",
-        headers={"kid": key_id, "typ": "JWT"},
-    )
-
-    app_query = urllib.parse.urlencode({"filter[bundleId]": bundle_id, "limit": 1})
-    apps = request_json(f"/apps?{app_query}", token).get("data", [])
-    if not apps:
-        raise RuntimeError(f"App not found for bundle ID {bundle_id}")
-
-    app_id = apps[0]["id"]
+    token = create_app_token(key_id, issuer_id, private_key)
+    app_id = find_app_id(bundle_id, token)
     version_query = urllib.parse.urlencode(
         {
             "filter[platform]": "IOS",

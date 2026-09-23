@@ -13,6 +13,14 @@ export default function NewsEntryDialog({ entry, committees, pending, onClose, o
   const [reading, setReading] = useState(false);
   const fileInput = useRef(null);
   const update = (key, value) => setDraft(current => ({ ...current, [key]: value }));
+  const toggleCommittee = id => {
+    if (id === 'all') {
+      update('committeeIds', []);
+      return;
+    }
+    const selected = draft.committeeIds.includes(id);
+    update('committeeIds', selected ? draft.committeeIds.filter(value => value !== id) : [...draft.committeeIds, id]);
+  };
   const readImage = event => {
     const file = event.target.files?.[0]; event.target.value = '';
     if (!file) return;
@@ -28,7 +36,8 @@ export default function NewsEntryDialog({ entry, committees, pending, onClose, o
   const save = async event => {
     event.preventDefault(); setError('');
     // Saving this form explicitly replaces any legacy student targeting with circles.
-    const { legacyStudentIds: _legacy, ...value } = draft;
+    const value = { ...draft };
+    delete value.legacyStudentIds;
     try { await onSave(value); } catch (reason) { setError(reason.message); }
   };
   return <Dialog open onOpenChange={open => { if (!open && !pending && !reading) onClose(); }}>
@@ -42,7 +51,7 @@ export default function NewsEntryDialog({ entry, committees, pending, onClose, o
           <div className="space-y-1.5"><Label>الحلقات</Label>
             <MultiSelectSetting value={draft.committeeIds.length ? draft.committeeIds : ['all']} placeholder="جميع الحلقات"
               options={[{ value: 'all', label: 'جميع الحلقات' }, ...committees.map(row => ({ value: Number(row.id), label: row.name }))]}
-              onToggle={id => update('committeeIds', id === 'all' ? [] : draft.committeeIds.includes(id) ? draft.committeeIds.filter(value => value !== id) : [...draft.committeeIds, id])} />
+              onToggle={toggleCommittee} />
           </div>
           <div className="grid min-w-0 gap-3 sm:grid-cols-2">
             <div className="min-w-0 space-y-1.5"><p className="text-sm font-medium">بداية العرض</p><DateTimePicker label="بداية العرض" value={draft.startsAt} onChange={value => update('startsAt', value)} /></div>

@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - name: Prepare public web build settings
         run: cp config/web-build.env .env.madarij
       - run: npm run verify

@@ -62,7 +62,7 @@ export default function StudentNewsCard({ news, active = true }) {
     </div>
     </div>
     {images.length > 1 && <div className="flex flex-wrap justify-center" aria-label="صور الأخبار">
-      {images.map((_, item) => <Button key={item} variant="ghost" size="icon" className="h-11 w-11 min-w-0 rounded-none px-0"
+      {entries.map((entry, item) => <Button key={entry.id} variant="ghost" size="icon" className="h-11 w-11 min-w-0 rounded-none px-0"
         aria-label={`الصورة ${item + 1}`} aria-pressed={item === current} onClick={() => select(item)}>
         <span className={`h-1.5 rounded-full ${item === current ? 'w-5 bg-primary' : 'w-1.5 bg-primary/25'}`} />
       </Button>)}

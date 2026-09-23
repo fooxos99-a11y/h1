@@ -256,38 +256,24 @@ const StudentPlansSection = ({ hideCommitteeFilter = false }) => {
   );
 
   const preview = useMemo(() => {
+    let pages;
     if (quranReferenceMode === 'page') {
       const startPage = Number(form.startPage || 0);
       const endPage = Number(form.endPage || 0);
       if (!startPage || !endPage) return null;
-      const pages = countUnblockedPages(startPage, endPage, unavailablePageRanges);
-      const dailyPages = getPagesValue(form.dailyPreset, form.dailyPages, 0.25);
-      const reviewDays = countReviewDays(form.reviewWeekStartDay, form.reviewWeekEndDay, weeklyHolidayDays, holidayTaskTypes);
+      pages = countUnblockedPages(startPage, endPage, unavailablePageRanges);
       if (startPage < 1 || startPage > 604 || endPage < 1 || endPage > 604) return { error: 'بداية الخطة ونهايتها يجب أن تكونا ضمن صفحات المصحف.' };
-      if (form.reviewSplitWeekly && reviewDays < 1) return { error: 'اختر أيام مراجعة لا تكون كلها ضمن الإجازة الأسبوعية.' };
-      return {
-        pages,
-        dailyPages,
-        linkPages: getPagesValue(form.linkPreset, form.linkPages),
-        reviewPages: getPagesValue(form.reviewPreset, form.reviewPages),
-        reviewDailyPages: form.reviewSplitWeekly
-          ? Math.max(
-            Math.ceil(getPagesValue(form.reviewPreset, form.reviewPages) / reviewDays),
-            Number(form.reviewMinDailyPages || 1)
-          )
-          : getPagesValue(form.reviewPreset, form.reviewPages),
-        days: countExpectedMemorizationDays({ pages, dailyPages }),
-      };
+    } else {
+      if (!startAyah || !endAyah) return null;
+      pages = countUnblockedQuranPlanPages({
+        startAyah,
+        endAyah,
+        startChapter,
+        endChapter,
+        chapters,
+        blockedRanges: unavailablePageRanges,
+      });
     }
-    if (!startAyah || !endAyah) return null;
-    const pages = countUnblockedQuranPlanPages({
-      startAyah,
-      endAyah,
-      startChapter,
-      endChapter,
-      chapters,
-      blockedRanges: unavailablePageRanges,
-    });
     const dailyPages = getPagesValue(form.dailyPreset, form.dailyPages, 0.25);
     const reviewDays = countReviewDays(form.reviewWeekStartDay, form.reviewWeekEndDay, weeklyHolidayDays, holidayTaskTypes);
     if (form.reviewSplitWeekly && reviewDays < 1) return { error: 'اختر أيام مراجعة لا تكون كلها ضمن الإجازة الأسبوعية.' };

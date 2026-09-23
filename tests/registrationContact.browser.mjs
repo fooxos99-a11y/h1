@@ -16,7 +16,9 @@ try {
     await page.getByLabel('الاسم', { exact: true }).fill('ولي أمر طالب');
     await page.getByLabel('موضوع الرسالة', { exact: true }).fill('أرغب بالاستفسار عن موعد التسجيل');
     assert.ok(await page.getByRole('dialog').evaluate(node => node.scrollWidth <= node.clientWidth));
-    await page.screenshot({ path: `outputs/registration-contact-${width}.png` });
+    await page.screenshot({ path: `outputs/registration-contact-${width}.png`, animations: 'disabled' });
+    const bounds = await page.getByRole('dialog').boundingBox();
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width, 'Contact dialog fits the viewport');
     await page.getByRole('button', { name: 'إرسال', exact: true }).click();
     await page.getByRole('dialog').waitFor({ state: 'detached' });
     assert.equal(sent.registrationNumber, '1234');
