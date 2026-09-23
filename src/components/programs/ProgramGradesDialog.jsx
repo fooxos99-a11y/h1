@@ -57,8 +57,9 @@ export default function ProgramGradesDialog({ program, onClose }) {
   const toggle = (id, checked) => setSelected(current => checked ? [...new Set([...current, id])] : current.filter(value => value !== id));
   const selectAll = students.length > 0 && selected.length === students.length;
   return <Dialog open={Boolean(program)} onOpenChange={open => { if (!open && !saving) onClose(); }}>
-    <DialogContent dir="rtl" className="max-h-[90dvh] max-w-2xl overflow-y-auto [font-family:var(--font-ui)]">
+    <DialogContent dir="rtl" className="flex max-h-[90dvh] max-w-2xl flex-col overflow-hidden [font-family:var(--font-ui)]">
       <DialogHeader><DialogTitle>{program?.title} — تسجيل النقاط</DialogTitle></DialogHeader>
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain">
       {error && <div role="alert" className="space-y-2 text-sm text-destructive"><p>{error}</p>{!students.length && <Button variant="outline" onClick={() => setRetry(value => value + 1)}>إعادة المحاولة</Button>}</div>}
       {loading ? <DashboardLoader /> : <>
         {students.length > 0 && <fieldset disabled={saving} className="space-y-3 rounded-xl border p-3">
@@ -67,7 +68,6 @@ export default function ProgramGradesDialog({ program, onClose }) {
           </CheckboxOption>
           <div className="flex flex-wrap gap-2">
             <Input type="number" aria-label="نقاط المحددين" min="0" max={program?.pointsReward} step="1" value={bulkPoints} onChange={event => setBulkPoints(event.target.value)} className="min-h-11 min-w-0 flex-1" />
-            <Button className="min-h-11" disabled={saving} onClick={save}>{saving ? 'جارٍ الحفظ...' : 'حفظ'}</Button>
           </div>
         </fieldset>}
         <fieldset disabled={saving} className="space-y-3">{students.map(student => {
@@ -84,10 +84,12 @@ export default function ProgramGradesDialog({ program, onClose }) {
           </div>;
         })}</fieldset>
         {!students.length && !error && <p className="text-sm text-muted-foreground">لا يوجد طلاب.</p>}
-        <DialogFooter className="sticky bottom-0 border-t bg-card py-3">
-          <Button variant="outline" className="min-h-11" disabled={saving} onClick={onClose}>إغلاق</Button>
-        </DialogFooter>
       </>}
+      </div>
+      <DialogFooter className="shrink-0 flex-nowrap border-t bg-card pt-3" dir="rtl">
+        <Button variant="outline" className="min-h-11" disabled={saving} onClick={onClose}>إغلاق</Button>
+        <Button className="min-h-11" disabled={saving || loading || !students.length} onClick={save}>{saving ? 'جارٍ الحفظ...' : 'حفظ'}</Button>
+      </DialogFooter>
     </DialogContent>
   </Dialog>;
 }

@@ -40,8 +40,8 @@ test('staff attendance covers teachers, reciters, and administrators with locati
   assert.match(portal, /StaffAttendancePrompt/);
   assert.match(portal, /settings\.staffAttendanceSource === 'teacher'/);
   assert.ok(portal.indexOf("key: 'staffAttendance', label: 'التحضير'") < portal.indexOf("key: 'quranEvaluation', label: 'جلسات التسميع'"));
-  assert.match(report, /تقرير تحضير المعلمين والمقرئين والإدارة/);
-  assert.match(report, /value="supervisors">المعلمين والمقرئين والإدارة</);
+  assert.match(report, /تقرير الكادر/);
+  assert.match(report, /value="supervisors">الكادر</);
   assert.match(clientPermissions, /key: 'staffAttendance', label: 'تحضير المعلمين والمقرئين والإدارة'/);
   assert.doesNotMatch(clientPermissions, /description:/);
   assert.match(serverPermissions, /'staffAttendance'/);

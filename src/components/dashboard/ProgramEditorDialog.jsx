@@ -33,7 +33,7 @@ const fileAsDataUrl = (file) => new Promise((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
-export default function ProgramEditorDialog({ open, program, saving, onOpenChange, onSave, sectionMode = false }) {
+export default function ProgramEditorDialog({ open, program, saving, onOpenChange, onSave, onDelete, sectionMode = false }) {
   const rewardUnits = useRewardUnits();
   const fieldId = useId();
   const [draft, setDraft] = useState(emptyDraft);
@@ -224,6 +224,10 @@ export default function ProgramEditorDialog({ open, program, saving, onOpenChang
           </section></>}
           </>}
         </div>
+        {!sectionMode && program && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+          <SettingToggle label="إخفاء البرنامج" checked={draft.status === 'locked'} onCheckedChange={hidden => setDraft({ ...draft, status: hidden ? 'locked' : 'open' })} />
+          {onDelete && <Button type="button" variant="destructive" disabled={saving} onClick={onDelete}><Trash2 className="h-4 w-4" /> حذف البرنامج</Button>}
+        </div>}
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>إلغاء</Button>
           <Button type="button" disabled={saving || !draft.title.trim() || (draft.sectionsEnabled && !draft.sections.length)} onClick={submit}>{saving ? 'جارٍ الحفظ...' : 'حفظ'}</Button>

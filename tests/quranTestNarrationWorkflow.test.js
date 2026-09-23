@@ -28,8 +28,8 @@ test('Quran tests and narration expose both result entry and Mushaf recitation w
   ]);
   assert.match(testsSection, /مقطع عشوائي/);
   assert.match(testsSection, /randomMode/);
-  assert.match(narrationPanel, /بدء التسميع/);
-  assert.match(narrationPanel, /part\.rangeLabel/);
+  assert.match(await read('../src/components/dashboard/NarrationJuzParts.jsx'), /بدء التسميع/);
+  assert.match(await read('../src/lib/narrationParts.js'), /part\.rangeLabel/);
   assert.match(controls, /المقطع التالي/);
   for (const source of [testsSection, narrationPanel, settings, catalog]) {
     assert.doesNotMatch(source, /quranTestRecitationMode|narrationRecitationMode/);

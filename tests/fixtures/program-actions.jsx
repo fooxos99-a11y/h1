@@ -1,0 +1,14 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import ProgramsSection from '../../src/components/dashboard/ProgramsSection';
+import { studentsApi } from '../../src/services/studentsApi';
+import '../../src/index.css';
+if (!import.meta.env.DEV || !['localhost', '127.0.0.1'].includes(location.hostname)) throw new Error('Local only');
+let program = { id: 1, title: 'برنامج الاختبار', status: 'open', pointsReward: 20, contents: [], questions: [], sections: [], sectionsEnabled: false };
+studentsApi.getProgramsConfiguration = async () => ({ learningPathsEnabled: true });
+studentsApi.getPrograms = async () => ({ programs: program ? [program] : [] });
+studentsApi.updateProgram = async (_id, payload) => { program = { ...program, ...payload }; };
+studentsApi.deleteProgram = async () => { program = null; };
+studentsApi.getProgramGrades = async () => ({ students: Array.from({ length: 20 }, (_, i) => ({ id: i + 1, name: `طالب ${i + 1}`, earnedPoints: 0, completedAt: null })) });
+studentsApi.saveProgramGrades = async (_id, grades) => ({ grades: grades.map(row => ({ studentId: row.studentId, earnedPoints: row.points })) });
+createRoot(document.getElementById('root')).render(<main className="mx-auto max-w-5xl p-4"><ProgramsSection /></main>);

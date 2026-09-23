@@ -9,8 +9,8 @@ const student = { nazemStudentId: '29189' };
 const item = { type: 'conserve', late_items: [late] };
 const payload = value => ({ data: { students: [{ student_id: 29189, attendance_status: 2, items: [value] }] } });
 
-test('one-day refresh imports the explicit previous pending day for every track with its original identity', async () => {
-  for (const type of ['conserve', 'revision', 'master']) {
+test('one-day refresh imports the explicit previous pending day for memorization tracks with its original identity', async () => {
+  for (const type of ['conserve', 'master']) {
     const adapter = new NazemAdapter();
     const pending = { id: 123, date: '2026-09-07', status: 'pending', surah_from: 67, verse_from: 13, surah_to: 67, verse_to: 26 };
     adapter.openFollowUp = async () => payload({ id: 32698, type, pending_day: pending, late_items: [],

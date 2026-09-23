@@ -83,8 +83,9 @@ test('count-only evaluation is shared while detailed tests and narration use the
   assert.match(tests, /مقطع عشوائي/);
   assert.match(tests, />النتيجة</);
   assert.doesNotMatch(narration, /recitationMode === 'count'/);
-  assert.match(narration, /بدء التسميع/);
-  assert.match(narration, />النتيجة</);
+  const narrationParts = await read('../src/components/dashboard/NarrationJuzParts.jsx');
+  assert.match(narrationParts, /بدء التسميع/);
+  assert.match(narrationParts, />النتيجة</);
   assert.match(narration, /MushafRecitationDialog/);
   assert.match(api, /getQuranTestJuzAyahs/);
   assert.match(api, /getNarrationPartAyahs/);

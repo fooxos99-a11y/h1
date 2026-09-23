@@ -1,14 +1,13 @@
+import ReportsStaff from './ReportsStaff';
 import ReportsArchiveView from './ReportsArchiveView';
 import PageLoadingBoundary from '@/components/ui/page-loading-boundary';
 import DashboardDateRange from '@/components/dashboard/DashboardDateRange';
 import DashboardHeaderFilters from '@/components/dashboard/DashboardHeaderFilters';
-import { formatClockTime } from '../../../shared/clock-time.js';
-import NazemReconciliationReport from './NazemReconciliationReport';
 import ErrorState from '@/components/ui/error-state';
 import StudentPointsReport from '@/components/dashboard/StudentPointsReport';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, ChevronDown, FileDown, FileSpreadsheet, FileText, Send } from 'lucide-react';
-import { DashboardDatePicker, DashboardSecondaryButton } from '@/components/dashboard/DashboardControls';
+import { ChevronDown, FileDown, FileSpreadsheet, FileText, Send } from 'lucide-react';
+import { DashboardSecondaryButton } from '@/components/dashboard/DashboardControls';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -20,7 +19,6 @@ import ExecutionFollowupSection from '@/components/dashboard/ExecutionFollowupSe
 import ReportsOverview from '@/components/dashboard/ReportsOverview';
 import ReportsProgress from '@/components/dashboard/ReportsProgress';
 import ReportsRecitationSessions from '@/components/dashboard/ReportsRecitationSessions';
-import ReportsStudentSaved from '@/components/dashboard/ReportsStudentSaved';
 import TeacherPointsReport from '@/components/dashboard/TeacherPointsReport';
 import { getRecitationStatusLabel, isMasteredRecitation } from '@/lib/recitationEvaluation';
 import { studentsApi } from '@/services/studentsApi';
@@ -30,28 +28,11 @@ import { getBusinessDate } from '../../../shared/business-date.js';
 
 const today = getBusinessDate;
 
-const statusLabel = (status) => {
-  if (status === 'no_session') return 'لا توجد جلسة في هذا اليوم';
-  if (status === 'present') return 'حاضر';
-  if (status === 'late') return 'متأخر';
-  if (status === 'excused') return 'مستأذن';
-  return 'غائب';
-};
-
-const statusClassName = (status) => {
-  if (status === 'no_session') return 'text-muted-foreground';
-  if (status === 'present') return 'text-green-400';
-  if (status === 'late') return 'text-amber-400';
-  if (status === 'excused') return 'text-sky-400';
-  return 'text-red-400';
-};
-
-const reportControlClassName = 'h-11 w-full max-w-full min-w-0 rounded-xl border-primary/30 bg-background px-3 text-sm font-semibold text-foreground shadow-none xl:h-10';
+const reportControlClassName = 'h-11 w-full max-w-full min-w-0 rounded-xl border-primary/30 bg-background px-2 text-xs sm:px-3 sm:text-sm font-semibold text-foreground shadow-none xl:h-10';
 const whatsappReportLabels = {
   students: 'متابعة الطلاب',
-  supervisors: 'تقرير تحضير المعلمين والمقرئين والإدارة',
+  supervisors: 'تقرير الكادر',
   recitationSessions: 'تقرير جلسات التسميع',
-  studentSaved: 'تقرير محفوظ الطلاب',
   overview: 'تقرير الإحصائيات',
   archive: 'أرشيف التقارير',
 };
@@ -72,6 +53,8 @@ const ReportsSection = ({
   const [date, setDate] = useState(today());
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState(today());
+  const [staffId, setStaffId] = useState('all');
+  const [staffOptions, setStaffOptions] = useState([]);
   const [committeeId, setCommitteeId] = useState('all');
   const studentId = 'all';
   const [recitationStatus, setRecitationStatus] = useState('all');
@@ -109,6 +92,15 @@ const ReportsSection = ({
   ), [accountId, actorRole]);
 
   useEffect(() => {
+    if (target !== 'supervisors') return;
+    let active = true;
+    cachedReport(`staff-options:${date}`, () => studentsApi.getSupervisorReport({ date }))
+      .then((data) => { if (active) setStaffOptions(data); })
+      .catch((error) => { if (active) toast({ title: 'تعذر تحميل الكادر', description: error.message, variant: 'destructive' }); });
+    return () => { active = false; };
+  }, [target, date, cachedReport, toast]);
+
+  useEffect(() => {
     let active = true;
     Promise.all([
       canViewStandardReports ? cachedReport('scoped-committees', () => studentsApi.getReportCommittees()) : Promise.resolve([]),
@@ -131,7 +123,7 @@ const ReportsSection = ({
     if (!teacherScoped) return;
     const allowedTargets = [
       ...(canViewExecutionFollowup ? ['executionFollowup'] : []),
-      ...(canViewStandardReports ? ['students', 'studentSaved', 'studentPoints', 'nazemReconciliation', 'overview'] : []),
+      ...(canViewStandardReports ? ['students', 'studentPoints', 'overview'] : []),
       ...(canViewTeacherPoints ? ['teacherPoints'] : []),
     ];
     if (!allowedTargets.includes(target) && allowedTargets[0]) setTarget(allowedTargets[0]);
@@ -149,7 +141,7 @@ const ReportsSection = ({
 
   useEffect(() => {
     const requestKey = (from = fromDate, to = toDate) => JSON.stringify([
-      target, date, from, to, committeeId, archiveId, teacherScoped, reportRetry, accountId, actorRole,
+      target, date, from, to, committeeId, staffId, archiveId, teacherScoped, reportRetry, accountId, actorRole,
     ]);
     // The server supplies the initial period. Reflect it in the filters without
     // issuing the same report again or briefly replacing its results with a loader.
@@ -159,12 +151,6 @@ const ReportsSection = ({
     // Each loader owns its response shape and ignores results after effect cleanup.
     const reportLoaders = new Map([
       ['executionFollowup', async () => {
-          setArchive(null);
-          setOverview(null);
-          setRows([]);
-          setReportPeriod(null);
-        }],
-      ['nazemReconciliation', async () => {
           setArchive(null);
           setOverview(null);
           setRows([]);
@@ -235,22 +221,11 @@ const ReportsSection = ({
           normalizedRequest.current = requestKey(fromDate || report?.period?.from || '');
           if (!fromDate && report?.period?.from) setFromDate(report.period.from);
         }],
-      ['studentSaved', async () => {
-          setArchive(null);
-          setOverview(null);
-          const report = await cachedReport(`student-saved:all:${committeeId}:${studentId}`, () => studentsApi.getStudentSavedReport({
-            committeeId,
-            studentId,
-          }));
-          if (!active) return;
-          setRows(report.rows || []);
-          setReportPeriod(report.period || null);
-        }],
       ['supervisors', async () => {
           setArchive(null);
           setOverview(null);
           setReportPeriod(null);
-          const report = await cachedReport(`supervisors:${date}`, () => studentsApi.getSupervisorReport({ date }));
+          const report = await cachedReport(`supervisors:${reportFromDate}:${reportToDate}:${staffId}`, () => studentsApi.getSupervisorReport({ from: reportFromDate, to: reportToDate, staffId }));
           if (!active) return;
           setRows(report);
         }]
@@ -273,26 +248,24 @@ const ReportsSection = ({
       toast({ title: 'تعذر تحميل التقرير', description: error.message, variant: 'destructive' });
     });
     return () => { active = false; };
-  }, [reportRetry, target, date, reportFromDate, reportToDate, fromDate, toDate, committeeId, studentId, archiveId, teacherScoped, toast, cachedReport, accountId, actorRole]);
+  }, [reportRetry, target, date, reportFromDate, reportToDate, fromDate, toDate, committeeId, staffId, studentId, archiveId, teacherScoped, toast, cachedReport, accountId, actorRole]);
 
   const isOverviewReport = target === 'overview';
   const isStudentsReport = target === 'students';
   const isRecitationSessionsReport = target === 'recitationSessions';
-  const isStudentSavedReport = target === 'studentSaved';
   const isSupervisorsReport = target === 'supervisors';
   const isArchiveReport = target === 'archive';
   const isExecutionFollowup = target === 'executionFollowup';
-  const isNazemReconciliationReport = target === 'nazemReconciliation';
   const isStudentPointsReport = target === 'studentPoints';
   const isTeacherPointsReport = target === 'teacherPoints';
-  const isRangeReport = isOverviewReport || isStudentsReport || isRecitationSessionsReport || isTeacherPointsReport || isStudentPointsReport || isNazemReconciliationReport;
+  const isRangeReport = isSupervisorsReport || isOverviewReport || isStudentsReport || isRecitationSessionsReport || isTeacherPointsReport || isStudentPointsReport;
   const visibleRecitationRows = useMemo(() => {
     if (recitationStatus === 'mastered') return rows.filter(isMasteredRecitation);
     if (recitationStatus === 'repeat') return rows.filter((row) => getRecitationStatusLabel(row) === 'يحتاج إعادة');
     if (recitationStatus === 'incomplete') return rows.filter((row) => getRecitationStatusLabel(row) === 'لم يُستكمل');
     return rows;
   }, [recitationStatus, rows]);
-  const controlGridClass = 'grid-cols-2';
+  const controlGridClass = isRecitationSessionsReport ? 'grid-cols-3 gap-1.5 sm:gap-3' : 'grid-cols-2';
 
   const archiveRows = (archive?.progressReport?.rows || []).filter((row) => {
     if (committeeId === 'all') return true;
@@ -324,7 +297,7 @@ const ReportsSection = ({
 
   const updateToDate = (value) => {
     setToDate(value);
-    const start = (isStudentsReport || isStudentPointsReport || isNazemReconciliationReport) ? progressFromDate : fromDate;
+    const start = (isStudentsReport || isStudentPointsReport || isSupervisorsReport) ? progressFromDate : fromDate;
     if (value < start) setFromDate(value);
   };
 
@@ -349,6 +322,7 @@ const ReportsSection = ({
         date,
         committeeId,
         studentId,
+        staffId,
         archiveId,
         format,
       };
@@ -356,16 +330,14 @@ const ReportsSection = ({
       if (isOverviewReport) {
         file = await studentsApi.exportOverviewReport(exportPayload);
       } else if (isSupervisorsReport) {
-          file = await studentsApi.exportSupervisorReport(exportPayload);
-        } else if (isArchiveReport) {
-            file = await studentsApi.exportArchiveReport(exportPayload);
-          } else if (isRecitationSessionsReport) {
-              file = await studentsApi.exportRecitationSessionsReport(exportPayload);
-            } else if (isStudentSavedReport) {
-                file = await studentsApi.exportStudentSavedReport(exportPayload);
-              } else {
-                file = await studentsApi.exportProgressReport(exportPayload);
-              }
+        file = await studentsApi.exportSupervisorReport(exportPayload);
+      } else if (isArchiveReport) {
+        file = await studentsApi.exportArchiveReport(exportPayload);
+      } else if (isRecitationSessionsReport) {
+        file = await studentsApi.exportRecitationSessionsReport(exportPayload);
+      } else {
+        file = await studentsApi.exportProgressReport(exportPayload);
+      }
       downloadFile(file.blob, file.filename);
       toast({ title: 'تم التصدير', description: format === 'xlsx' ? 'تم تجهيز ملف Excel.' : 'تم تجهيز ملف PDF.' });
     } catch (error) {
@@ -384,7 +356,7 @@ const ReportsSection = ({
       setSupervisors(rows);
       setSelectedSupervisorIds([]);
     } catch (error) {
-      toast({ title: 'تعذر تحميل المعلمين والمقرئين والإدارة', description: error.message, variant: 'destructive' });
+      toast({ title: 'تعذر تحميل الكادر', description: error.message, variant: 'destructive' });
     }
   };
 
@@ -421,6 +393,7 @@ const ReportsSection = ({
         date,
         committeeId,
         studentId,
+        staffId,
         archiveId,
         formats: selectedReportFormats,
         supervisorIds: selectedSupervisorIds,
@@ -438,7 +411,7 @@ const ReportsSection = ({
     }
   };
 
-  const renderExportMenu = (compact = false) => (isOverviewReport || isStudentsReport || isRecitationSessionsReport || isStudentSavedReport || isSupervisorsReport || isArchiveReport) ? (
+  const renderExportMenu = (compact = false) => (isOverviewReport || isStudentsReport || isRecitationSessionsReport || isSupervisorsReport || isArchiveReport) ? (
     <div className={compact ? 'relative w-11 min-w-0 flex-none' : 'relative w-[112px] min-w-0 flex-none'}>
       <DashboardSecondaryButton
         onClick={() => setExportOpen((current) => !current)}
@@ -476,7 +449,7 @@ const ReportsSection = ({
     if (reportError && loadedTarget !== target) return <ErrorState message={reportError} onRetry={() => setReportRetry(value => value + 1)} />;
     // These reports share loading presentation; specialist reports manage their own requests.
     if (isLoading && loadedTarget !== target && (isOverviewReport || isArchiveReport || isRecitationSessionsReport
-      || isStudentSavedReport || isStudentsReport || isStudentPointsReport || isTeacherPointsReport)) {
+      || isStudentsReport || isStudentPointsReport || isTeacherPointsReport || isSupervisorsReport)) {
       return <DashboardLoader className="p-8" />;
     }
     if (isExecutionFollowup) {
@@ -489,15 +462,11 @@ const ReportsSection = ({
     if (isRecitationSessionsReport) {
       return <ReportsRecitationSessions rows={visibleRecitationRows} />;
     }
-    if (isStudentSavedReport) {
-      return <ReportsStudentSaved rows={rows} />;
-    }
+
     if (isStudentsReport) {
       return <ReportsProgress rows={rows} period={reportPeriod} />;
     }
-    if (isNazemReconciliationReport) {
-      return <NazemReconciliationReport from={reportFromDate} to={reportToDate} committeeId={committeeId} />;
-    }
+
     if (isStudentPointsReport) {
       if (studentPointsError) {
         return <ErrorState message={studentPointsError} onRetry={() => setReportRetry((value) => value + 1)} />;
@@ -507,48 +476,20 @@ const ReportsSection = ({
     if (isTeacherPointsReport) {
       return <TeacherPointsReport rows={rows} showTeacher={!teacherScoped} />;
     }
-    const _resolve_resolveReportsSection = () => {
-      if (isLoading && loadedTarget !== target) {
-        return <DashboardLoader className="p-8" />;
-      }
-      if (rows.length === 0) {
-        return <div className="p-8 text-center text-muted-foreground">لا توجد بيانات لهذا التاريخ.</div>;
-      }
-      return rows.map((row) => (
-                  <div key={row.id} className="grid grid-cols-[1.4fr_1fr_1fr] border-t border-primary/10 p-3 text-sm md:grid-cols-[1.5fr_1fr_1fr_1fr]">
-                    <span className="font-medium text-foreground">{row.name}</span>
-                    <span className="text-muted-foreground">{row.jobTitle}</span>
-                    <span className={statusClassName(row.status)}>{statusLabel(row.status)}</span>
-                    <span className="hidden items-center gap-2 text-muted-foreground md:flex">
-                      <CalendarDays className="h-4 w-4" />
-                      {formatClockTime(row.checkInTime)}
-                    </span>
-                  </div>
-                ));
-    };
-    return <div className="overflow-hidden rounded-2xl border border-primary/20">
-              <div className="grid grid-cols-[1.4fr_1fr_1fr] bg-background/80 p-3 text-sm font-bold text-muted-foreground md:grid-cols-[1.5fr_1fr_1fr_1fr]">
-                <span>الاسم</span>
-                <span>المسمى</span>
-                <span>الحالة</span>
-                <span className="hidden md:block">الوقت</span>
-              </div>
-
-              {_resolve_resolveReportsSection()}
-            </div>;
+    return <ReportsStaff rows={rows} />;
   };
   return (
     <PageLoadingBoundary key={target}>
     <div className="space-y-6" aria-busy={isLoading}>
       {!metadataReady && <DashboardLoader />}
       {reportError && loadedTarget === target && <ErrorState message={reportError} onRetry={() => setReportRetry(value => value + 1)} />}
-      {!isOnline && !isNazemReconciliationReport && (
+      {!isOnline && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-700 dark:text-amber-200">
           تعرض التقارير المحفوظة فقط دون إنترنت. التصدير والإرسال والحذف متاحة بعد عودة الاتصال.
         </div>
       )}
-      {!isExecutionFollowup && !isStudentSavedReport && !isArchiveReport && (teacherScoped || isRangeReport) && <DashboardHeaderFilters>
-        <DashboardDateRange from={teacherScoped || isStudentsReport || isStudentPointsReport || isNazemReconciliationReport ? progressFromDate : fromDate} to={toDate} onFromChange={updateFromDate} onToChange={updateToDate} />
+      {!isExecutionFollowup && !isArchiveReport && (teacherScoped || isRangeReport) && <DashboardHeaderFilters aboveTitle>
+        <DashboardDateRange sessionDates={!isSupervisorsReport} from={teacherScoped || isStudentsReport || isStudentPointsReport || isSupervisorsReport ? progressFromDate : fromDate} to={toDate} onFromChange={updateFromDate} onToChange={updateToDate} />
       </DashboardHeaderFilters>}
       <DashboardMobileHeaderActions>
         <div className="lg:hidden">{renderExportMenu(true)}</div>
@@ -567,9 +508,7 @@ const ReportsSection = ({
                     <>
                       {canViewExecutionFollowup && <SelectItem value="executionFollowup">متابعة تنفيذ</SelectItem>}
                       {canViewStandardReports && <SelectItem value="students">طلاب</SelectItem>}
-                      {canViewStandardReports && <SelectItem value="studentSaved">محفوظ الطلاب</SelectItem>}
                       {canViewStandardReports && <SelectItem value="studentPoints">نقاط الطلاب</SelectItem>}
-                      {canViewStandardReports && <SelectItem value="nazemReconciliation">مطابقة ناظم</SelectItem>}
                       {canViewStandardReports && <SelectItem value="overview">إحصائيات</SelectItem>}
                       {canViewTeacherPoints && <SelectItem value="teacherPoints">عمليات الإضافة والخصم</SelectItem>}
                     </>
@@ -578,10 +517,8 @@ const ReportsSection = ({
                       {canViewStandardReports && <SelectItem value="students">متابعة الطلاب</SelectItem>}
                       {canViewExecutionFollowup && <SelectItem value="executionFollowup">متابعة التنفيذ</SelectItem>}
                       {canViewStandardReports && <SelectItem value="recitationSessions">جلسات التسميع</SelectItem>}
-                      {canViewStandardReports && <SelectItem value="studentSaved">محفوظ الطلاب</SelectItem>}
                       {canViewStandardReports && <SelectItem value="studentPoints">نقاط الطلاب</SelectItem>}
-                      {canViewStandardReports && <SelectItem value="nazemReconciliation">مطابقة ناظم</SelectItem>}
-                      {canViewStandardReports && <SelectItem value="supervisors">المعلمين والمقرئين والإدارة</SelectItem>}
+                      {canViewStandardReports && <SelectItem value="supervisors">الكادر</SelectItem>}
                       {canViewStandardReports && <SelectItem value="overview">الإحصائيات</SelectItem>}
                       {canViewTeacherPoints && <SelectItem value="teacherPoints">عمليات الإضافة والخصم</SelectItem>}
                       {canViewStandardReports && <SelectItem value="archive">الأرشيف</SelectItem>}
@@ -598,7 +535,7 @@ const ReportsSection = ({
               />
             )}
 
-            {!teacherScoped && !isExecutionFollowup && (isOverviewReport || isStudentPointsReport || isNazemReconciliationReport || target === 'students' || target === 'recitationSessions' || target === 'studentSaved' || target === 'archive') && (
+            {!teacherScoped && !isExecutionFollowup && (isOverviewReport || isStudentPointsReport || target === 'students' || target === 'recitationSessions' || target === 'archive') && (
               <Select value={committeeId} onValueChange={setCommitteeId}>
                 <SelectTrigger aria-label="الحلقة" className={reportControlClassName}>
                   <SelectValue />
@@ -610,6 +547,16 @@ const ReportsSection = ({
                       {committee.name}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {isSupervisorsReport && (
+              <Select value={staffId} onValueChange={setStaffId}>
+                <SelectTrigger aria-label="اختيار الكادر" className={reportControlClassName}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الكادر</SelectItem>
+                  {staffOptions.map((person) => <SelectItem key={person.id} value={String(person.id)}>{person.name} — {({ supervisor: 'معلم', reciter: 'مقرئ', admin: 'إداري' })[person.role] || person.jobTitle}</SelectItem>)}
                 </SelectContent>
               </Select>
             )}
@@ -643,7 +590,6 @@ const ReportsSection = ({
               </div>
             )}
 
-            {!teacherScoped && !isExecutionFollowup && !isArchiveReport && !isStudentSavedReport && !isRangeReport && <DashboardDatePicker sessionDates value={date} onChange={setDate} className="w-full" />}
           </div>
         </CardHeader>
 

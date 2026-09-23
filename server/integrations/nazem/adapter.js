@@ -105,7 +105,8 @@ export function mapNazemPendingFollowUps(item, {
   remoteType,
   attendanceStatus = null,
 } = {}) {
-  const taskType = remoteType === 'revision' ? 'review' : 'memorization';
+  if (remoteType === 'revision') return [];
+  const taskType = 'memorization';
   const lateItems = normalizeNazemFollowUpItems(item?.late_items);
   return lateItems.flatMap((late) => {
     const lateDate = normalizeDateOnly(
@@ -1322,7 +1323,7 @@ export class NazemAdapter {
       const late = pending.filter(day => day.nazemLate).sort((a, b) => String(a.date).localeCompare(String(b.date)));
       const blocked = pending.filter(day => day.nazemPendingDay).sort((a, b) => String(a.date).localeCompare(String(b.date)));
       const overdueDates = [late[0]?.date, blocked[0]?.date].filter(Boolean).sort((first, second) => String(first).localeCompare(String(second)));
-      const actionableDate = overdueDates[0] || pending[0]?.date || null;
+      const actionableDate = remoteType === 'revision' ? queueDate : overdueDates[0] || pending[0]?.date || null;
       for (const day of [...rows, ...pending].filter(day => day.remoteType === remoteType)) {
         day.nazemQueueDate = queueDate;
         day.nazemActionableDate = actionableDate;
@@ -1589,10 +1590,11 @@ export class NazemAdapter {
     const followUpDate = saudiDate();
     const payload = await this.readStudentFollowUp(studentLink, planLink, followUpDate, { fresh });
     const current = findFollowUpDay(payload, studentLink, mapped.remoteType || 'conserve', { sourceDayId: mapped.nazemSourceDayId, sourceItemId: mapped.nazemSavedTarget?.nazemItemId });
-    const late = mapped.taskType === 'link' ? null : findMatchingNazemLate(normalizeNazemFollowUpItems(current.item?.late_items), mapped);
+    const carriesBacklog = mapped.taskType !== 'link' && mapped.remoteType !== 'revision';
+    const late = carriesBacklog ? findMatchingNazemLate(normalizeNazemFollowUpItems(current.item?.late_items), mapped) : null;
     if (late) return { ...current, payload, late, followUpDate };
     const pendingDay = current.item?.pending_day;
-    if (current.item?.is_blocked_by_previous_days && matchesNazemTarget(pendingDay, mapped, followUpDate)) {
+    if (carriesBacklog && current.item?.is_blocked_by_previous_days && matchesNazemTarget(pendingDay, mapped, followUpDate)) {
       return { ...current, day: pendingDay, payload, late: null, followUpDate, pendingDay: true };
     }
     if (matchesNazemTarget(current.day, mapped, followUpDate)) {
@@ -1605,8 +1607,31 @@ export class NazemAdapter {
         return { ...target, payload: historical, late: null, followUpDate: mapped.date,
           executionAttendanceStatus: current.student?.attendance_status, executionDate: followUpDate };
       }
+      const replacement = await this.resolveRegeneratedRecitation(studentLink, planLink, mapped, target, mapped.date);
+      if (replacement) return { ...replacement,
+        executionAttendanceStatus: current.student?.attendance_status, executionDate: followUpDate };
     }
-    const replacement = findRegeneratedPendingDay(normalizeNazemFollowUpItems(current.student?.items), mapped);
+    // Never reuse a current snapshot after navigating to a historical date.
+    const replacement = mapped.date === followUpDate
+      ? await this.resolveRegeneratedRecitation(studentLink, planLink, mapped, current, followUpDate) : null;
+    if (replacement) return replacement;
+    // A stored snapshot alone never replaces independent remote verification.
+    if (mapped.nazemSourceDayId || current.day) {
+      const missingCycle = mapped.taskType === 'review' && !mapped.nazemSavedTarget?.nazemItemId;
+      const message = missingCycle
+        ? 'التقييم القديم محفوظ دون رقم دورة المراجعة، وتغيّر رقم سجل المتابعة في ناظم. يلزم إثبات دورته الأصلية؛ هذا لا يعني تغيّر خطة الطالب.'
+        : 'تعذر مطابقة سجل ناظم الأصلي بالتقييم المحفوظ. النتيجة محفوظة وتحتاج مطابقة.';
+      const error = reviewNazemError(message, 'NAZEM_SAVED_TARGET_CHANGED');
+      error.details = { stage: 'target-resolution', expectedRecordId: mapped.nazemSourceDayId,
+        observedRecordId: current.day?.id, taskDate: mapped.date,
+        reason: missingCycle ? 'original-cycle-missing' : 'original-target-unmatched' };
+      throw error;
+    }
+    return { ...current, payload, late: null, followUpDate };
+  }
+
+  async resolveRegeneratedRecitation(studentLink, planLink, mapped, target, followUpDate) {
+    const replacement = findRegeneratedPendingDay(normalizeNazemFollowUpItems(target.student?.items), mapped);
     if (replacement) {
       const replacementId = String(replacement.day.id);
       // A second independent read must still identify the same unique pending day.
@@ -1618,14 +1643,7 @@ export class NazemAdapter {
           replacedRecordId: mapped.nazemSourceDayId };
       }
     }
-    // A stored snapshot alone never replaces independent remote verification.
-    if (mapped.nazemSourceDayId || current.day) {
-      const error = reviewNazemError('تعذر مطابقة سجل ناظم الأصلي بالتقييم المحفوظ. النتيجة محفوظة وتحتاج مطابقة.', 'NAZEM_SAVED_TARGET_CHANGED');
-      error.details = { stage: 'target-resolution', expectedRecordId: mapped.nazemSourceDayId,
-        observedRecordId: current.day?.id, taskDate: mapped.date };
-      throw error;
-    }
-    return { ...current, payload, late: null, followUpDate };
+    return null;
   }
 
   async readRecitationAuthority(studentLink, planLink, mapped) {
@@ -2139,11 +2157,13 @@ for (const remoteType of ['conserve', 'revision', 'master']) {
 
 /** Load late records only for the current requested day. */
 async function loadCurrentLateItems({ daysAgo, endDate, adapter, item, externalPlanId, studentLink, remoteType }) {
+  if (remoteType === 'revision') return [];
   return daysAgo === 0 && (!endDate || endDate === saudiDate(0)) ? await adapter.datedLateItems(item, externalPlanId, studentLink, remoteType) : [];
 }
 
 /** Preserve the current unfinished remote day as its own scheduled identity. */
 function collectCurrentPendingDay(daysAgo, pendingDay, remoteType, date, scheduled, itemId) {
+  if (remoteType === 'revision') return;
   if (daysAgo === 0 && pendingDay?.id && normalizeDateOnly(pendingDay.date)
     && !FINAL_FOLLOW_UP_STATUSES.has(String(pendingDay.status || ''))) {
     const pending = {

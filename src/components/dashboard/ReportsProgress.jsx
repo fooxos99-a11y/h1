@@ -6,77 +6,18 @@ function formatListening(value) {
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { formatContinuousRecitationRange } from '@/lib/recitationTaskRanges';
+import { getTaskSummary, formatReportFaces } from '../../../shared/report-faces.js';
 import useRewardUnits from '@/hooks/useRewardUnits';
 
 const formatNumber = (value = 0) => Number(value || 0).toLocaleString('ar-SA-u-nu-latn');
 const percent = (value = 0) => `${formatNumber(value)}%`;
 
-const formatFaces = (value = 0) => {
-  const faces = Number(value || 0);
-  if (faces === 0.25) return 'ربع وجه';
-  if (faces === 0.5) return 'نصف وجه';
-  if (faces === 1) return 'وجه';
-  if (faces === 2) return 'وجهان';
-  if (faces >= 3 && faces <= 10) return `${formatNumber(faces)} أوجه`;
-  return `${formatNumber(faces)} وجه`;
-};
-
-const getTaskSummary = (row, taskType, isDaily, period, track = null) => {
-  const details = row.tasks?.[taskType]?.details || [];
-  const selectedDetails = isDaily
-    ? details.filter((detail) => detail.date === period?.from)
-    : details;
-  const items = selectedDetails
-    .flatMap((detail) => detail.items || [])
-    .filter((item) => !track || (item.track || 'memorization') === track)
-    .filter((item) => {
-      if (taskType === 'memorization') {
-        return item.teacherCompleted === true || (
-          item.teacherCompleted === null
-          && item.studentStatus === 'done'
-          && ['complete', 'partial', 'extra'].includes(item.executionState)
-        );
-      }
-      if (taskType === 'review') return item.studentStatus === 'done';
-      return item.studentStatus === 'done'
-        && item.teacherCompleted !== false
-        && item.executionState !== 'partial';
-    });
-  return {
-    amount: formatContinuousRecitationRange(items, 'ayah'),
-    faces: items.reduce((sum, item) => sum + Number(item.actualFaces ?? item.targetPages ?? 0), 0),
-  };
-};
-
 const TaskAmount = ({ summary, label = '' }) => {
-  const content = summary?.amount
-    ? `${summary.amount} (${formatFaces(summary.faces)})`
-    : '-';
+  const content = formatReportFaces(summary?.faces);
   return (
     <div className="min-w-0" title={content === '-' ? undefined : content}>
       {label && <span className="font-black text-muted-foreground">{label}: </span>}
       <span className="text-foreground">{content}</span>
-    </div>
-  );
-};
-
-const ExpandableTaskAmount = ({ summary }) => {
-  const [expanded, setExpanded] = useState(false);
-  if (!summary?.amount) return <TaskAmount summary={summary} />;
-  if (summary.amount.length <= 28) return <TaskAmount summary={summary} />;
-  return (
-    <div className="min-w-0 text-right">
-      <div className={expanded ? '' : 'line-clamp-2'}><TaskAmount summary={summary} /></div>
-      <button
-        type="button"
-        className="mt-0.5 inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-lg font-black text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        aria-expanded={expanded}
-        aria-label={expanded ? 'إخفاء بقية المقدار' : 'عرض كامل المقدار'}
-        onClick={() => setExpanded((value) => !value)}
-      >
-        …
-      </button>
     </div>
   );
 };
@@ -105,12 +46,7 @@ const attendanceClasses = {
   no_session: 'text-muted-foreground',
 };
 
-const memorizationStatusLabels = {
-  no_plan: 'لا توجد خطة',
-  not_completed: 'لم ينفذ',
-  partial: 'تنفيذ جزئي',
-  completed: 'تم واعتمد',
-};
+
 const executionTypeLabels = { normal: 'طبيعي', compensation: 'تعويض', extra: 'زيادة خارج الخطة' };
 
 const HeaderCell = ({ children }) => (
@@ -126,11 +62,9 @@ const ValueCell = ({ children, className = '', title }) => (
   </div>
 );
 
-const DailyDetails = ({ items = [], nazemManaged = false, referenceMode = 'ayah' }) => {
+const DailyDetails = ({ row, items = [], nazemManaged = false }) => {
   const rewardUnits = useRewardUnits();
-  const rangeValue = (rangeItems, fallback) => (
-    rangeItems?.length ? formatContinuousRecitationRange(rangeItems, referenceMode) : fallback
-  );
+  const amountValue = (date, type, track = null) => formatReportFaces(getTaskSummary(row, type, true, { from: date }, track).faces);
   return (
   <div className="grid gap-2 border-t border-primary/10 bg-background/45 p-3 sm:grid-cols-2 xl:grid-cols-3">
     {items.map((item) => { const _resolveDailyDetails = () => {
@@ -152,7 +86,7 @@ const DailyDetails = ({ items = [], nazemManaged = false, referenceMode = 'ayah'
         <div className="space-y-1.5 text-right leading-6">
           <div>
             <span className="text-muted-foreground">المحفوظ:</span>{' '}
-            {rangeValue(item.memorizationItems, item.memorization) || memorizationStatusLabels[item.memorizationStatus] || '-'}
+            {amountValue(item.date, 'memorization', 'memorization')}
             {item.memorization && item.memorizationStatus === 'partial' && (
               <span className="mr-1 text-amber-600 dark:text-amber-400">(تنفيذ جزئي)</span>
             )}
@@ -160,10 +94,10 @@ const DailyDetails = ({ items = [], nazemManaged = false, referenceMode = 'ayah'
           <div><span className="text-muted-foreground">التكرار:</span> {item.repeat == null ? '-' : `${formatNumber(item.repeat)} مرة`}</div>
           <div><span className="text-muted-foreground">السماع:</span> {_resolveDailyDetails()}</div>
           {item.masteryStatus !== 'no_plan' && (
-            <div><span className="text-muted-foreground">الإتقان:</span> {rangeValue(item.masteryItems, item.mastery) || memorizationStatusLabels[item.masteryStatus] || '-'}</div>
+            <div><span className="text-muted-foreground">الإتقان:</span> {amountValue(item.date, 'memorization', 'mastery')}</div>
           )}
-          <div><span className="text-muted-foreground">المراجعة:</span> {rangeValue(item.reviewItems, item.review) || '-'}</div>
-          <div><span className="text-muted-foreground">الربط:</span> {rangeValue(item.linkItems, item.link) || '-'}</div>
+          <div><span className="text-muted-foreground">المراجعة:</span> {amountValue(item.date, 'review')}</div>
+          <div><span className="text-muted-foreground">الربط:</span> {amountValue(item.date, 'link')}</div>
           {item.evaluation && <div><span className="text-muted-foreground">التقييم:</span> {item.evaluation}</div>}
           {Object.entries(item.executionBreakdown || {})
             .filter(([type]) => !nazemManaged || type === 'normal')
@@ -222,7 +156,7 @@ const ReportsProgress = ({ rows = [], period = null }) => {
                 </div>
                 <TaskAmount summary={review} label="المراجعة" />
                 <TaskAmount summary={link} label="الربط" />
-                {mastery.amount && <TaskAmount summary={mastery} label="الإتقان" />}
+                {mastery.hasItems && <TaskAmount summary={mastery} label="الإتقان" />}
                 {isDaily && (
                   <>
                     <div><span className="text-muted-foreground">التكرار:</span> {todayDetails?.repeat == null ? '-' : `${formatNumber(todayDetails.repeat)} مرة`}</div>
@@ -275,7 +209,7 @@ const ReportsProgress = ({ rows = [], period = null }) => {
                           <TaskAmount summary={memorization} label="مقدار الحفظ" />
                         </div>
                         <div className="truncate text-[11px] font-bold text-muted-foreground">{row.committeeName || 'بدون حلقة'}</div>
-                        {mastery.amount && <div className="text-[11px] font-bold"><TaskAmount summary={mastery} label="الإتقان" /></div>}
+                        {mastery.hasItems && <div className="text-[11px] font-bold"><TaskAmount summary={mastery} label="الإتقان" /></div>}
                         {isDaily && <div className="text-[10px] font-bold text-muted-foreground">التكرار: {todayDetails?.repeat == null ? '-' : `${formatNumber(todayDetails.repeat)} مرة`}، السماع: {formatListening(todayDetails?.listening)}</div>}
                         {!row.nazemManaged && <div className="text-[10px] font-black text-amber-600">النقص: {formatNumber(row.planProgress?.shortageFaces)} وجه</div>}
                       </div>
@@ -296,8 +230,8 @@ const ReportsProgress = ({ rows = [], period = null }) => {
                         ? (attendanceLabels[todayDetails?.attendanceStatus] || '-')
                         : <RatioValue done={row.attendance?.attended} expected={row.attendance?.expected} />}
                     </ValueCell>
-                    <ValueCell className="text-right leading-5"><ExpandableTaskAmount summary={review} /></ValueCell>
-                    <ValueCell className="text-right leading-5"><ExpandableTaskAmount summary={link} /></ValueCell>
+                    <ValueCell className="text-right leading-5"><TaskAmount summary={review} /></ValueCell>
+                    <ValueCell className="text-right leading-5"><TaskAmount summary={link} /></ValueCell>
                     <ValueCell className="text-primary">{percent(row.overallPercentage)}</ValueCell>
                   </div>
                 </div>
@@ -317,9 +251,9 @@ const ReportsProgress = ({ rows = [], period = null }) => {
           </DialogHeader>
           <div className="max-h-[75dvh] overflow-y-auto">
             <DailyDetails
+              row={selectedDetails}
               items={selectedDetails?.dailyDetails || []}
               nazemManaged={selectedDetails?.nazemManaged}
-              referenceMode="ayah"
             />
           </div>
         </DialogContent>

@@ -71,18 +71,15 @@ test('remote Nazem follow-up imports repetition and listening into Ruwasi', asyn
   assert.match(saveRemote, /listeningCount: importedListeningCount/);
 });
 
-test('saved Quran report exposes the complete merged memorization only', async () => {
-  const [reports, saved, server] = await Promise.all([
+test('removed reports stay hidden while saved Quran data remains available', async () => {
+  const [reports, server] = await Promise.all([
     read('../src/components/dashboard/ReportsSection.jsx'),
-    read('../src/components/dashboard/ReportsStudentSaved.jsx'),
     read('../server/index.js'),
   ]);
 
-  assert.match(reports, /SelectItem value="studentSaved">محفوظ الطلاب/);
-  assert.match(reports, /getStudentSavedReport/);
-  assert.match(reports, /exportStudentSavedReport/);
-  assert.match(saved, /row\.memorizationRange/);
-  assert.doesNotMatch(saved, /row\.masteryRange|row\.reviewRange|بيانات ناظم/);
+  assert.doesNotMatch(reports, /SelectItem value="(?:studentSaved|nazemReconciliation)"/);
+  assert.doesNotMatch(reports, /getStudentSavedReport/);
+  assert.doesNotMatch(reports, /exportStudentSavedReport/);
   assert.match(server, /await getStudentMemorizedRanges\(connection, student\.id\)/);
   assert.match(server, /mode: 'allTime'/);
 });

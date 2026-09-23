@@ -1,7 +1,7 @@
 import ProgramManagementDialog from '@/components/programs/ProgramManagementDialog';
 import ProgramGradesDialog from '@/components/programs/ProgramGradesDialog';
 import React, { useCallback, useEffect, useState } from 'react';
-import { BookOpen, Eye, EyeOff, Pencil, Plus, Trash2 } from 'lucide-react';
+import { BookOpen, Pencil, Plus } from 'lucide-react';
 import DashboardHeaderToggle from '@/components/dashboard/DashboardHeaderToggle';
 import DashboardLoader from '@/components/dashboard/DashboardLoader';
 import DashboardMobileHeaderActions from '@/components/dashboard/DashboardMobileHeaderActions';
@@ -75,19 +75,12 @@ export default function ProgramsSection() {
     }
   };
 
-  const toggle = async (program) => {
-    try {
-      await studentsApi.updateProgram(program.id, { ...program, status: program.status === 'open' ? 'locked' : 'open' });
-      await load();
-    } catch (error) {
-      toast({ title: 'تعذر تغيير حالة المستوى', description: error.message, variant: 'destructive' });
-    }
-  };
-
   const remove = async () => {
     try {
       await studentsApi.deleteProgram(deleting.id);
       setDeleting(null);
+      setEditorOpen(false);
+      setEntered(null);
       await load();
       toast({ title: 'حُذف المستوى' });
     } catch (error) {
@@ -134,16 +127,10 @@ export default function ProgramsSection() {
                     <BookOpen className="h-5 w-5" />
                   </span>
                 </div>
-                {(program.sectionsEnabled || !program.questions.length) && <Button className="min-h-11 w-full" onClick={() => setEntered(program)}>دخول</Button>}
                 <div className="flex gap-2">
+                  {(program.sectionsEnabled || !program.questions.length) && <Button className="min-h-11 flex-1" onClick={() => setEntered(program)}>دخول</Button>}
                   <Button className="min-h-11 flex-1" variant="outline" onClick={() => { setEditing(program); setEditorOpen(true); }}>
                     <Pencil className="h-4 w-4" /> تعديل
-                  </Button>
-                  <Button className="min-h-11" size="icon" variant="outline" aria-label={program.status === 'open' ? 'إخفاء' : 'إظهار'} title={program.status === 'open' ? 'إخفاء' : 'إظهار'} onClick={() => toggle(program)}>
-                    {program.status === 'open' ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                  <Button className="min-h-11 border-destructive/20 text-destructive hover:bg-destructive/5" size="icon" variant="outline" aria-label="حذف" onClick={() => setDeleting(program)}>
-                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               </CardContent>
@@ -154,7 +141,7 @@ export default function ProgramsSection() {
 
       <ProgramManagementDialog program={grading || editorOpen ? null : entered} onClose={() => setEntered(null)} onGrade={setGrading} onEdit={program => { setEditing(program); setEditorOpen(true); }} />
       <ProgramGradesDialog program={grading} onClose={() => setGrading(null)} />
-      <ProgramEditorDialog open={editorOpen} program={editing} saving={saving} onOpenChange={setEditorOpen} onSave={save} />
+      <ProgramEditorDialog open={editorOpen} program={editing} saving={saving} onOpenChange={setEditorOpen} onSave={save} onDelete={() => setDeleting(editing)} />
       <Dialog open={Boolean(deleting)} onOpenChange={(open) => !open && setDeleting(null)}>
         <DialogContent dir="rtl" className="[font-family:var(--font-ui)]">
           <DialogHeader><DialogTitle>حذف المستوى</DialogTitle></DialogHeader>
