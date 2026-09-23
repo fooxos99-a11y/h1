@@ -1,3 +1,5 @@
+import { getTaskSummary, formatReportFaces } from '../shared/report-faces.js';
+import { loadStaffAttendanceReport } from './services/staffAttendanceReport.js';
 import { practiceCompletionCount } from '../shared/practice-completion.js';
 import { normalizePointAdjustmentTarget, setStudentStoreBalance } from './services/studentBalanceAdjustment.js';
 import { normalizeWordMarkType, normalizeSelectedWordMarks, normalizeSelectedAyahMarks } from './services/recitationMarks.js';
@@ -15452,34 +15454,8 @@ async function persistSelectedWordMarks(normalizedWordMarks, connection, taskId,
   }
 }
 
-async function buildSupervisorAttendanceReport({ date } = {}) {
-    const requestedDate = isValidDateOnly(date) ? date : getSaudiDateTimeParts().date;
-    const [rows] = await db().query(
-      `
-      SELECT
-        s.id,
-        s.name,
-        s.login_number AS loginNumber,
-        s.job_title AS jobTitle,
-        ar.status AS status,
-        TIME_FORMAT(ar.check_in_time, '%H:%i') AS checkInTime,
-        ar.record_date AS recordDate,
-        COALESCE(ar.points, 0) AS points,
-        s.role,
-        ar.check_in_method AS checkInMethod,
-        ar.distance_meters AS distance
-      FROM supervisors s
-      LEFT JOIN supervisor_attendance_records ar ON ar.supervisor_id = s.id AND ar.record_date = ?
-      WHERE s.role IN ('supervisor', 'reciter', 'admin') AND s.is_active = 1
-      ORDER BY s.name ASC
-      `,
-      [requestedDate]
-    );
-
-    return {
-      period: { from: requestedDate, to: requestedDate },
-      rows,
-    };
+async function buildSupervisorAttendanceReport(query = {}) {
+  return loadStaffAttendanceReport(query, db(), getSaudiDateTimeParts().date);
 }
 
 app.get('/api/reports/supervisors', requireManagementReportAccess, async (req, res, next) => {
@@ -16164,10 +16140,10 @@ function getReportRowValues(row) {
     attendance: reportRatio(row.attendance?.attended, row.attendance?.expected),
     late: Number(row.attendance?.late || 0),
     excused: Number(row.attendance?.excused || 0),
-    savedMemorization: row.saved?.memorization || '-',
-    reviewRange: row.saved?.review || '-',
+    savedMemorization: formatReportFaces(getTaskSummary(row, 'memorization', false, null, 'memorization').faces),
+    reviewRange: formatReportFaces(getTaskSummary(row, 'review', false).faces),
     repeat: reportRatio(row.tasks?.repeat?.done, row.tasks?.repeat?.expected),
-    link: reportRatio(row.tasks?.link?.done, row.tasks?.link?.expected),
+    link: formatReportFaces(getTaskSummary(row, 'link', false).faces),
     currentShortage: `${Number(row.planProgress?.shortageFaces || 0)} وجه`,
     overall: Number(row.overallPercentage || 0) / 100,
   };
@@ -16808,10 +16784,10 @@ async function buildProgressPdf(report) {
     const rowHeight = 21;
     const columns = [
       { label: 'النسبة', width: 54, value: (row) => `${Number(row.overallPercentage || 0)}%`, strong: true },
-      { label: 'الربط', width: 50, value: (row) => reportRatio(row.tasks?.link?.done, row.tasks?.link?.expected) },
+      { label: 'الربط', width: 50, value: (row) => formatReportFaces(getTaskSummary(row, 'link', false).faces) },
       { label: 'التكرار', width: 50, value: (row) => reportRatio(row.tasks?.repeat?.done, row.tasks?.repeat?.expected) },
-      { label: 'المراجعة', width: 130, value: (row) => row.saved?.review || '-' },
-      { label: 'المحفوظ', width: 150, value: (row) => row.saved?.memorization || '-' },
+      { label: 'المراجعة', width: 130, value: (row) => formatReportFaces(getTaskSummary(row, 'review', false).faces) },
+      { label: 'المحفوظ', width: 150, value: (row) => formatReportFaces(getTaskSummary(row, 'memorization', false, null, 'memorization').faces) },
       { label: 'الحضور', width: 62, value: (row) => reportRatio(row.attendance?.attended, row.attendance?.expected) },
       { label: 'النقص', width: 60, value: (row) => `${Number(row.planProgress?.shortageFaces || 0)} وجه` },
       { label: 'الطالب', width: contentWidth - 556, value: (row) => row.name, align: 'right', student: true },
@@ -17996,8 +17972,8 @@ async function prepareWhatsAppReport({ reportType, report, req, reportTitle, bui
     buildExcel = buildOverviewExcel;
     getFileName = (data, extension) => `الإحصائيات-${data.period.from}-إلى-${data.period.to}.${extension}`;
   } else if (reportType === 'supervisors') {
-    report = await buildSupervisorAttendanceReport({ date: req.body.date || req.body.from });
-    reportTitle = 'تقرير تحضير المعلمين والمقرئين والإدارة';
+    report = await buildSupervisorAttendanceReport(req.body);
+    reportTitle = 'تقرير الكادر';
     buildPdf = (data) => buildSupervisorPdf(data, { fontPair: resolvePdfFontPair(), siteName: currentSiteConfig().name });
     buildExcel = buildSupervisorExcel;
     getFileName = (data, extension) => `تقرير-المعلمين-${data.period.from}.${extension}`;

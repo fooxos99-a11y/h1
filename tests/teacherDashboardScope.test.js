@@ -48,9 +48,9 @@ test('teacher attendance and reports are constrained to linked committees on the
   assert.match(attendance, /teacherScoped \? \([\s\S]*headerLabel/);
   assert.doesNotMatch(reports, /getMyCommittees/);
   assert.match(reports, /teacherScoped \? Promise\.resolve\(\[\]\)/);
-  assert.match(reports, /<DashboardHeaderFilters>[\s\S]*<DashboardDateRange/);
+  assert.match(reports, /<DashboardHeaderFilters aboveTitle>[\s\S]*<DashboardDateRange/);
   assert.ok(reports.indexOf('<DashboardMobileHeaderActions>') < reports.indexOf('<Card className='));
-  assert.match(reports, /!isExecutionFollowup && !isStudentSavedReport && !isArchiveReport && \(teacherScoped \|\| isRangeReport\)[\s\S]*DashboardDateRange/);
+  assert.match(reports, /!isExecutionFollowup && !isArchiveReport && \(teacherScoped \|\| isRangeReport\)[\s\S]*DashboardDateRange/);
   assert.match(reports, /teacherScoped[\s\S]*studentsApi\.getProgressReport/);
   assert.match(reports, /<ReportsOverview data=\{overview\} \/>/);
   assert.match(teacherOverview, /CommitteeIndicatorsPanel/);
@@ -118,7 +118,8 @@ test('teacher reports use a date range and call rooms lock to the linked committ
   assert.match(reportsProgress, /<HeaderCell>الربط<\/HeaderCell>/);
   assert.match(reportsProgress, /<HeaderCell>نسبة الإنجاز<\/HeaderCell>/);
   assert.match(reportsProgress, /label="مقدار الحفظ"/);
-  assert.match(reportsProgress, /formatContinuousRecitationRange\(items, 'ayah'\)/);
+  assert.match(reportsProgress, /formatReportFaces/);
+  assert.doesNotMatch(reportsProgress, /formatContinuousRecitationRange/);
   assert.doesNotMatch(reportsProgress, /بيانات ناظم|مقدار الفترة/);
   assert.match(server, /quranReferenceMode: settings\.quranReferenceMode === 'page' \? 'page' : 'ayah'/);
   assert.doesNotMatch(reportsProgress, /<HeaderCell>التحضير<\/HeaderCell>|محفوظ اليوم|مراجعة اليوم|<HeaderCell>النسبة<\/HeaderCell>/);

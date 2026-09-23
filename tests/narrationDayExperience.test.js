@@ -16,7 +16,7 @@ test('narration day uses header actions and compact completed student cards', as
   assert.doesNotMatch(section, /<CardHeader/);
   assert.match(studentPanel, /if \(student\.status === 'completed'\) \{\s*return 'تم الانتهاء';/);
   assert.match(studentPanel, /bg-emerald-600/);
-  assert.match(studentPanel, /part\.rangeLabel \|\| `الجزء \$\{part\.juzNumber\}`/);
+  assert.match(await readFile(new URL('../src/lib/narrationParts.js', import.meta.url), 'utf8'), /part\.rangeLabel \|\| `الجزء \$\{part\.juzNumber\}`/);
   assert.doesNotMatch(studentPanel, /صفحة \{part\.startPage\}|تم تقييم \{evaluatedParts\.length\}/);
   assert.match(studentPanel, /أسماء المسمعين/);
   assert.match(studentPanel, /evaluatorNames\.map/);

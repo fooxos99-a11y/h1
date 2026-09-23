@@ -25,7 +25,8 @@ export function isCurrentNazemSession(owned, authorities, lateIds = []) {
       && row.taskType === 'memorization' && row.track === task.track
       && row.sourceDate === task.taskDate)) return true;
     const authority = authorities.find(row => Number(row.planId) === Number(task.planId)
-      && row.taskType === taskType && row.track === task.track);
+      && row.taskType === taskType && row.track === task.track
+      && (taskType !== 'review' || row.sourceDate === task.taskDate));
     if (!authority?.taskDate || authority.taskDate !== task.taskDate) return false;
     return taskType !== 'review' || ['fromSurah', 'fromAyah', 'toSurah', 'toAyah']
       .every(key => Number(authority[key]) > 0 && Number(authority[key]) === Number(task[key]));

@@ -6,10 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { loadOfflineSnapshot } from '@/services/offlineOperationsService';
 import { studentsApi } from '@/services/studentsApi';
+import NarrationJuzParts from './NarrationJuzParts';
+import { groupNarrationParts } from '@/lib/narrationParts';
 
 const getAccountId = () => Number(localStorage.getItem('wajeh_supervisor_id') || 0);
 
 const NarrationStudentPanel = ({ eventId, student, archived, onSavePart, onStart }) => {
+  const juzGroups = useMemo(() => groupNarrationParts(student.parts), [student.parts]);
   const [open, setOpen] = useState(false);
   const [selectedPart, setSelectedPart] = useState(null);
   const [mushafPart, setMushafPart] = useState(null);
@@ -79,7 +82,7 @@ const NarrationStudentPanel = ({ eventId, student, archived, onSavePart, onStart
 
         <div className="flex items-center justify-between gap-3">
           <div className="text-xs font-bold text-muted-foreground">
-            {student.parts.length} مقطع · {student.totalFaces} وجه
+            {juzGroups.length} جزء
           </div>
           <Button
             type="button"
@@ -99,35 +102,7 @@ const NarrationStudentPanel = ({ eventId, student, archived, onSavePart, onStart
             <p className="text-sm font-bold text-muted-foreground">{student.committeeName} · {student.totalFaces} وجه</p>
           </DialogHeader>
 
-          <div className="space-y-3 py-2">
-            {student.parts.map((part) => {
-              const evaluated = part.score !== null && part.score !== undefined;
-              return (
-                <section key={part.id} className="rounded-xl border border-primary/15 bg-background/60 p-3 sm:p-4">
-                  <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <div className="font-black text-foreground">{part.rangeLabel || `الجزء ${part.juzNumber}`}</div>
-                    </div>
-                    <div className={`rounded-full border px-3 py-1 text-xs font-black ${evaluated ? 'border-primary/20 bg-primary/10 text-primary' : 'border-amber-500/25 bg-amber-500/10 text-amber-500'}`}>
-                      {evaluated ? `${Number(part.score).toFixed(1)} من 100` : 'لم يُقيّم'}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm font-black text-muted-foreground">
-                      {evaluated ? `${part.mistakeCount} خطأ · ${part.warningCount} تنبيه` : `${part.faces} وجه`}
-                    </div>
-                    {!archived && (
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" onClick={() => setSelectedPart(part)} className="min-h-11">النتيجة</Button>
-                        <Button type="button" onClick={() => setMushafPart(part)} className="min-h-11">بدء التسميع</Button>
-                      </div>
-                    )}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
+          <NarrationJuzParts groups={juzGroups} archived={archived} onResult={setSelectedPart} onRecite={setMushafPart} />
 
           <div className="grid gap-3 border-t border-primary/15 pt-4 sm:grid-cols-2">
             <div className="rounded-xl border border-primary/15 bg-primary/5 p-4">

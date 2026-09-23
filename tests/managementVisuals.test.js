@@ -22,7 +22,7 @@ test('management actions share subtle borders and family preview shows contact d
   assert.match(iconButton, /variant="outline"/);
   assert.match(iconButton, /border-border\/70 shadow-none/);
   assert.doesNotMatch(iconButton, /border-destructive\/50/);
-  assert.match(reports, /const controlGridClass = 'grid-cols-2'/);
+  assert.match(reports, /const controlGridClass = isRecitationSessionsReport \? 'grid-cols-3 gap-1.5 sm:gap-3' : 'grid-cols-2'/);
   assert.match(reports, /id="execution-followup-report-controls"[\s\S]*className="contents"/);
   assert.match(reports, /sm:w-\[220px\]/);
   for (const source of [students, plans, families, staff]) {

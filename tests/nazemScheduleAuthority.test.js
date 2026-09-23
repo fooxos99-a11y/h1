@@ -21,9 +21,18 @@ test('today and linking cannot bypass the oldest pending day; exact replays rema
 
 test('review with a changed starting verse is rejected before saving another evaluation', () => {
   const review = { ...task, taskType: 'review', fromSurah: 114, fromAyah: 1, toSurah: 78, toAyah: 40 };
-  const current = { ...review, fromAyah: 2 };
+  const current = { ...review, sourceDate: review.taskDate, fromAyah: 2 };
   assert.equal(isCurrentNazemSession([review], [current]), false);
   assert.equal(isCurrentNazemSession([current], [current]), true);
+});
+
+test('daily review selects its own date, not the first historical snapshot with the same actionable date', () => {
+  const review = { ...task, taskType: 'review', fromSurah: 67, fromAyah: 1, toSurah: 114, toAyah: 6 };
+  const current = { ...review, sourceDate: review.taskDate };
+  const historical = { ...current, sourceDate: '2026-09-17', fromSurah: 58 };
+  assert.equal(isCurrentNazemSession([review], [historical, current]), true);
+  assert.equal(isCurrentNazemSession([review], [historical]), false);
+  assert.equal(isCurrentNazemSession([{ ...review, taskDate: '2026-09-17' }], [historical, current]), false);
 });
 
 test('independent linking accepts its own current source day without changing memorization eligibility', () => {

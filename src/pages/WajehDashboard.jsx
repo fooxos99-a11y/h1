@@ -1,3 +1,4 @@
+import { groupUserSections, userSectionKeys } from '@/lib/userSections';
 import PageLoadingBoundary from '@/components/ui/page-loading-boundary';
 import { defaultAccountSection } from '@/lib/defaultAccountSection';
 import useStaffAttendance from '@/hooks/useStaffAttendance';
@@ -52,7 +53,7 @@ import { useSiteConfig } from '@/site/SiteProvider';
 import useRewardUnits from '@/hooks/useRewardUnits';
 import StaffAttendancePrompt from '@/components/attendance/StaffAttendancePrompt';
 
-const AdministratorsSection = lazy(() => import('@/components/dashboard/AdministratorsSection'));
+const UsersSection = lazy(() => import('@/components/dashboard/UsersSection'));
 const FamiliesSection = lazy(() => import('@/components/dashboard/FamiliesSection'));
 const ManualAttendanceSection = lazy(() => import('@/components/dashboard/ManualAttendanceSection'));
 const NarrationDaySection = lazy(() => import('@/components/dashboard/NarrationDaySection'));
@@ -61,14 +62,11 @@ const QuranTestsSection = lazy(() => import('@/components/dashboard/QuranTestsSe
 const RegistrationRequestsSection = lazy(() => import('@/components/dashboard/RegistrationRequestsSection'));
 const NotificationsSection = lazy(() => import('@/components/dashboard/NotificationsSection'));
 const ReportsSection = lazy(() => import('@/components/dashboard/ReportsSection'));
-const RecitersSection = lazy(() => import('@/components/dashboard/RecitersSection'));
 const SettingsSection = lazy(() => import('@/components/dashboard/SettingsSection'));
 const StoreSection = lazy(() => import('@/components/dashboard/StoreSection'));
 const ProgramsSection = lazy(() => import('@/components/dashboard/ProgramsSection'));
 const StudentPlansSection = lazy(() => import('@/components/dashboard/StudentPlansSection'));
 const StudentExecutionCorrectionsSection = lazy(() => import('@/components/dashboard/StudentExecutionCorrectionsSection'));
-const StudentsSection = lazy(() => import('@/components/dashboard/StudentsSection'));
-const SupervisorsSection = lazy(() => import('@/components/dashboard/SupervisorsSection'));
 const TeacherEvaluationSection = lazy(() => import('@/components/dashboard/TeacherEvaluationSection'));
 const TeacherPreviousSessionsPanel = lazy(() => import('@/components/portal/TeacherPreviousSessionsPanel'));
 const RecitationSettingsButton = lazy(() => import('@/components/portal/RecitationSettingsButton'));
@@ -79,6 +77,7 @@ const StudentMushafSection = lazy(() => import('@/components/portal/StudentMusha
 const TeacherPointsAdjustmentSection = lazy(() => import('@/components/portal/TeacherPointsAdjustmentSection'));
 
 const dashboardSectionPreloaders = {
+  users: () => import('@/components/dashboard/UsersSection'),
   administrators: () => import('@/components/dashboard/AdministratorsSection'),
   families: () => import('@/components/dashboard/FamiliesSection'),
   manualAttendance: () => import('@/components/dashboard/ManualAttendanceSection'),
@@ -298,13 +297,13 @@ const WajehDashboard = () => {
     const availableSections = isOnline
       ? filteredSections
       : filteredSections.filter((section) => offlineDashboardSections.has(section.key));
-    if (!isSupervisor) return localizeSections([...availableSections].sort((first, second) => (
+    if (!isSupervisor) return localizeSections(groupUserSections([...availableSections].sort((first, second) => (
       Number(second.key === 'staffAttendance') - Number(first.key === 'staffAttendance')
-    )));
-    return localizeSections([...availableSections].sort((first, second) => (
+    ))));
+    return localizeSections(groupUserSections([...availableSections].sort((first, second) => (
       (supervisorSectionOrder.get(first.key) ?? Number.MAX_SAFE_INTEGER)
       - (supervisorSectionOrder.get(second.key) ?? Number.MAX_SAFE_INTEGER)
-    )));
+    ))));
   }, [alreadyPresentToday, dashboardPermissions, isAdmin, isManager, isOnline, isReciter, isSupervisor, rewardUnits, settings, site.features]);
 
   const routeSection = dashboardSectionRoutes.getKey(sectionSlug);
@@ -315,7 +314,7 @@ const WajehDashboard = () => {
     if (routeSection === 'settings') {
       return defaultSettingsNavigationKey;
     }
-    return routeSection;
+    return userSectionKeys.includes(routeSection) ? 'users' : routeSection;
   };
   const requestedSection = _resolveRequestedSection();
   const isVisibleSection = sections.some((section) => (
@@ -330,9 +329,10 @@ const WajehDashboard = () => {
     if (navigationLoading || !hasDashboardAccess || !visibleActiveSection) return;
     const canonicalSlug = dashboardSectionRoutes.getSlug(visibleActiveSection);
     if (sectionSlug !== canonicalSlug) {
-      navigate(`/dashboard/${canonicalSlug}`, { replace: true });
+      const tab = userSectionKeys.includes(routeSection) && visibleActiveSection === 'users' ? `?tab=${routeSection}` : '';
+      navigate(`/dashboard/${canonicalSlug}${tab}`, { replace: true });
     }
-  }, [hasDashboardAccess, navigationLoading, navigate, sectionSlug, visibleActiveSection]);
+  }, [hasDashboardAccess, navigationLoading, navigate, routeSection, sectionSlug, visibleActiveSection]);
 
   const changeSection = useCallback((key) => {
     const slug = dashboardSectionRoutes.getSlug(key);
@@ -347,7 +347,7 @@ const WajehDashboard = () => {
   const renderSection = () => {
     // Select the requested view without evaluating unrelated page branches.
     switch (visibleActiveSection) {
-      case 'students': return <StudentsSection />;
+      case 'users': return <UsersSection tabs={sections.find(({ key }) => key === 'users')?.userTabs} />;
       case 'registrationRequests': return <RegistrationRequestsSection />;
       case 'studentPlans': return <StudentPlansSection hideCommitteeFilter={isSupervisor && !isManager} />;
       case 'studentExecutionCorrections': return <StudentExecutionCorrectionsSection />;
@@ -356,9 +356,6 @@ const WajehDashboard = () => {
       case 'quranEvaluation': return <TeacherEvaluationSection />;
       case 'previousRecitationSessions': return <TeacherPreviousSessionsPanel />;
       case 'families': return <FamiliesSection />;
-      case 'supervisors': return <SupervisorsSection />;
-      case 'reciters': return <RecitersSection />;
-      case 'administrators': return <AdministratorsSection />;
       case 'reports': return (
       <ReportsSection
         teacherScoped={isSupervisor}

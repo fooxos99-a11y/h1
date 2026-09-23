@@ -18,6 +18,7 @@ export const dashboardSectionRoutes = createSectionRoutes([
   ['notifications', 'notifications'],
   ['reports', 'reports'],
   ['programs', 'programs'],
+  ['users', 'users'],
   ['students', 'students'],
   ['studentPlans', 'student-plans'],
   ['studentExecutionCorrections', 'student-execution-corrections'],

@@ -612,9 +612,12 @@ export const studentsApi = {
     if (committeeId) params.set('committeeId', committeeId);
     return request(`/reports/students?${params.toString()}`);
   },
-  getSupervisorReport: ({ date }) => {
+  getSupervisorReport: ({ date, from, to, staffId } = {}) => {
     const params = new URLSearchParams();
     if (date) params.set('date', date);
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (staffId) params.set('staffId', staffId);
     return request(`/reports/supervisors?${params.toString()}`);
   },
   getRecitationSessionDates: ({ from, to }) => {
@@ -677,9 +680,12 @@ export const studentsApi = {
     params.set('committeeId', committeeId);
     return requestFile(`/reports/overview/export?${params.toString()}`);
   },
-  exportSupervisorReport: ({ date, format = 'pdf' } = {}) => {
+  exportSupervisorReport: ({ date, from, to, staffId, format = 'pdf' } = {}) => {
     const params = new URLSearchParams();
     if (date) params.set('date', date);
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (staffId) params.set('staffId', staffId);
     params.set('format', format);
     return requestFile(`/reports/supervisors/export?${params.toString()}`);
   },

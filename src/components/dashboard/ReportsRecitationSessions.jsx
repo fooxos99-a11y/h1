@@ -98,7 +98,6 @@ const ReportsRecitationSessions = ({ rows = [] }) => {
                                 المحاولة {formatNumber(row.attemptNumber || 1)}
                               </span>
                             )}
-                            {row.nazemSource && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-black text-primary">ناظم</span>}
                             {row.taskType === 'memorization' && (
                               <>
                                 <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[11px] font-black text-violet-600">التكرار {formatNumber(row.actualRepeatCount)}</span>

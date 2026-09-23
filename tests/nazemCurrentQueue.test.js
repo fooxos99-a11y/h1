@@ -5,7 +5,7 @@ import { NazemAdapter } from '../server/integrations/nazem/adapter.js';
 import { findMatchingNazemLate } from '../server/integrations/nazem/recitationTarget.js';
 
 test('current late records send sequentially by identity without opening unavailable historical dates', async () => {
-  for (const remoteType of ['conserve', 'revision', 'master']) {
+  for (const remoteType of ['conserve', 'master']) {
     const adapter = new NazemAdapter();
     let late = [1, 2].map(index => ({ id: 50 + index, source_day_id: 700 + index, status: 'pending',
       date: `2026-09-0${index}`, surah_from: 2, verse_from: index === 1 ? 1 : 11, surah_to: 2, verse_to: index * 10 }));

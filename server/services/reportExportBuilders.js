@@ -307,24 +307,25 @@ export async function buildSupervisorExcel(report, options = {}) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = siteName;
   const sheet = workbook.addWorksheet('تحضير الكادر');
-  sheet.addRow(['الاسم', 'رقم الدخول', 'المسمى', 'الحالة', 'وقت الحضور', rewardUnits.plural]);
+  sheet.addRow(['الاسم', 'رقم الدخول', 'المسمى', 'الحالة', 'وقت الحضور', rewardUnits.plural, 'التاريخ']);
   (report?.rows || []).forEach((row) => {
     sheet.addRow([
       row.name,
       row.loginNumber || '-',
       row.jobTitle || '-',
-      statusLabels[row.status] || row.status || '-',
+      statusLabels[row.status] || 'لم يُرصد',
       row.checkInTime || '-',
       Number(row.points || 0),
+      row.recordDate || report?.period?.from,
     ]);
   });
   const rows = report?.rows || [];
   styleModernReportSheet(sheet, {
-    title: 'تقرير تحضير المعلمين والمقرئين والإدارة',
-    subtitle: `التاريخ ${report?.period?.from || '-'}`,
-    widths: [28, 16, 24, 22, 16, 12],
+    title: 'تقرير الكادر',
+    subtitle: `من ${report?.period?.from || '-'} إلى ${report?.period?.to || '-'}`,
+    widths: [28, 16, 24, 22, 16, 12, 16],
     summary: [
-      ['المعلمون والمقرئون', rows.length],
+      ['الكادر', new Set(rows.map((row) => row.id)).size],
       ['الحاضرون', rows.filter((row) => row.status === 'present').length],
       ['المتأخرون', rows.filter((row) => row.status === 'late').length],
       ['المعتذرون', rows.filter((row) => row.status === 'excused').length],
@@ -496,17 +497,18 @@ const buildTablePdf = ({ title, period, summary = [], columns, rows, siteName, f
 export function buildSupervisorPdf(report, options = {}) {
   const rewardUnits = getRewardUnits(options.summitEnabled);
   const columns = [
+    { label: 'التاريخ', width: 90, value: (row) => row.recordDate || report?.period?.from || '-' },
     { label: rewardUnits.plural, width: 70, value: (row) => Number(row.points || 0) },
     { label: 'وقت الحضور', width: 100, value: (row) => row.checkInTime || '-' },
-    { label: 'الحالة', width: 125, value: (row) => statusLabels[row.status] || row.status || '-' },
+    { label: 'الحالة', width: 125, value: (row) => statusLabels[row.status] || 'لم يُرصد' },
     { label: 'المسمى', width: 160, value: (row) => row.jobTitle || '-' },
     { label: 'رقم الدخول', width: 105, value: (row) => row.loginNumber || '-' },
-    { label: 'الاسم', width: 225, value: (row) => row.name || '-', align: 'right', bold: true },
+    { label: 'الاسم', width: 135, value: (row) => row.name || '-', align: 'right', bold: true },
   ];
   return buildTablePdf({
-    title: 'تقرير تحضير المعلمين والمقرئين والإدارة',
+    title: 'تقرير الكادر',
     period: report?.period,
-    summary: [['عدد المعلمين والمقرئين والإدارة', report?.rows?.length || 0]],
+    summary: [['الكادر', new Set((report?.rows || []).map((row) => row.id)).size]],
     columns,
     rows: report?.rows || [],
     ...options,
