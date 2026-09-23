@@ -3,50 +3,61 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import sharp from 'sharp';
 import { normalizeStudentNews } from '../server/services/studentNews.js';
-import { emptyStudentNews, visibleStudentNews } from '../shared/student-news.js';
+import { emptyStudentNews, visibleStudentNews, upgradeStudentNews } from '../shared/student-news.js';
 import { createStudentNewsRouter } from '../server/routes/studentNewsRoutes.js';
-
-test('news visibility enforces expiry, audience and disabled/empty cards without exposing audience IDs', () => {
-  const content = { ...emptyStudentNews(), images: ['image'], studentIds: [244], expiresOn: '2026-09-23' };
-  assert.equal(visibleStudentNews(content, 245, '2026-09-23'), null);
-  assert.equal(visibleStudentNews(content, 244, '2026-09-24'), null);
-  assert.equal(visibleStudentNews({ ...content, enabled: false }, 244, '2026-09-23'), null);
-  assert.equal(visibleStudentNews({ ...content, images: [] }, 244, '2026-09-23'), null);
-  assert.equal(visibleStudentNews(content, 244, '2026-09-23').studentIds, undefined);
+const entry = { id: 'one', title: 'تكريم', image: 'image', committeeIds: [4], startsAt: '2026-09-23T09:00', endsAt: '2026-09-23T18:00' };
+test('each news item independently enforces its circle and schedule without exposing audience IDs', () => {
+  const content = { entries: [entry, { ...entry, id: 'two', committeeIds: [], startsAt: '', endsAt: '' }] };
+  assert.deepEqual(visibleStudentNews(content, { id: 244, committeeId: 5 }, '2026-09-23T12:00').entries.map(row => row.id), ['two']);
+  assert.equal(visibleStudentNews(content, { id: 244, committeeId: 4 }, '2026-09-23T12:00').entries.length, 2);
+  for (const now of ['2026-09-23T08:59', '2026-09-23T18:01']) assert.equal(visibleStudentNews(content, { id: 244, committeeId: 4 }, now).entries.length, 1);
+  assert.equal(visibleStudentNews({ entries: [{ ...entry, enabled: false }] }, { id: 244, committeeId: 4 }, '2026-09-23T12:00').entries.length, 0);
+  assert.equal(visibleStudentNews(content, { id: 244, committeeId: 4 }, '2026-09-23T12:00').entries[0].committeeIds, undefined);
+  assert.deepEqual(visibleStudentNews(emptyStudentNews(), { id: 244 }, '2026-09-23T12:00'), { entries: [] });
 });
-test('news validates images and inputs and produces a bounded WebP image', async () => {
+test('legacy news preserves its audience and expiry during upgrade', () => {
+  const content = upgradeStudentNews({ images: ['image'], title: 'تكريم', studentIds: [244], expiresOn: '2026-09-23' });
+  assert.equal(visibleStudentNews(content, { id: 245 }, '2026-09-23T12:00').entries.length, 0);
+  assert.equal(visibleStudentNews(content, { id: 244 }, '2026-09-23T12:00').entries.length, 1);
+  assert.equal(visibleStudentNews(content, { id: 244 }, '2026-09-24T00:00').entries.length, 0);
+});
+test('news validates images, times and circles and reuses bounded WebP images', async () => {
   const png = await sharp({ create: { width: 2000, height: 1000, channels: 3, background: 'red' } }).png().toBuffer();
-  const content = await normalizeStudentNews({ ...emptyStudentNews(), images: [`data:image/png;base64,${png.toString('base64')}`] });
-  const meta = await sharp(Buffer.from(content.images[0].split(',')[1], 'base64')).metadata();
+  const input = { ...entry, image: `data:image/png;base64,${png.toString('base64')}` };
+  const content = await normalizeStudentNews({ revision: 0, entries: [input] });
+  const meta = await sharp(Buffer.from(content.entries[0].image.split(',')[1], 'base64')).metadata();
   assert.equal(meta.format, 'webp'); assert.equal(meta.width, 1400); assert.equal(meta.height, 700);
-  const saved = await normalizeStudentNews({ ...content, revision: 1, title: 'مسمى آخر' }, content.images);
-  assert.deepEqual(saved.images, content.images, 'Metadata edits must not recompress saved images');
-  for (const invalid of [{ title: '' }, { expiresOn: '2026-02-30' }, { studentIds: [-1] }, { revision: -1 }, { images: ['data:image/svg+xml;base64,AA=='] }, { images: ['data:image/png;base64,AAAA'] }, { images: Array(9).fill('') }]) {
-    await assert.rejects(normalizeStudentNews({ ...emptyStudentNews(), ...invalid }), error => error.statusCode === 422);
+  const previous = { ...content.entries[0], legacyStudentIds: [244] };
+  const saved = await normalizeStudentNews({ revision: 1, entries: [{ ...previous, title: 'آخر', legacyStudentIds: [245] }] }, [previous]);
+  assert.equal(saved.entries[0].image, previous.image);
+  assert.deepEqual(saved.entries[0].legacyStudentIds, [244]);
+  const replaced = await normalizeStudentNews({ revision: 1, entries: content.entries }, [previous]);
+  assert.equal(replaced.entries[0].legacyStudentIds, undefined);
+  for (const invalid of [{ title: '' }, { endsAt: '2026-02-30T12:00' }, { endsAt: '2026-09-22T12:00' }, { committeeIds: [-1] }, { image: 'data:image/svg+xml;base64,AA==' }, { image: 'data:image/png;base64,AAAA' }]) {
+    await assert.rejects(normalizeStudentNews({ revision: 0, entries: [{ ...input, ...invalid }] }), error => error.statusCode === 422);
   }
+  for (const invalid of [{ revision: -1 }, { entries: Array(9).fill(input) }, { entries: [input, input] }]) await assert.rejects(normalizeStudentNews({ revision: 0, entries: [], ...invalid }), error => error.statusCode === 422);
 });
-test('news routes authorize management, enforce student audience and reject stale saves', async () => {
-  const content = { ...emptyStudentNews(), title: 'تكريم', studentIds: [244], images: ['image'] };
-  let writes = 0;
+test('news routes authorize management, enforce trusted student circle and reject stale saves', async () => {
+  const content = { entries: [entry] }; let writes = 0;
   const database = { query: async (sql, values) => {
     if (sql.startsWith('SELECT content')) return [[{ content: JSON.stringify(content), revision: 2 }]];
+    if (sql.startsWith('SELECT id, committee_id')) return [[{ id: values[0], committeeId: values[0] === 244 ? 4 : 5 }]];
+    if (sql.startsWith('SELECT id, name')) return [[{ id: 4, name: 'حلقة النور' }]];
     if (sql.startsWith('UPDATE')) { writes++; return [{ affectedRows: values[1] === 2 ? 1 : 0 }]; }
     throw new Error('Unexpected query');
   } };
   const app = express(); app.use(express.json());
   app.use((req, _res, next) => { req.auth = { role: req.headers['x-test-role'], id: Number(req.headers['x-test-id']) }; next(); });
-  app.use(createStudentNewsRouter({ getToday: () => '2026-09-23', db: () => database }));
+  app.use(createStudentNewsRouter({ getNow: () => '2026-09-23T12:00', db: () => database }));
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   const url = `http://127.0.0.1:${server.address().port}`;
   try {
-    assert.equal((await fetch(`${url}/manage`, { headers: { 'x-test-role': 'student' } })).status, 403);
-    const outsider = await fetch(url, { headers: { 'x-test-role': 'student', 'x-test-id': '245' } });
-    assert.equal(await outsider.json(), null);
-    const student = await fetch(url, { headers: { 'x-test-role': 'student', 'x-test-id': '244' } });
-    assert.equal((await student.json()).title, 'تكريم');
+    for (const path of ['/manage', '/audience']) assert.equal((await fetch(`${url}${path}`, { headers: { 'x-test-role': 'student' } })).status, 403);
+    assert.equal((await (await fetch(url, { headers: { 'x-test-role': 'student', 'x-test-id': '245' } })).json()).entries.length, 0);
+    assert.equal((await (await fetch(url, { headers: { 'x-test-role': 'student', 'x-test-id': '244' } })).json()).entries[0].title, 'تكريم');
+    assert.equal((await (await fetch(`${url}/audience`, { headers: { 'x-test-role': 'manager' } })).json())[0].name, 'حلقة النور');
     const save = revision => fetch(`${url}/manage`, { method: 'PUT', headers: { 'x-test-role': 'manager', 'Content-Type': 'application/json' }, body: JSON.stringify({ ...emptyStudentNews(), revision }) });
-    assert.equal((await save(0)).status, 409);
-    assert.equal((await save(2)).status, 200);
-    assert.equal(writes, 1);
+    assert.equal((await save(0)).status, 409); assert.equal((await save(2)).status, 200); assert.equal(writes, 1);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });

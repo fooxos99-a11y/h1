@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
 export default function StudentNewsCard({ news, active = true }) {
-  const images = news?.images || [];
+  const entries = news?.entries || [];
+  const images = entries.map(entry => entry.image);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -25,17 +26,17 @@ export default function StudentNewsCard({ news, active = true }) {
     return () => clearInterval(timer);
   }, [active, images.length, paused, reducedMotion, expanded]);
   if (!images.length) return null;
+  const title = entries[current].title;
   const select = value => { setIndex((value + images.length) % images.length); setPaused(true); };
-  return <section aria-label={news.title} className="min-w-0 overflow-hidden rounded-2xl border border-primary/15 bg-card [font-family:var(--font-ui)]" dir="rtl">
-    <div className="flex min-h-11 items-center justify-between gap-2 px-3">
-      <h2 className="min-w-0 truncate text-sm font-bold text-primary" title={news.title}>{news.title}</h2>
-      {active && images.length > 1 && !reducedMotion && <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0"
+  return <section aria-label="الأخبار" className="relative min-w-0 overflow-hidden rounded-2xl border border-primary/15 bg-card [font-family:var(--font-ui)]" dir="rtl">
+    <div className="absolute left-1 top-1 z-10">
+      {active && images.length > 1 && !reducedMotion && <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 bg-card/90"
         aria-label={paused ? 'تشغيل تبديل الصور' : 'إيقاف تبديل الصور'} onClick={() => setPaused(value => !value)}>
         {paused ? <Play size={16} /> : <Pause size={16} />}
       </Button>}
     </div>
     <Button variant="ghost" className="!h-[150px] w-full touch-pan-y rounded-none !p-0 hover:translate-y-0 active:scale-100 sm:!h-[180px]"
-      aria-label={`تكبير الصورة ${current + 1}: ${news.title}`} onFocus={() => setPaused(true)}
+      aria-label={`تكبير الصورة ${current + 1}: ${title}`} onFocus={() => setPaused(true)}
       onPointerDown={event => { start.current = event.clientX; }}
       onPointerCancel={() => { start.current = null; }}
       onPointerUp={event => {
@@ -50,7 +51,7 @@ export default function StudentNewsCard({ news, active = true }) {
           event.preventDefault(); select(current + (event.key === 'ArrowLeft' ? 1 : -1));
         }
       }}>
-      <img src={images[current]} alt={`${news.title} — الصورة ${current + 1}`} className="h-full w-full object-contain" draggable={false} />
+      <img src={images[current]} alt={`${title} — الصورة ${current + 1}`} className="h-full w-full object-contain" draggable={false} />
     </Button>
     {images.length > 1 && <div className="flex flex-wrap justify-center" aria-label="صور الأخبار">
       {images.map((_, item) => <Button key={item} variant="ghost" size="icon" className="h-11 w-11 min-w-0 rounded-none px-0"
@@ -60,8 +61,8 @@ export default function StudentNewsCard({ news, active = true }) {
     </div>}
     <Dialog open={expanded} onOpenChange={setExpanded}>
       <DialogContent className="max-w-3xl [font-family:var(--font-ui)]" dir="rtl" aria-describedby={undefined}>
-        <DialogTitle>{news.title}</DialogTitle>
-        <img src={images[current]} alt={news.title} className="max-h-[65dvh] w-full object-contain" />
+        <DialogTitle>{title}</DialogTitle>
+        <img src={images[current]} alt={title} className="max-h-[65dvh] w-full object-contain" />
         <Button variant="outline" onClick={() => setExpanded(false)}>إغلاق</Button>
       </DialogContent>
     </Dialog>

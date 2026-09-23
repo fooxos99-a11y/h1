@@ -13,7 +13,7 @@ test('manager settings keep store and programs activation in their own pages', a
 
   assert.deepEqual(titles, [
     'التحضير وجلسات التسميع',
-    'الأخبار والتكريم',
+    'الأخبار',
     'يوم السرد والاختبار',
     'الكيلومترات والترتيب',
     'الخريطة والتحدي اليومي',

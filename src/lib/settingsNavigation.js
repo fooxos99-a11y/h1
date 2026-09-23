@@ -11,7 +11,7 @@ import { getSiteConfig } from '@/site/siteConfigs';
 
 const allSettingsNavigationItems = [
   { key: 'settingsAttendance', slug: 'settings-attendance', label: 'التحضير وجلسات التسميع', icon: CalendarCheck2 },
-  { key: 'settingsNews', slug: 'settings-news', label: 'الأخبار والتكريم', icon: Newspaper },
+  { key: 'settingsNews', slug: 'settings-news', label: 'الأخبار', icon: Newspaper },
   { key: 'settingsNarration', slug: 'settings-narration', label: 'يوم السرد والاختبار', icon: BookOpenCheck },
   { key: 'settingsPoints', slug: 'settings-points', label: 'الكيلومترات والترتيب', icon: Trophy },
   { key: 'settingsMap', slug: 'settings-map', label: 'الخريطة والتحدي اليومي', icon: Map },
