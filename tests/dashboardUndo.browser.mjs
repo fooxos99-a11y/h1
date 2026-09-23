@@ -14,6 +14,7 @@ try {
     await page.getByRole('button', { name: 'حذف البرنامج' }).click();
     const undo = page.getByRole('button', { name: 'تراجع', exact: true });
     await undo.waitFor();
+    assert.equal(await page.locator('[data-dashboard-undo]').getByText(/خلال|ثوان/).count(), 0, 'Undo notice has no visible countdown');
     const box = await undo.boundingBox();
     assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= width);
     assert.equal(writes, 0, 'No network mutation during undo window');

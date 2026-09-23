@@ -64,3 +64,22 @@ test('batched execution preserves partial, complete, extra and reversed traversa
     assert.equal(earlierTask.ayah, task.toAyah, 'only the last task may extend beyond its end');
   }
 });
+
+test('the global API gate permits student news reads but blocks management and writes', async () => {
+  const start = server.indexOf('async function authorizeApiRequest(');
+  const end = server.indexOf('\n}', start) + 2;
+  const context = vm.createContext({
+    getSharedApiAccess: () => ({}), getOwnAccountDeletionAccess: () => false,
+    getSupervisorApiAccess: () => ({}), getStudentFeatureApiAccess: () => ({}),
+    hasOfflineRecitationAccountAccess: () => false, canAccessDashboardApi: async () => false,
+  });
+  vm.runInContext(server.slice(start, end), context);
+  for (const [path, method, expected] of [['/api/student-news', 'GET', 200], ['/api/student-news/manage', 'GET', 403], ['/api/student-news/audience', 'GET', 403], ['/api/student-news', 'PUT', 403]]) {
+    let status = 0;
+    const res = { status(code) { status = code; return this; }, json() {} };
+    await context.authorizeApiRequest({ path, method, auth: { role: 'student', id: 244 } }, res, error => { if (error) throw error; status = 200; });
+    assert.equal(status, expected, `${method} ${path}`);
+  }
+  const resolve = loadHelper('getDashboardPermissionKeysForRequest');
+  for (const path of ['/api/student-news/manage', '/api/student-news/audience']) assert.deepEqual(Array.from(resolve({ path, method: 'GET' })), ['settings']);
+});

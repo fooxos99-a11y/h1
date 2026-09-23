@@ -531,6 +531,7 @@ function getDashboardPermissionKeysForRequest(req) {
   const method = req.method;
   const rules = [
     [path === '/settings', ['settings']],
+    [path === '/student-news/manage' || path === '/student-news/audience', ['settings']],
     [path.startsWith('/staff-attendance'), ['staffAttendance']],
     [path.startsWith('/recitation-preferences'), ['quranEvaluation']],
     [path.startsWith('/nazem/plan-statuses'), ['studentPlans']],
@@ -577,6 +578,7 @@ async function authorizeApiRequest(req, res, next) {
   if (!req.auth || req.auth.role === 'manager') return next();
   try {
     const path = req.path.replace(/^\/api/, '');
+    if (req.auth.role === 'student' && req.method === 'GET' && path === '/student-news') return next();
     const id = String(req.auth.id || '');
     const { sharedGet, sharedPost } = getSharedApiAccess(req, path);
     const ownStudent = req.auth.role === 'student' && new RegExp(`^/students/${id}(?:/|$)`).test(path);
@@ -7288,7 +7290,7 @@ app.get('/api/dashboard-bootstrap', async (req, res, next) => {
   }
 });
 
-app.use('/api/student-news', createStudentNewsRouter({ getToday: () => getSaudiDateTimeParts().date }));
+app.use('/api/student-news', createStudentNewsRouter({}));
 app.use('/api/contact-messages', contactMessageRouter);
 app.use('/api/account-deletion', accountDeletionRouter);
 app.use('/api/backups', createBackupRouter({ requireManager: requirePermission }));
