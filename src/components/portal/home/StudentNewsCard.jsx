@@ -27,6 +27,8 @@ export default function StudentNewsCard({ news, active = true }) {
   }, [active, images.length, paused, reducedMotion, expanded]);
   if (!images.length) return null;
   const title = entries[current].title;
+  const body = entries[current].body;
+  const hasImage = Boolean(images[current]);
   const select = value => { setIndex((value + images.length) % images.length); setPaused(true); };
   return <section aria-label="الأخبار" className="relative min-w-0 overflow-hidden rounded-2xl border border-primary/15 bg-card [font-family:var(--font-ui)]" dir="rtl">
     <div className="absolute left-1 top-1 z-10">
@@ -35,8 +37,9 @@ export default function StudentNewsCard({ news, active = true }) {
         {paused ? <Play size={16} /> : <Pause size={16} />}
       </Button>}
     </div>
-    <Button variant="ghost" className="!h-[150px] w-full touch-pan-y rounded-none !p-0 hover:translate-y-0 active:scale-100 sm:!h-[180px]"
-      aria-label={`تكبير الصورة ${current + 1}: ${title}`} onFocus={() => setPaused(true)}
+    <div className="relative h-[280px] sm:h-[320px]">
+    <Button variant="ghost" className="!h-full w-full touch-pan-y rounded-none !p-0 hover:translate-y-0 active:scale-100 bg-gradient-to-br from-primary/15 via-primary/5 to-secondary"
+      aria-label={`عرض الخبر ${current + 1}: ${title}`} onFocus={() => setPaused(true)}
       onPointerDown={event => { start.current = event.clientX; }}
       onPointerCancel={() => { start.current = null; }}
       onPointerUp={event => {
@@ -51,8 +54,13 @@ export default function StudentNewsCard({ news, active = true }) {
           event.preventDefault(); select(current + (event.key === 'ArrowLeft' ? 1 : -1));
         }
       }}>
-      <img src={images[current]} alt={`${title} — الصورة ${current + 1}`} className="h-full w-full object-contain" draggable={false} />
+      {hasImage && <img src={images[current]} alt="" className="h-full w-full object-cover" draggable={false} />}
     </Button>
+    <div className={`pointer-events-none absolute inset-x-0 bottom-0 space-y-2 p-5 text-start sm:p-6 ${hasImage ? 'border-t border-primary/10 bg-card/95 backdrop-blur-sm' : 'flex h-full flex-col justify-center border-s-4 border-primary/40'}`}>
+      <h3 className="line-clamp-2 break-words text-lg font-bold leading-relaxed text-primary sm:text-xl">{title}</h3>
+      {body && <p className={`whitespace-pre-wrap break-words text-sm leading-7 text-foreground ${hasImage ? 'line-clamp-2' : 'line-clamp-5'}`}>{body}</p>}
+    </div>
+    </div>
     {images.length > 1 && <div className="flex flex-wrap justify-center" aria-label="صور الأخبار">
       {images.map((_, item) => <Button key={item} variant="ghost" size="icon" className="h-11 w-11 min-w-0 rounded-none px-0"
         aria-label={`الصورة ${item + 1}`} aria-pressed={item === current} onClick={() => select(item)}>
@@ -61,8 +69,9 @@ export default function StudentNewsCard({ news, active = true }) {
     </div>}
     <Dialog open={expanded} onOpenChange={setExpanded}>
       <DialogContent className="max-w-3xl [font-family:var(--font-ui)]" dir="rtl" aria-describedby={undefined}>
-        <DialogTitle>{title}</DialogTitle>
-        <img src={images[current]} alt={title} className="max-h-[65dvh] w-full object-contain" />
+        <DialogTitle className="break-words text-primary">{title}</DialogTitle>
+        {hasImage && <img src={images[current]} alt={title} className="max-h-[55dvh] w-full rounded-xl object-contain" />}
+        {body && <p className="whitespace-pre-wrap break-words rounded-xl bg-primary/5 p-4 text-sm leading-7 text-foreground">{body}</p>}
         <Button variant="outline" onClick={() => setExpanded(false)}>إغلاق</Button>
       </DialogContent>
     </Dialog>

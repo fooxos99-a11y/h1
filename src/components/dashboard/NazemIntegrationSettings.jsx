@@ -31,6 +31,7 @@ const NazemIntegrationSettings = ({ onConfigChange }) => {
   const [identityTeacher, setIdentityTeacher] = useState(null);
   const [logOpen, setLogOpen] = useState(false);
   const [errorsOpen, setErrorsOpen] = useState(false);
+  const [refreshButtonContainer, setRefreshButtonContainer] = useState(null);
   const [busyTeacherId, setBusyTeacherId] = useState(null);
   const [toggleBusy, setToggleBusy] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -202,6 +203,7 @@ const NazemIntegrationSettings = ({ onConfigChange }) => {
             <History className="h-4 w-4" />
             سجل ناظم
           </Button>
+          <div ref={setRefreshButtonContainer} className="contents" />
         </div>
       </div>
 
@@ -224,7 +226,7 @@ const NazemIntegrationSettings = ({ onConfigChange }) => {
 
       {config.enabled && accounts && (
         <div className="space-y-2">
-          <NazemBulkRefresh accounts={accounts} disabled={!config.runtime?.ready} onChanged={load} />
+          <NazemBulkRefresh accounts={accounts} disabled={!config.runtime?.ready} onChanged={load} buttonContainer={refreshButtonContainer} />
           {accounts.map((account) => {
             const linked = Boolean(account.status);
             const connected = account.status === 'connected';

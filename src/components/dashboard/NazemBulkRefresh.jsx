@@ -1,5 +1,6 @@
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ProgressBar from '@/components/ui/progress-bar';
@@ -13,7 +14,7 @@ const labels = {
   requires_review: 'يحتاج مراجعة', dismissed: 'أُوقفت العملية',
 };
 
-export default function NazemBulkRefresh({ accounts, disabled, onChanged }) {
+export default function NazemBulkRefresh({ accounts, disabled, onChanged, buttonContainer }) {
   const [rows, setRows] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -47,13 +48,14 @@ export default function NazemBulkRefresh({ accounts, disabled, onChanged }) {
       request.current = null;
     }
   };
-  return (
-    <div className="space-y-3 [font-family:var(--font-ui)]" dir="rtl">
-      <Button type="button" className="min-h-11 w-full gap-2 sm:w-auto" onClick={start}
+  const refreshButton = <Button type="button" className="min-h-11 gap-2" onClick={start}
         disabled={disabled || busy || !accounts.some((account) => account.status === 'connected')}>
         {busy ? <LoadingSpinner /> : <RefreshCw aria-hidden="true" className="h-4 w-4" />}
         {busy ? 'جارٍ تحديث الكل' : 'تحديث الكل'}
-      </Button>
+      </Button>;
+  return (
+    <div className="space-y-3 [font-family:var(--font-ui)]" dir="rtl">
+      {buttonContainer ? createPortal(refreshButton, buttonContainer) : refreshButton}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="space-y-2" role="status" aria-live="polite">
         {rows.map((row) => (

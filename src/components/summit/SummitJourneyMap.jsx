@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import SummitJourneyBoard from './SummitJourneyBoard';
-import SummitGatheringStation from './SummitGatheringStation';
 import { Map, Route } from 'lucide-react';
 import QassimOverviewMap from '@/components/summit/QassimOverviewMap';
 import QassimRoadScene from '@/components/summit/QassimRoadScene';
@@ -15,7 +14,6 @@ const SummitJourneyMap = ({ journey, onStageClick, embedded = false, showViewTog
   const isRoad = mode === 'road';
   let scene = <QassimOverviewMap journey={journey} onStageClick={onStageClick} />;
   if (isRoad) scene = <QassimRoadScene journey={journey} onStageClick={onStageClick} />;
-  if (journey.activeStation) scene = <SummitGatheringStation station={journey.activeStation} embedded={embedded} />;
 
 
   return (
@@ -23,10 +21,10 @@ const SummitJourneyMap = ({ journey, onStageClick, embedded = false, showViewTog
       className={`summit-map-shell relative isolate w-full overflow-hidden [font-family:var(--font-ui)] ${embedded ? 'is-embedded h-full' : 'h-dvh'}`}
       aria-label={`رحلة القصيم، قطعت ${progress.distanceKm.toLocaleString('ar-SA-u-nu-latn', { maximumFractionDigits: 0 })} من ${routeOptions.totalKilometers.toLocaleString('ar-SA-u-nu-latn')} كيلومتر`}
     >
-      {isRoad && !embedded && <SummitJourneyBoard journey={journey} />}
+      {!embedded && (isRoad || journey.activeStation) && <SummitJourneyBoard journey={journey} />}
       {scene}
 
-      {showViewToggle && !journey.activeStation && (
+      {showViewToggle && (
         <Button
             type="button"
             variant="ghost"

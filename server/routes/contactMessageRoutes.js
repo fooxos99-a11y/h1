@@ -2,6 +2,7 @@ import express from 'express';
 import { db } from '../db.js';
 import { attachOptionalAuthSession } from '../services/authSessions.js';
 import { requirePermission } from '../services/dashboardPermissions.js';
+import { deliverContactMessage } from '../services/contactMessageDelivery.js';
 
 const router = express.Router();
 const accountRoles = new Set(['student', 'supervisor', 'admin', 'manager']);
@@ -20,13 +21,11 @@ router.post('/', attachOptionalAuthSession, async (req, res, next) => {
       return res.status(422).json({ message: 'أدخل الاسم وموضوع الرسالة بشكل واضح.' });
     }
 
-    const [result] = await db().query(
-      `INSERT INTO contact_messages
-        (sender_role, sender_id, sender_name, subject)
-       VALUES (?, ?, ?, ?)`,
-      [linkedAccount ? req.auth.role : null, linkedAccount ? req.auth.id : null, senderName, subject],
-    );
-    return res.status(201).json({ id: result.insertId, linkedAccount: Boolean(linkedAccount) });
+    const id = await deliverContactMessage(db(), {
+      senderRole: linkedAccount ? req.auth.role : null,
+      senderId: linkedAccount ? req.auth.id : null, senderName, subject,
+    });
+    return res.status(201).json({ id, linkedAccount: Boolean(linkedAccount) });
   } catch (error) {
     return next(error);
   }

@@ -9,7 +9,7 @@ test('journey board always follows the next city and switches to the gathering n
   } };
   assert.equal(getSummitJourneyBoardText(journey), 'المتبقي إلى الأولى: 800 كم');
   assert.equal(getSummitJourneyBoardText({ ...journey, points: 1000 }), 'المتبقي إلى الثانية: 1,000 كم');
-  assert.equal(getSummitJourneyBoardText({ ...journey, activeStation: { name: 'التجمع' } }), 'التجمع');
+  assert.equal(getSummitJourneyBoardText({ ...journey, activeStation: { name: 'التجمع' } }), 'متوقف في محطة التجمع');
   assert.equal(getSummitJourneyBoardText({ ...journey, points: 7500 }), 'المتبقي إلى النهاية: 500 كم');
   assert.equal(getSummitJourneyBoardText({ ...journey, points: 9000 }), 'وصلت');
   assert.equal(getSummitJourneyBoardText({ ...journey, points: 3000 }), 'المتبقي إلى الوجهة التالية: 5,000 كم');

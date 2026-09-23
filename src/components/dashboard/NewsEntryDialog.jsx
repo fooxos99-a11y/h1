@@ -2,6 +2,8 @@ import React, { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import DateTimePicker from '@/components/ui/date-time-picker';
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@/components/ui/dialog';
 import MultiSelectSetting from '@/components/ui/multi-select-setting';
 
@@ -25,7 +27,6 @@ export default function NewsEntryDialog({ entry, committees, pending, onClose, o
   };
   const save = async event => {
     event.preventDefault(); setError('');
-    if (!draft.image) { setError('اختر صورة الخبر.'); return; }
     // Saving this form explicitly replaces any legacy student targeting with circles.
     const { legacyStudentIds: _legacy, ...value } = draft;
     try { await onSave(value); } catch (reason) { setError(reason.message); }
@@ -37,19 +38,21 @@ export default function NewsEntryDialog({ entry, committees, pending, onClose, o
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <fieldset disabled={pending || reading} className="min-w-0 space-y-4">
           <div className="space-y-1.5"><Label htmlFor="news-title">الخبر</Label><Input id="news-title" required maxLength={80} value={draft.title} onChange={event => update('title', event.target.value)} /></div>
+          <div className="space-y-1.5"><Label htmlFor="news-body">نص الخبر</Label><Textarea id="news-body" maxLength={2000} value={draft.body || ''} onChange={event => update('body', event.target.value)} /></div>
           <div className="space-y-1.5"><Label>الحلقات</Label>
             <MultiSelectSetting value={draft.committeeIds.length ? draft.committeeIds : ['all']} placeholder="جميع الحلقات"
               options={[{ value: 'all', label: 'جميع الحلقات' }, ...committees.map(row => ({ value: Number(row.id), label: row.name }))]}
               onToggle={id => update('committeeIds', id === 'all' ? [] : draft.committeeIds.includes(id) ? draft.committeeIds.filter(value => value !== id) : [...draft.committeeIds, id])} />
           </div>
           <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-            <div className="min-w-0 space-y-1.5"><Label htmlFor="news-start">بداية العرض</Label><Input id="news-start" className="min-w-0 max-w-full" type="datetime-local" value={draft.startsAt} onChange={event => update('startsAt', event.target.value)} /></div>
-            <div className="min-w-0 space-y-1.5"><Label htmlFor="news-end">نهاية العرض</Label><Input id="news-end" className="min-w-0 max-w-full" type="datetime-local" min={draft.startsAt || undefined} value={draft.endsAt} onChange={event => update('endsAt', event.target.value)} /></div>
+            <div className="min-w-0 space-y-1.5"><p className="text-sm font-medium">بداية العرض</p><DateTimePicker label="بداية العرض" value={draft.startsAt} onChange={value => update('startsAt', value)} /></div>
+            <div className="min-w-0 space-y-1.5"><p className="text-sm font-medium">نهاية العرض</p><DateTimePicker label="نهاية العرض" min={draft.startsAt || undefined} value={draft.endsAt} onChange={value => update('endsAt', value)} /></div>
           </div>
           <Input ref={fileInput} className="hidden" aria-label="صورة الخبر" type="file" accept="image/png,image/jpeg,image/webp" onChange={readImage} />
           <Button type="button" variant="outline" className="h-auto min-h-28 w-full overflow-hidden border-dashed p-3" onClick={() => fileInput.current?.click()}>
             {draft.image ? <img src={draft.image} alt="صورة الخبر" className="h-28 w-full object-contain" /> : 'إضافة صورة'}
           </Button>
+          {draft.image && <Button type="button" variant="ghost" onClick={() => update('image', '')}>إزالة الصورة</Button>}
         </fieldset>
         <DialogFooter className="grid grid-cols-2 border-t pt-3">
           <Button type="button" variant="outline" disabled={pending || reading} onClick={onClose}>إغلاق</Button>

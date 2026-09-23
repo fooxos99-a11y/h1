@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import SummitSceneImage from '@/components/summit/SummitSceneImage';
 import { uploadSummitImage } from '@/services/summitImageService';
 
-export default function SummitImagePicker({ imageId, onChange, label, fallback }) {
+export default function SummitImagePicker({ imageId, onChange, label, fallback, portrait = false }) {
   const input = useRef(null);
   const currentChange = useRef(onChange);
   const mounted = useRef(true);
@@ -23,7 +23,7 @@ export default function SummitImagePicker({ imageId, onChange, label, fallback }
     finally { if (mounted.current) setBusy(false); }
   };
   return <div className="space-y-2 [font-family:var(--font-ui)]">
-    <SummitSceneImage imageId={imageId} fallback={fallback} alt={label} className="h-36 w-full rounded-xl object-cover" />
+    <SummitSceneImage imageId={imageId} fallback={fallback} alt={label} className={portrait ? 'h-64 w-full rounded-xl bg-muted/30 object-contain' : 'h-36 w-full rounded-xl object-cover'} />
     <input ref={input} type="file" className="sr-only" tabIndex={-1} accept="image/jpeg,image/png,image/webp" aria-label={label} onChange={(event) => { select(event.target.files?.[0]); event.target.value = ''; }} />
     <Button type="button" variant="outline" className="min-h-11 w-full" disabled={busy} onClick={() => input.current?.click()}><ImagePlus className="h-4 w-4" />{busy ? 'تحميل الصورة…' : label}</Button>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

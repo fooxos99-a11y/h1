@@ -27,7 +27,7 @@ const QassimOverviewMap = ({ journey, onStageClick }) => {
   const [zoom, setZoom] = useState(initialZoom);
   const [viewMode, setViewMode] = useState('focus');
   const routeOptions = useMemo(() => getQassimJourneyRouteOptions(journey), [journey]);
-  const focusStagePoints = clamp(Number(journey?.nextStage?.points ?? routeOptions.totalKilometers), 0, routeOptions.totalKilometers);
+  const focusStagePoints = clamp(Number(journey.activeStation ? journey.points : journey?.nextStage?.points ?? routeOptions.totalKilometers), 0, routeOptions.totalKilometers);
   const traveler = getQassimRoutePosition(journey.points, routeOptions);
   const roadProgress = getQassimRoadProgress(journey.points, routeOptions);
   const activeMapStation = journey.mapConfig?.stations?.find(({ id }) => id === journey.mapConfig?.activeStationId);

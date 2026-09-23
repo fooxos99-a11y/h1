@@ -6,6 +6,16 @@ import { normalizeStudentNews } from '../server/services/studentNews.js';
 import { emptyStudentNews, visibleStudentNews, upgradeStudentNews } from '../shared/student-news.js';
 import { createStudentNewsRouter } from '../server/routes/studentNewsRoutes.js';
 const entry = { id: 'one', title: 'تكريم', image: 'image', committeeIds: [4], startsAt: '2026-09-23T09:00', endsAt: '2026-09-23T18:00' };
+test('text news saves without an image and exposes its body to eligible students', async () => {
+  for (const image of ['', undefined, null]) {
+    const content = await normalizeStudentNews({ revision: 0, entries: [{ ...entry, image, body: ' تفاصيل الخبر ' }] });
+    assert.equal(content.entries[0].image, '');
+    assert.equal(visibleStudentNews(content, { id: 244, committeeId: 4 }, '2026-09-23T12:00').entries[0].body, 'تفاصيل الخبر');
+  }
+  for (const body of ['x'.repeat(2001), {}]) {
+    await assert.rejects(normalizeStudentNews({ revision: 0, entries: [{ ...entry, image: '', body }] }), error => error.statusCode === 422);
+  }
+});
 test('each news item independently enforces its circle and schedule without exposing audience IDs', () => {
   const content = { entries: [entry, { ...entry, id: 'two', committeeIds: [], startsAt: '', endsAt: '' }] };
   assert.deepEqual(visibleStudentNews(content, { id: 244, committeeId: 5 }, '2026-09-23T12:00').entries.map(row => row.id), ['two']);

@@ -38,7 +38,7 @@ const SummitMapEventFields = ({
         </Button>
       </div>
     )}
-    {isStation && <div className="sm:col-span-2"><SummitImagePicker imageId={entity.imageId} label="صورة المحطة" onChange={imageId => onChange({ imageId })} /></div>}
+    {isStation && <div className="sm:col-span-2"><SummitImagePicker portrait imageId={entity.imageId} label="صورة المحطة" onChange={imageId => onChange({ imageId })} /></div>}
     {!isStation && <><div className="grid grid-cols-2 gap-2 sm:col-span-2">
       <div className="flex min-h-14 items-center justify-between gap-2 rounded-xl border border-primary/15 px-3">
         <Label className="font-black">الإشعار</Label>

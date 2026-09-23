@@ -41,6 +41,15 @@
   animation: none;
 }
 
+.qassim-road-scene.is-station .qassim-road-backdrop.qassim-station-backdrop {
+  object-fit: contain;
+  object-position: center;
+  padding: calc(env(safe-area-inset-top) + 7rem) 0 calc(env(safe-area-inset-bottom) + 6rem);
+  transform: none;
+  animation: none;
+  filter: none;
+}
+
 .qassim-road-scene.is-moving .qassim-road-backdrop {
   animation: qassim-road-driving 1.25s ease-in-out infinite alternate;
 }

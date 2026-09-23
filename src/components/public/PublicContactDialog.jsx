@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { studentsApi } from '@/services/studentsApi';
 
-const PublicContactDialog = ({ open, onOpenChange, hasSession = false, accountName = '' }) => {
+const PublicContactDialog = ({ open, onOpenChange, hasSession = false, accountName = '', registrationNumber }) => {
   const { toast } = useToast();
   const [name, setName] = useState(accountName);
   const [subject, setSubject] = useState('');
@@ -18,13 +18,14 @@ const PublicContactDialog = ({ open, onOpenChange, hasSession = false, accountNa
   }, [accountName, open]);
 
   const submit = async () => {
+    if (saving) return;
     if ((!hasSession && name.trim().length < 2) || subject.trim().length < 5) {
       toast({ title: 'أكمل البيانات', description: 'أدخل الاسم وموضوع الرسالة بشكل واضح.', variant: 'destructive' });
       return;
     }
     setSaving(true);
     try {
-      await studentsApi.submitContactMessage({ name, subject });
+      await studentsApi.submitContactMessage({ name, subject, ...(registrationNumber ? { registrationNumber } : {}) });
       toast({ title: 'وصلت رسالتك إلى المجمع' });
       setSubject('');
       onOpenChange(false);
@@ -36,7 +37,7 @@ const PublicContactDialog = ({ open, onOpenChange, hasSession = false, accountNa
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={value => { if (!saving) onOpenChange(value); }}>
       <DialogContent className="max-w-lg border-primary/25 bg-card text-foreground [font-family:var(--font-ui)]" dir="rtl">
         <DialogHeader>
           <DialogTitle>التواصل مع المجمع</DialogTitle>

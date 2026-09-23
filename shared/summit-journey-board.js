@@ -1,5 +1,5 @@
 export function getSummitJourneyBoardText(journey) {
-  if (journey.activeStation) return journey.activeStation.name;
+  if (journey.activeStation) return `متوقف في محطة ${journey.activeStation.name}`;
   const points = Math.max(0, Number(journey.points) || 0);
   const config = journey.mapConfig || {};
   const city = [...(config.cities || [])]

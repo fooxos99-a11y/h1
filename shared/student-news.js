@@ -16,5 +16,5 @@ export function visibleStudentNews(config, student, now) {
     && (!entry.startsAt || entry.startsAt <= now) && (!entry.endsAt || entry.endsAt >= now)
     && (!entry.committeeIds.length || entry.committeeIds.includes(Number(student.committeeId)))
     && (!entry.legacyStudentIds?.length || entry.legacyStudentIds.includes(Number(student.id))));
-  return { entries: entries.map(({ id, title, image, startsAt, endsAt }) => ({ id, title, image, startsAt, endsAt })) };
+  return { entries: entries.map(({ id, title, body = '', image, startsAt, endsAt }) => ({ id, title, body, image, startsAt, endsAt })) };
 }

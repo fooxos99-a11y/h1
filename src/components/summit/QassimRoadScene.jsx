@@ -1,5 +1,6 @@
 import React from 'react';
 import SummitSceneImage from '@/components/summit/SummitSceneImage';
+import SummitGatheringStation from '@/components/summit/SummitGatheringStation';
 import { getSummitScene } from '../../../shared/summit-scenes.js';
 import { Flag } from 'lucide-react';
 import { getQassimJourneyRouteOptions, getQassimRoadProgress } from '@/components/summit/qassimMapData';
@@ -29,6 +30,7 @@ const QassimRoadScene = ({ journey }) => {
   const activeStation = getSummitActiveStation(journey.mapConfig);
   const stationProximity = activeStation ? 1 : 0;
   const _resolveScenePhase = () => {
+    if (journey.activeStation) return 'station';
     if (arrivedCity) {
       return 'city-interior';
     }
@@ -38,23 +40,23 @@ const QassimRoadScene = ({ journey }) => {
     return getRoadScenePhase(progress.segmentProgress);
   };
   const scenePhase = _resolveScenePhase();
-  const atmosphere = customScene?.imageId || progress.segmentIndex % 2 === 0 ? 'day' : 'night';
+  const atmosphere = journey.activeStation || customScene?.imageId || progress.segmentIndex % 2 === 0 ? 'day' : 'night';
   const movingKey = `${progress.segmentIndex}-${scenePhase}-${atmosphere}`;
 
   return (
     <div
       key={movingKey}
-      className={`qassim-road-scene is-${scenePhase} is-${atmosphere} ${journey.isMoving ? 'is-moving' : ''}`}
+      className={`qassim-road-scene is-${scenePhase} is-${atmosphere} ${journey.isMoving && !journey.activeStation ? 'is-moving' : ''}`}
       style={{ '--road-scene-scale': 1 + (stationProximity * 0.08) }}
       aria-label={`منظور الطريق ${atmosphere === 'night' ? 'ليلًا' : 'نهارًا'}، قطعت ${progress.distanceKm.toLocaleString('ar-SA-u-nu-latn', { maximumFractionDigits: 0 })} من ${routeOptions.totalKilometers.toLocaleString('ar-SA-u-nu-latn')} كيلومتر`}
     >
-      <SummitSceneImage
+      {journey.activeStation ? <SummitGatheringStation station={journey.activeStation} /> : <SummitSceneImage
         className="qassim-road-backdrop"
         imageId={customScene?.imageId}
         fallback={ROAD_SCENES[scenePhase]}
         alt=""
         aria-hidden="true"
-      />
+      />}
       <div className="qassim-road-depth" aria-hidden="true" />
 
       {progress.goalVisible && (
