@@ -1,4 +1,5 @@
 import { groupUserSections, userSectionKeys } from '@/lib/userSections';
+import DashboardUndoNotice from '@/components/dashboard/DashboardUndoNotice';
 import PageLoadingBoundary from '@/components/ui/page-loading-boundary';
 import { defaultAccountSection } from '@/lib/defaultAccountSection';
 import useStaffAttendance from '@/hooks/useStaffAttendance';
@@ -438,6 +439,7 @@ const WajehDashboard = () => {
 
   return (
     <>
+    <DashboardUndoNotice active={isAdmin || isManager} />
     <StaffAttendancePrompt active={staffAttendanceActive} attendanceState={staffAttendanceState} />
     <DashboardShell
       headerContent={visibleActiveSection === 'quranEvaluation' ? <><Suspense fallback={null}><RecitationSettingsButton staffId={supervisorId} /></Suspense><NotificationButton showTrigger={false} /></> : <NotificationButton />}

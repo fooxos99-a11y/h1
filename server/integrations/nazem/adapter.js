@@ -837,7 +837,10 @@ export class NazemAdapter {
           if (ids.size !== profiles.length || (page.total != null && Number(page.total) !== ids.size)) {
             throw new Error('قائمة طلاب ناظم غير مكتملة أو تحتوي معرّفات مكررة.');
           }
-          return profiles.filter((profile) => profile.id && profile.name);
+          if (profiles.some(profile => !isNazemExternalStudentId(profile.id) || !profile.name)) {
+            throw new Error('قائمة طلاب ناظم تحتوي بيانات هوية ناقصة.');
+          }
+          return profiles;
         }
         if (!page.next_page_url) throw new Error('تعذر الوصول إلى بقية صفحات طلاب ناظم.');
         responsePromise = this.page.waitForResponse(matchesStudentsResponse);

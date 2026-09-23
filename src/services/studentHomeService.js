@@ -1,19 +1,22 @@
 import { studentsApi } from '@/services/studentsApi';
+import { studentNewsService } from '@/services/studentNewsService';
 import { loadOfflineSnapshot } from '@/services/offlineOperationsService';
 import { getDailyChallengeCached, getSummitJourneyCached, loadPublicSettingsCached } from '@/services/publicSettingsCache';
 
 export async function loadStudentHomeExtras({ showPath, showDailyChallenge, onUpdate, refresh = false }) {
-  const keys = ['settings', 'journey', 'challenge'];
+  const keys = ['settings', 'journey', 'challenge', 'news'];
   const entries = await Promise.allSettled([
     loadPublicSettingsCached({ refresh }),
     showPath ? getSummitJourneyCached({ refresh }) : null,
     showDailyChallenge ? getDailyChallengeCached({ refresh }) : null,
+    studentNewsService.load(),
   ].map((request, index) => Promise.resolve(request).then((value) => {
     onUpdate?.({ [keys[index]]: value, [`${keys[index]}Error`]: false });
     return value;
   }, (error) => { onUpdate?.({ [`${keys[index]}Error`]: true }); throw error; })));
   const value = (index) => entries[index].status === 'fulfilled' ? entries[index].value : null;
   return { settings: value(0), journey: value(1), challenge: value(2),
+    news: value(3), newsError: entries[3].status === 'rejected',
     settingsError: entries[0].status === 'rejected', journeyError: entries[1].status === 'rejected', challengeError: entries[2].status === 'rejected' };
 }
 

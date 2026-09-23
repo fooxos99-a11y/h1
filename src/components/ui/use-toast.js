@@ -1,6 +1,7 @@
 "use client";
 // Inspired by react-hot-toast library
 import * as React from "react"
+import { ACTION_CANCELLED_MESSAGE } from '@/lib/deferredActions';
 
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 500
@@ -97,6 +98,9 @@ function dispatch(action) {
 function toast({
   ...props
 }) {
+  if (props.description === ACTION_CANCELLED_MESSAGE) {
+    props = { title: ACTION_CANCELLED_MESSAGE };
+  }
   const id = genId()
 
   const update = (props) =>

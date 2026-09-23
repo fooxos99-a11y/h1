@@ -68,25 +68,13 @@ import {
 
 process.env.NAZEM_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
 
-test('Nazem attendance remains authoritative even when a local change is pending', () => {
-  assert.equal(shouldApplyRemoteAttendance({
-    localStatus: 'absent',
-    localSubmittedStatus: 'absent',
-    localJobStatus: 'pending',
-    remoteStatus: 'present',
-  }), true);
-  assert.equal(shouldApplyRemoteAttendance({
-    localStatus: 'absent',
-    localSubmittedStatus: 'absent',
-    localJobStatus: 'synced',
-    remoteStatus: 'present',
-  }), true);
-  assert.equal(shouldApplyRemoteAttendance({
-    localStatus: 'absent',
-    localSubmittedStatus: 'absent',
-    localJobStatus: 'pending',
-    remoteStatus: 'absent',
-  }), true);
+test('Nazem attendance needs an explicit local change and never defaults a student to present', () => {
+  for (const remoteStatus of ['present', 'late', 'absent', 'excused']) {
+    assert.equal(shouldApplyRemoteAttendance({ remoteStatus }), false);
+    assert.equal(shouldApplyRemoteAttendance({ remoteStatus, explicitChange: false }), false);
+    assert.equal(shouldApplyRemoteAttendance({ remoteStatus, explicitChange: true }), true);
+  }
+  assert.equal(shouldApplyRemoteAttendance({ remoteStatus: 'unknown', explicitChange: true }), false);
 });
 
 test('pending Nazem follow-up never becomes a completed Rawasi recitation', () => {

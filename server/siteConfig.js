@@ -10,7 +10,7 @@ const madarijSiteConfig = {
   themeColor: '#003D52',
   appUrl: 'https://161.97.171.108.sslip.io/mdarj',
   apiUrl: 'https://161.97.171.108.sslip.io/mdarj/api',
-  features: { store: true, dailyChallenge: true, summit: true, studentHome: true, nazemAutomaticAttendance: true },
+  features: { store: true, dailyChallenge: true, summit: true, studentHome: true, nazemAutomaticAttendance: false },
 };
 
 

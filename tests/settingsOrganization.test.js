@@ -13,6 +13,7 @@ test('manager settings keep store and programs activation in their own pages', a
 
   assert.deepEqual(titles, [
     'التحضير وجلسات التسميع',
+    'الأخبار والتكريم',
     'يوم السرد والاختبار',
     'الكيلومترات والترتيب',
     'الخريطة والتحدي اليومي',
@@ -21,7 +22,7 @@ test('manager settings keep store and programs activation in their own pages', a
   ]);
   assert.match(dashboard, /children: settingsNavigationItems/);
   assert.match(sidebar, /section\.children\.map/);
-  assert.equal((navigation.match(/icon: /g) || []).length, 6);
+  assert.equal((navigation.match(/icon: /g) || []).length, 7);
   assert.match(sidebar, /const ChildIcon = child\.icon/);
   assert.doesNotMatch(sidebar, /h-1\.5 w-1\.5 shrink-0 rounded-full/);
   assert.doesNotMatch(settings, /SettingsDisclosure/);

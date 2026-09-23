@@ -36,6 +36,7 @@ import { buildStudentPointsReport } from './services/studentPointsReport.js';
 import { setQuranTaskGroupReward } from './services/quranTaskRewards.js';
 import { buildNazemLateTaskExistsSql } from './integrations/nazem/lateTaskScope.js';
 import { nazemStudentRefreshState } from './integrations/nazem/refreshState.js';
+import { loadNazemCompletedStudentIds } from './integrations/nazem/completedRecitation.js';
 import { validateNazemLateSession } from './services/nazemLateSelection.js';
 import { buildStudentPlanPoints } from './services/studentPlanPoints.js';
 import { getManualAttendancePoints, applyStudentPointDelta, applyAttendancePointDelta, syncStudentPointBalance, logStudentPointTransaction, syncStudentFamilyPointsForAttendance } from './services/studentPoints.js';
@@ -80,6 +81,7 @@ import contactMessageRouter from './routes/contactMessageRoutes.js';
 import { createCulturalGamesRouter } from './routes/culturalGamesRoutes.js';
 import { createBackupRouter } from './routes/backupRoutes.js';
 import { createStoreRouter } from './routes/storeRoutes.js';
+import { createStudentNewsRouter } from './routes/studentNewsRoutes.js';
 import { createProgramRouter } from './routes/programRoutes.js';
 import { createDailyChallengeRouter } from './routes/dailyChallengeRoutes.js';
 import { createStaffAttendanceRouter } from './routes/staffAttendanceRoutes.js';
@@ -396,6 +398,7 @@ app.use(
   enforceContentLength(16 * 1024 * 1024),
   express.json({ limit: '16mb' }),
 );
+app.use('/api/student-news/manage', enforceContentLength(16 * 1024 * 1024), express.json({ limit: '16mb' }));
 app.use(express.json({ limit: '1mb' }));
 app.use((req, _res, next) => {
   req.body = req.body || {};
@@ -7285,6 +7288,7 @@ app.get('/api/dashboard-bootstrap', async (req, res, next) => {
   }
 });
 
+app.use('/api/student-news', createStudentNewsRouter({ getToday: () => getSaudiDateTimeParts().date }));
 app.use('/api/contact-messages', contactMessageRouter);
 app.use('/api/account-deletion', accountDeletionRouter);
 app.use('/api/backups', createBackupRouter({ requireManager: requirePermission }));
@@ -12379,6 +12383,9 @@ async function buildSupervisorTeacherModeTasks(
     JOIN committees c ON c.id = s.committee_id
     JOIN supervisor_committees sc ON sc.committee_id = s.committee_id
     WHERE sc.supervisor_id = ?
+      AND NOT EXISTS (SELECT 1 FROM nazem_student_links rosterLink
+        WHERE rosterLink.teacher_id = sc.supervisor_id AND rosterLink.ruwasi_student_id = s.id
+          AND rosterLink.status = 'linked' AND rosterLink.roster_active = 0)
     ORDER BY c.name ASC, s.name ASC
     `,
     [supervisorId]
@@ -12777,7 +12784,9 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
       `,
       [supervisorId, date, taskEndDate, date, date, taskEndDate]
     );
+    const visibleStudentIds = new Set(students.map(student => Number(student.id)));
     const allRows = candidateRows.filter((row) => {
+      if (!visibleStudentIds.has(Number(row.studentId))) return false;
       if (Number(row.nazemManaged)) return true;
       if (!canTeacherExecuteQuranTask(settings, row.taskType)) return false;
       return getQuranTaskExecutionSource(settings, 'memorization') !== 'student'
@@ -12865,6 +12874,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
       [supervisorId, date, date, date],
     );
     const nazemDueStudentIds = new Set(nazemDueRows.map((row) => Number(row.studentId)));
+    const remotelyCompletedStudentIds = await loadNazemCompletedStudentIds(connection, supervisorId, date);
     const serializeEvaluationTask = (row) => {
       const _resolveExpectedRepeatCount = () => {
         if (row.nazemManaged) {
@@ -12952,6 +12962,10 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
           attendanceStatus: attendanceByStudent.get(Number(student.id)) || '',
           canSetAttendance: teacherAttendanceMode,
           nazemRemainingDue: nazemDueRows.filter((due) => Number(due.studentId) === Number(student.id)),
+          nazemRecitationCompleted: remotelyCompletedStudentIds.has(Number(student.id))
+            && !activeTaskStudentIds.has(Number(student.id))
+            && !nazemDueStudentIds.has(Number(student.id))
+            && !nazemPendingStudentIds.has(Number(student.id)),
           recitationPending: nazemPendingStudentIds.has(Number(student.id)),
           recitationSyncFailed: nazemFailedStudentIds.has(Number(student.id)),
           recitationSyncNeedsRecheck: nazemRecheckStudentIds.has(Number(student.id)),

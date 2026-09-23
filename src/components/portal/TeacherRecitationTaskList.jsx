@@ -194,6 +194,7 @@ const TeacherRecitationTaskList = ({
         const position = (item) => actionOrder.indexOf(item.action.key === 'mastery' && !memorizationView ? 'saved' : item.action.key);
         const displayActionViews = [...actionViews].sort((a, b) => position(a) - position(b));
         const _resolveTeacherRecitationTaskList = () => {
+          if (student.nazemRecitationCompleted) return 'مكتمل';
           if (student.recitationPending || student.recitationSyncFailed) {
             return 'حُفظت النتيجة';
           }
