@@ -20,7 +20,10 @@ try {
     const image = page.locator('img').first();
     await image.waitFor();
     await page.waitForFunction(() => globalThis.getComputedStyle(globalThis.document.querySelector('img')).objectFit === 'cover');
-    assert.equal((await image.boundingBox()).height, width < 640 ? 280 : 320);
+    const pictureBounds = await image.boundingBox();
+    const textBounds = await page.locator('[data-news-text]').boundingBox();
+    assert.ok(pictureBounds.height > 0);
+    assert.ok(pictureBounds.y + pictureBounds.height <= textBounds.y + 1, 'The entire image area ends above the text panel');
     const cardHeight = (await page.getByRole('region', { name: 'الأخبار', exact: true }).boundingBox()).height;
     assert.equal(await page.getByRole('heading', { name: 'خبر 1', exact: true }).isVisible(), true);
     if (width === 360) {

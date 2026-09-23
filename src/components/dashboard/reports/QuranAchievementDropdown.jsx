@@ -1,8 +1,7 @@
 import React from 'react';
 import { BadgeCheck, BookOpen, Link2, RefreshCw, Trophy } from 'lucide-react';
 
-const formatter = new Intl.NumberFormat('ar-SA-u-nu-latn');
-const formatNumber = (value) => formatter.format(Number(value || 0));
+import { formatStatisticsNumber as formatNumber } from '@/lib/statisticsNumber';
 
 const leaderboardConfig = [
   { key: 'review', title: 'الطلاب الأكثر مراجعة', icon: RefreshCw, color: '#f59e0b', valueKey: 'faces', suffix: 'وجه' },

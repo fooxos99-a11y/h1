@@ -1,4 +1,5 @@
 import { db } from '../db.js';
+import { requireUndoPermission } from './undoJournal.js';
 
 export const DASHBOARD_PERMISSION_KEYS = [
   'manualAttendance',
@@ -82,14 +83,16 @@ export function requirePermission(permissionKeys, res, next) {
   if (typeof permissionKeys !== 'string' && !Array.isArray(permissionKeys)) {
     const req = permissionKeys;
     if (req.auth?.role !== 'manager') return permissionDenied(res);
+    requireUndoPermission(null);
     return next();
   }
 
   const keys = cleanDashboardPermissions(Array.isArray(permissionKeys) ? permissionKeys : [permissionKeys]);
   return async (req, routeRes, routeNext) => {
     try {
-      if (req.auth?.role === 'manager') return routeNext();
+      if (req.auth?.role === 'manager') { requireUndoPermission(keys); return routeNext(); }
       if (['supervisor', 'admin', 'reciter'].includes(req.auth?.role) && await hasSupervisorDashboardPermission(req.auth.id, keys)) {
+        requireUndoPermission(keys);
         return routeNext();
       }
       return permissionDenied(routeRes);

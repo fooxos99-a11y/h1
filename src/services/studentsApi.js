@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core';
-import { isDeferredMutation, waitForDashboardUndo } from '@/lib/deferredActions';
+import { isDeferredMutation, isDashboardUndoActive, deferredActions } from '@/lib/deferredActions';
 import { clearAuthSession, getAuthSessionVersion, getBearerToken } from '@/lib/authSession';
 import {
   apiBase,
@@ -57,13 +57,7 @@ export async function request(path, options = {}) {
   const { apiBaseOverride, authSnapshot, ...requestOptions } = options;
   const sessionVersion = getAuthSessionVersion();
   const requestBase = apiBaseOverride || getApiBase();
-  if (isDeferredMutation(path, options)) {
-    const label = options.method === 'DELETE' ? 'حذف العنصر' : 'تنفيذ الأمر';
-    await waitForDashboardUndo(label, options.signal);
-    if (sessionVersion !== getAuthSessionVersion() || requestBase !== (apiBaseOverride || getApiBase())) {
-      throw new Error('تغير الحساب؛ أعد تنفيذ الأمر من الحساب الحالي.');
-    }
-  }
+  const captureUndo = isDashboardUndoActive() && !authSnapshot && isDeferredMutation(path, options);
   const fetchOnce = async () => {
     requestCooldown.check(requestBase, path);
     const traceId = globalThis.crypto?.randomUUID?.() || '';
@@ -76,6 +70,7 @@ export async function request(path, options = {}) {
         headers: {
           ...await (authSnapshot || roleHeader()),
           ...(options.headers),
+          ...(captureUndo ? { 'X-Dashboard-Undo': '1' } : {}),
           ...(traceId ? { 'X-Request-Id': traceId } : {}),
         },
       });
@@ -128,6 +123,19 @@ export async function request(path, options = {}) {
     error.retryAfterMs = _resolveConditional();
     if (error.requestId && response.status >= 500) error.message += ` رقم المتابعة: ${error.requestId}`;
     throw error;
+  }
+  if (captureUndo && sessionVersion === getAuthSessionVersion() && isDashboardUndoActive()) {
+    const value = response.headers?.get('X-Dashboard-Undo');
+    let undo;
+    try { undo = value ? JSON.parse(value) : null; } catch { undo = null; }
+    if (undo?.id && /^[a-f0-9]{64}$/.test(undo.id)) {
+      const sourcePage = globalThis.location?.href;
+      deferredActions.register(options.method === 'DELETE' ? 'حُذف العنصر' : 'حُفظت التغييرات', async () => {
+        if (sessionVersion !== getAuthSessionVersion() || requestBase !== (apiBaseOverride || getApiBase())) throw new Error('تغير الحساب؛ لا يمكن التراجع من حساب آخر.');
+        await request(`/dashboard-undo/${undo.id}`, { method: 'POST', body: '{}' });
+        globalThis.dispatchEvent(new CustomEvent('dashboard-undo-completed', { detail: { path, sourcePage } }));
+      }, Number(undo.durationMs || 0));
+    }
   }
   return data;
 }

@@ -1,4 +1,5 @@
 import mysql from 'mysql2/promise';
+import { undoDatabase } from './services/undoJournal.js';
 import { instrumentDatabase } from './services/requestDiagnostics.js';
 import { readFile } from 'node:fs/promises';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -1814,7 +1815,7 @@ export function db() {
   if (!currentPool) {
     throw new Error('Database pool is not initialized.');
   }
-  return currentPool;
+  return undoDatabase(currentPool);
 }
 
 const databasePoolSweep = setInterval(() => {

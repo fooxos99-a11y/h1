@@ -1,5 +1,4 @@
 import { mergeRecitationTaskResults } from '../lib/recitationTaskResults.js';
-import { waitForDashboardUndo } from '../lib/deferredActions.js';
 import {
   OFFLINE_RECITATION_MAX_BATCH,
   compareRecitationSessions,
@@ -333,7 +332,6 @@ export async function commitOfflineRecitation({
   tasks,
 }) {
   const version = getAuthSessionVersion();
-  await waitForDashboardUndo('حفظ التقييم');
   if (version !== getAuthSessionVersion()) throw new Error('تغير الحساب؛ أعد حفظ التقييم.');
   const actorKey = recitationActorKey(supervisorId);
   const device = await offlineRecitationStore.getDeviceContext(actorKey);

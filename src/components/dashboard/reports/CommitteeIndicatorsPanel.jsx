@@ -2,9 +2,7 @@ import React, { useMemo } from 'react';
 import { ArrowRight, BadgeCheck, BookOpen, CalendarCheck, Link2, RefreshCw, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const formatter = new Intl.NumberFormat('ar-SA-u-nu-latn');
-
-const formatNumber = (value) => formatter.format(Number(value || 0));
+import { formatStatisticsNumber as formatNumber } from '@/lib/statisticsNumber';
 
 const metricConfig = [
   { key: 'attendance', label: 'الحضور', icon: CalendarCheck, color: '#22c55e' },

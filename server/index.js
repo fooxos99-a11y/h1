@@ -1,4 +1,5 @@
 import { runCountedStatements, queryTaskGroups } from './services/queryResults.js';
+import { createDashboardUndo } from './services/dashboardUndo.js';
 import { createBufferedPdf, REPORT_PDF_COLORS } from './services/bufferedPdf.js';
 import { sendWhatsAppResult } from './services/whatsAppResult.js';
 import { getTaskSummary, formatReportFaces } from '../shared/report-faces.js';
@@ -374,7 +375,7 @@ app.use(cors((req, callback) => {
   const requestOrigin = `${req.protocol}://${req.get('host')}`;
   callback(null, {
     credentials: true,
-    exposedHeaders: ['X-Request-Id', 'Retry-After', 'X-RateLimit-Scope'],
+    exposedHeaders: ['X-Request-Id', 'Retry-After', 'X-RateLimit-Scope', 'X-Dashboard-Undo'],
     origin(origin, originCallback) {
       originCallback(null, !origin || origin === requestOrigin || allowedOrigins.has(origin));
     },
@@ -1000,8 +1001,12 @@ app.use('/api', async (req, res, next) => {
     return next(error);
   }
 });
-app.use('/api', authenticateApiRequest, authorizeApiRequest);
+const dashboardUndo = createDashboardUndo({ db, databaseName: () => getDatabaseContext().databaseName, hasPermission: hasSupervisorDashboardPermission });
+app.use('/api', authenticateApiRequest);
+app.use('/api/dashboard-undo', dashboardUndo.router);
+app.use('/api', authorizeApiRequest);
 app.use('/api', removedFeaturesMiddleware);
+app.use(dashboardUndo.capture);
 app.use(activityLogMiddleware);
 app.use('/api/cultural-games', createCulturalGamesRouter({ db, requirePermission }));
 

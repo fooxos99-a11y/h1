@@ -2,10 +2,7 @@ import React, { useState } from 'react';
 import { BadgeCheck, BookOpen, Home, Link2, RefreshCw, Users } from 'lucide-react';
 import CommitteeIndicatorsPanel from './reports/CommitteeIndicatorsPanel';
 import QuranAchievementDropdown from './reports/QuranAchievementDropdown';
-
-const formatter = new Intl.NumberFormat('ar-SA-u-nu-latn');
-
-const formatNumber = (value) => formatter.format(Number(value || 0));
+import { formatStatisticsNumber as formatNumber } from '@/lib/statisticsNumber';
 const SummaryTile = ({ icon: Icon, title, value, color }) => (
   <div className="rounded-lg border border-primary/15 bg-background/70 p-4">
     <div className="flex items-center justify-between gap-3">

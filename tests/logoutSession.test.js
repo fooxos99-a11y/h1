@@ -1,5 +1,5 @@
 import { createRequestCooldown } from '../src/lib/requestCooldown.js';
-import { isDeferredMutation, waitForDashboardUndo } from '../src/lib/deferredActions.js';
+import { isDeferredMutation, isDashboardUndoActive, deferredActions } from '../src/lib/deferredActions.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -58,7 +58,7 @@ async function setupApi() {
     document: { documentElement: { dataset: {} } },
     localizeRewardText: (value) => value,
     prepareTimedRequest, requestTimeoutMessage, singleFlight, refreshableSingleFlight, createRequestCooldown,
-    isDeferredMutation, waitForDashboardUndo,
+    isDeferredMutation, isDashboardUndoActive, deferredActions,
     fetch: (url, options) => {
       const response = deferred();
       requests.push({ url, options, response });

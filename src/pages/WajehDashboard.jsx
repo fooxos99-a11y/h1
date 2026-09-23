@@ -1,5 +1,6 @@
 import { groupUserSections, userSectionKeys } from '@/lib/userSections';
 import DashboardUndoNotice from '@/components/dashboard/DashboardUndoNotice';
+import useDashboardUndoRefresh from '@/hooks/useDashboardUndoRefresh';
 import PageLoadingBoundary from '@/components/ui/page-loading-boundary';
 import { defaultAccountSection } from '@/lib/defaultAccountSection';
 import useStaffAttendance from '@/hooks/useStaffAttendance';
@@ -206,6 +207,7 @@ const offlineDashboardSections = new Set([
 ]);
 
 const WajehDashboard = () => {
+  const undoRevision = useDashboardUndoRefresh();
   const site = useSiteConfig();
   const navigate = useNavigate();
   const { section: sectionSlug = '' } = useParams();
@@ -461,7 +463,7 @@ const WajehDashboard = () => {
         />
       ) : null}
     >
-      <Suspense fallback={<DashboardLoader className="min-h-[420px]" />}>
+      <Suspense key={undoRevision} fallback={<DashboardLoader className="min-h-[420px]" />}>
         {renderSection()}
       </Suspense>
     </DashboardShell>

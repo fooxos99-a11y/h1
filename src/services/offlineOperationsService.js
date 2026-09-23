@@ -1,5 +1,4 @@
 import { singleFlight, limitedTaskQueue } from '@/lib/asyncRequests';
-import { waitForDashboardUndo } from '@/lib/deferredActions';
 import { createRefreshGate } from '@/lib/refreshGate';
 import { getAuthSessionVersion } from '@/lib/authSession';
 import { studentsApi } from '@/services/studentsApi';
@@ -76,7 +75,6 @@ export async function loadOfflineSnapshot(accountId, resourceKey, loader, {
 export async function commitOfflineOperation(accountId, actionType, payload, { dedupeKey = '', actorRole = 'supervisor' } = {}) {
   if (!ACTION_HANDLERS[actionType]) throw new Error('نوع العملية المحلية غير مدعوم.');
   const session = getAuthSessionVersion();
-  await waitForDashboardUndo();
   if (session !== getAuthSessionVersion()) throw new Error('تغير الحساب؛ أعد تنفيذ الأمر.');
   const device = await offlineRecitationStore.getDeviceContext(offlineActorKey(accountId, actorRole));
   const capturedAtLocal = new Date().toISOString();
