@@ -1,4 +1,5 @@
 import { importNazemLinkResult } from './linkResultImport.js';
+import { refreshNazemRoster } from './rosterState.js';
 import { loadConfirmedNazemRecordIds, recitationIdentityFromReceipt } from './followUpCycles.js';
 import { applyRecitationWriteIdentity, hasLocalRecitation, recitationWriteJournal, recoverRejectedRecitationWrite, resolveLegacyRecitationTarget, validateRecitationTarget } from './recitationSubmission.js';
 import { recoverNazemAuthenticationJobs } from './authenticationRecovery.js';
@@ -1253,7 +1254,7 @@ async function syncAttendance(connection, job) {
     await adapter.login();
     await persistNazemSession(connection, job.teacherId, adapter);
     const remote = await adapter.submitAttendance(studentLink, targetPlan, { date, attendanceStatus, explicitChange: job.payload?.explicitChange === true });
-    await applyRemoteAttendanceToRuwasi(connection, Number(studentId), { date, attendanceStatus: remote.attendanceStatus, activeJobId: job.id });
+    await applyRemoteAttendanceToRuwasi(connection, Number(studentId), { date, attendanceStatus: remote.attendanceStatus, activeJobId: job.id, explicitChange: job.payload?.explicitChange === true });
     await persistNazemSession(connection, job.teacherId, adapter);
     return remote;
   } catch (cause) {
@@ -1778,15 +1779,15 @@ const NAZEM_ATTENDANCE_TO_RUWASI = Object.freeze({
   5: 'late',
 });
 
-export function shouldApplyRemoteAttendance({ remoteStatus }) {
-  return Object.values(NAZEM_ATTENDANCE_TO_RUWASI).includes(remoteStatus);
+export function shouldApplyRemoteAttendance({ remoteStatus, explicitChange = false }) {
+  return explicitChange === true && Object.values(NAZEM_ATTENDANCE_TO_RUWASI).includes(remoteStatus);
 }
 
 export async function applyRemoteAttendanceToRuwasi(connection, studentId, remoteAttendance, { inTransaction = false } = {}) {
   const status = NAZEM_ATTENDANCE_TO_RUWASI[Number(remoteAttendance?.attendanceStatus)];
   const date = String(remoteAttendance?.date || '').slice(0, 10);
   if (!status || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
-  if (!shouldApplyRemoteAttendance({ remoteStatus: status })) return false;
+  if (!shouldApplyRemoteAttendance({ remoteStatus: status, explicitChange: remoteAttendance.explicitChange })) return false;
   if (!inTransaction) await connection.beginTransaction();
   try {
     await connection.query('SELECT id FROM students WHERE id = ? FOR UPDATE', [studentId]);
@@ -1849,6 +1850,7 @@ async function discoverTeacherData(connection, job, adapter, {
   });
   if (!targetStudentExternalId && discoveryResult?.students) remoteStudents = discoveryResult.students;
   const studentDiscovery = await saveDiscoveredStudents(connection, job.teacherId, remoteStudents);
+  await refreshNazemRoster(connection, job.teacherId, adapter);
   const remotePlans = Array.isArray(discoveryResult)
     ? discoveryResult
     : (discoveryResult?.plans || []);
@@ -1975,6 +1977,7 @@ async function refreshTeacherFollowUps(connection, job) {
   try {
     await adapter.login();
     timing.loginMs = Date.now() - started;
+    await refreshNazemRoster(connection, job.teacherId, adapter);
     const [links] = await connection.query(
       `SELECT link.ruwasi_plan_id AS planId, link.ruwasi_student_id AS studentId,
         link.nazem_plan_id AS nazemPlanId, student.nazem_student_id AS nazemStudentId,
@@ -1984,7 +1987,7 @@ async function refreshTeacherFollowUps(connection, job) {
          AND student.ruwasi_student_id = link.ruwasi_student_id
        JOIN student_quran_plans plan ON plan.id = link.ruwasi_plan_id AND plan.student_id = link.ruwasi_student_id AND plan.status IN ('active','completed')
        WHERE link.teacher_id = ? AND link.sync_status NOT IN ('deleted','detached')
-         AND student.status = 'linked'`, [job.teacherId],
+         AND student.status = 'linked' AND COALESCE(student.roster_active, 1) = 1`, [job.teacherId],
     );
     const issues = [];
     let imported = 0;

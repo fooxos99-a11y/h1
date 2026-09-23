@@ -14,6 +14,7 @@ try {
     await page.waitForFunction(() => globalThis.getComputedStyle(globalThis.document.querySelector('.loading-spinner--screen')).width === '80px');
     const initial = await boot.evaluate((el,keys) => Object.fromEntries(keys.map(key => [key,globalThis.getComputedStyle(el)[key]])), properties);
     assert.ok(initial.backgroundImage.includes('alhabib-map-color-320.webp'));
+    await page.evaluate(() => { globalThis.document.documentElement.style.scrollbarGutter = 'stable'; });
     const box = await boot.boundingBox();
     assert.ok(Math.abs(box.x + box.width / 2 - width / 2) < 1);
     assert.equal(initial.backgroundColor,'rgba(0, 0, 0, 0)');

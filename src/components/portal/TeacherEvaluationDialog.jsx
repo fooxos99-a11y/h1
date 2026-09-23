@@ -135,28 +135,26 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
       || !studentId || attendancePendingIds.includes(studentId)) return;
     const shouldHideStudent = ['absent', 'excused'].includes(status);
     setAttendancePendingIds((current) => [...current, studentId]);
-    setData((current) => {
-  if (current) {
-    return {
-      ...current,
-      tasks: shouldHideStudent
-        ? (current.tasks || []).filter((task) => Number(task.studentId) !== studentId)
-        : current.tasks,
-      students: shouldHideStudent
-        ? (current.students || []).filter((item) => Number(item.studentId) !== studentId)
-        : (current.students || []).map((item) => (
-          Number(item.studentId) === studentId ? { ...item, attendanceStatus: status } : item
-        )),
-    };
-  }
-  return current;
-});
     try {
       await commitOfflineAttendance({
         supervisorId,
         studentId,
         date: data?.date,
         status,
+      });
+      setData((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          tasks: shouldHideStudent
+            ? (current.tasks || []).filter((task) => Number(task.studentId) !== studentId)
+            : current.tasks,
+          students: shouldHideStudent
+            ? (current.students || []).filter((item) => Number(item.studentId) !== studentId)
+            : (current.students || []).map((item) => (
+              Number(item.studentId) === studentId ? { ...item, attendanceStatus: status } : item
+            )),
+        };
       });
       if (navigator.onLine !== false) {
         await syncOfflineRecitations(supervisorId, { force: true });

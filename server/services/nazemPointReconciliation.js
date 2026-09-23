@@ -1,6 +1,5 @@
 import { readNazemLinkCount } from '../../shared/nazem-recitation-policy.js';
 import { isNazemFollowUpCompleted } from '../../shared/nazem-integration.js';
-import { loadAttendancePointSettings, saveAttendanceWithPoints } from './attendancePoints.js';
 import crypto from 'node:crypto';
 import { calculateEvaluatedGroupReward, loadRecitationRewardSettings } from './recitationRewards.js';
 import { setQuranTaskGroupReward } from './quranTaskRewards.js';
@@ -138,9 +137,6 @@ export async function settleNazemPoints(connection, dailyId) {
       const error = new Error(!settings.pointsSystemEnabled ? 'نظام النقاط غير مفعّل.' : 'تاريخ الاستحقاق يسبق تفعيل تسوية نقاط ناظم؛ يحتاج مراجعة.');
       error.statusCode = 409; throw error;
     }
-    const attendanceStatus = { 2: 'present', 3: 'absent', 4: 'excused', 5: 'late' }[Number(daily.attendanceStatus)];
-    if (attendanceStatus) await saveAttendanceWithPoints(connection, { studentId: daily.studentId,
-      date: daily.taskDate, status: attendanceStatus, awardNewPoints: true }, await loadAttendancePointSettings(connection));
     const delta = (group) => group.points - group.tasks.reduce((sum, task) => sum + Number(task.points || 0), 0);
     const _resolveReason = (group) => {
       if (group.taskType === 'repeat') {

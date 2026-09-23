@@ -1,3 +1,4 @@
+import StudentNewsEditor from '@/components/dashboard/StudentNewsEditor';
 import EvaluationUnitSelector from './EvaluationUnitSelector';
 import StaffAttendanceSettings from './StaffAttendanceSettings';
 import EndTermDialog from './EndTermDialog';
@@ -359,6 +360,7 @@ const SettingsSection = ({
     }
     return 'محفوظ تلقائياً';
   };
+  if (activeCategory === 'settingsNews') return <StudentNewsEditor />;
   return (
     <div className="space-y-7">
       <Card className="mx-auto w-full max-w-5xl overflow-visible border-primary/25 bg-card/90 shadow-lg shadow-primary/5">

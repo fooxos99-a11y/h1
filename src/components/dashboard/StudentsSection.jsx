@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Pencil, Repeat, Trash2, Upload } from 'lucide-react';
+import { filterRosterByName } from '@/lib/rosterSearch';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -223,6 +224,7 @@ const parseBestStudentSheet = (sheets, usedLoginNumbers, committees) => {
 
 
 const StudentsSection = () => {
+  const [search, setSearch] = useState('');
   const isOnline = useOnlineStatus();
   const accountId = Number(localStorage.getItem('wajeh_account_id') || localStorage.getItem('wajeh_supervisor_id') || 0);
   const actorRole = localStorage.getItem('wajeh_role') || 'manager';
@@ -231,6 +233,7 @@ const StudentsSection = () => {
   const fileInputRef = useRef(null);
   const [committees, setCommittees] = useState([]);
   const [students, setStudents] = useState([]);
+  const visibleStudents = useMemo(() => filterRosterByName(students, search), [students, search]);
   const [committeeFilter, setCommitteeFilter] = useState('all');
   const [studentForm, setStudentForm] = useState(emptyStudent);
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -441,13 +444,13 @@ const StudentsSection = () => {
     if (isLoading) {
       return <DashboardLoader />;
     }
-    if (students.length === 0) {
+    if (visibleStudents.length === 0) {
       return <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">
-              لا يوجد طلاب حالياً.
+              {search.trim() ? 'لا توجد نتائج مطابقة.' : 'لا يوجد طلاب حالياً.'}
             </div>;
     }
     return <div className="space-y-3">
-              {students.map((student) =>
+              {visibleStudents.map((student) =>
             <div
               key={student.id}
               className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-xl border border-primary/20 bg-background p-4">
@@ -506,6 +509,7 @@ const StudentsSection = () => {
                 إضافة
               </Button>
           </div>
+          <Input type="search" aria-label="ابحث باسم الطالب" placeholder="ابحث باسم الطالب" value={search} onChange={event => setSearch(event.target.value)} className="mt-3 min-h-11 w-full [font-family:var(--font-ui)]" />
         </CardHeader>
         <CardContent className="pt-6">
           {_resolveStudentsSection()

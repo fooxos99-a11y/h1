@@ -26,7 +26,7 @@ const DialogContent = React.forwardRef(({
   const keepDialogOpenForSelect = (event, handler) => {
     const originalEvent = event.detail?.originalEvent
     const target = originalEvent?.target
-    if (originalEvent?.detail > 1 || target?.closest?.("[data-app-select-content]")) {
+    if (originalEvent?.detail > 1 || target?.closest?.("[data-app-select-content], [data-dashboard-undo]")) {
       event.preventDefault()
     }
     handler?.(event)

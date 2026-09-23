@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { isDeferredMutation, waitForDashboardUndo } from '@/lib/deferredActions';
 import { clearAuthSession, getAuthSessionVersion, getBearerToken } from '@/lib/authSession';
 import {
   apiBase,
@@ -56,6 +57,13 @@ export async function request(path, options = {}) {
   const { apiBaseOverride, authSnapshot, ...requestOptions } = options;
   const sessionVersion = getAuthSessionVersion();
   const requestBase = apiBaseOverride || getApiBase();
+  if (isDeferredMutation(path, options)) {
+    const label = options.method === 'DELETE' ? 'حذف العنصر' : 'تنفيذ الأمر';
+    await waitForDashboardUndo(label, options.signal);
+    if (sessionVersion !== getAuthSessionVersion() || requestBase !== (apiBaseOverride || getApiBase())) {
+      throw new Error('تغير الحساب؛ أعد تنفيذ الأمر من الحساب الحالي.');
+    }
+  }
   const fetchOnce = async () => {
     requestCooldown.check(requestBase, path);
     const traceId = globalThis.crypto?.randomUUID?.() || '';

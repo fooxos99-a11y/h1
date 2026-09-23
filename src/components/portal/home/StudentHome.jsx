@@ -1,3 +1,4 @@
+import StudentNewsCard from './StudentNewsCard';
 import React, { lazy, Suspense, useEffect, useState } from 'react';
 import useMediaQuery from '@/hooks/useMediaQuery';
 import useStudentHomeNavigation from '@/hooks/useStudentHomeNavigation';
@@ -73,6 +74,8 @@ function StudentHomeContent({ studentId, showPath, showDailyChallenge, execution
     <div hidden={entering} inert={(mobile && view) || fullPage || view === 'store' ? '' : undefined}>
     <StudentHomeHeader showProgress={Boolean(plan.data?.today?.plan)} programsEnabled={features.programs} points={plan.data?.points?.total} progress={currentPlanProgress(plan.data?.today?.plan)} progressLabel="تقدم الخطة الحالية" storeEnabled={storeEnabled} onOpen={open} onLogout={onLogout} />
     <main className="student-home-main">
+      <StudentNewsCard news={extras?.news} active={!entering && !view} />
+      {extras?.newsError && <StudentHomeStatus message="تعذر تحديث الأخبار." onRetry={() => setVersion(value => value + 1)} />}
       <StudentTodayCard studentId={studentId} executionEnabled={executionEnabled} model={model} loading={plan.loading && !plan.data} error={plan.error} onRetry={plan.retry} onRead={read} />
       {extras?.settingsError && <StudentHomeStatus message="تعذر تحديث إعدادات الصفحة." onRetry={() => setVersion((value) => value + 1)} />}
       {showPath && <StudentHomeJourney journey={studentJourneySummary(extras?.journey)} error={extras?.journeyError} onRetry={() => setVersion((value) => value + 1)} onOpen={() => open('journey')} />}

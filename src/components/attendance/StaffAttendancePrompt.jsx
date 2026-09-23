@@ -15,8 +15,8 @@ export default function StaffAttendancePrompt({ active, attendanceState }) {
 
   return (
     <Dialog open={open} onOpenChange={(value) => { if (!value) setCancelled(true); }}>
-      <DialogContent className="max-w-sm [font-family:var(--font-ui)]" dir="rtl">
-        <DialogHeader><DialogTitle>تأكيد التحضير</DialogTitle></DialogHeader>
+      <DialogContent className="w-[calc(100%-3rem)] max-w-xs gap-5 p-5 sm:max-w-xs sm:p-5 [font-family:var(--font-ui)]" dir="rtl" aria-describedby={undefined}>
+        <DialogHeader className="text-center"><DialogTitle>تأكيد التحضير</DialogTitle></DialogHeader>
         <DialogFooter className="grid grid-cols-2 gap-2 sm:grid-cols-2">
           <Button type="button" variant="outline" className="h-11" disabled={pending} onClick={() => setCancelled(true)}>إلغاء</Button>
           <Button
