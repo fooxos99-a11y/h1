@@ -389,6 +389,7 @@ function renderRecitationAmountControl({ lateOptions, action, actionKey, selecte
     options={lateOptions}
     value={lateOptions.find(option => Number(option.task.id) === Number(action.tasks.at(-1).id))}
     onChange={(value) => updateSelectedEnd(actionKey, value)}
+    compact
   />
   );
   const canSelectEnd = teacherExecutionMode
@@ -420,6 +421,7 @@ function renderRecitationAmountControl({ lateOptions, action, actionKey, selecte
       allowedEnd={firstTask.selectionEnd}
       direction={firstTask.selectionDirection}
       onChange={(value) => updateSelectedEnd(actionKey, value)}
+      compact
     />
   );
 }

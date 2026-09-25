@@ -18,6 +18,14 @@ const ACTION_HANDLERS = Object.freeze({
     eventMonotonicMs: payload.eventMonotonicMs,
     committedAtLocal: payload.committedAtLocal,
   }),
+  narration_juz: (payload) => studentsApi.updateNarrationJuz(payload.eventId, payload.entryId, payload.juzNumber, {
+    ...payload.evaluation,
+    requestId: payload.requestId,
+    deviceId: payload.deviceId,
+    bootId: payload.bootId,
+    eventMonotonicMs: payload.eventMonotonicMs,
+    committedAtLocal: payload.committedAtLocal,
+  }),
   narration_student_status: (payload) => studentsApi.updateNarrationStudentStatus(
     payload.eventId,
     payload.entryId,

@@ -189,6 +189,9 @@ const actionRequest = (action) => {
   if (action.actionType === 'narration_part') {
     return [`narration-events/${payload.eventId}/parts/${payload.partId}`, { ...payload, ...payload.evaluation }, 'PUT'];
   }
+  if (action.actionType === 'narration_juz') {
+    return [`narration-events/${payload.eventId}/students/${payload.entryId}/juz/${payload.juzNumber}`, { ...payload, ...payload.evaluation }, 'PUT'];
+  }
   if (action.actionType === 'narration_student_status') {
     return [`narration-events/${payload.eventId}/students/${payload.entryId}/status`, payload, 'PUT'];
   }

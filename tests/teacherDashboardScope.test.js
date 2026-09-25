@@ -17,7 +17,7 @@ test('teacher dashboard exposes student plans while keeping other student admini
   assert.match(dashboard, /key: 'previousRecitationSessions'[\s\S]*permissionKey: 'quranEvaluation'/);
   assert.match(dashboard, /<TeacherPreviousSessionsPanel \/>/);
   assert.match(dashboard, /key: 'mushaf', label: 'المصحف'/);
-  assert.match(dashboard, /section\.key === 'mushaf'\) return isManager \|\| isSupervisor \|\| isReciter/);
+  assert.match(dashboard, /section\.key === 'mushaf'\) return isSupervisor \|\| isReciter/);
   assert.match(accountPortal, /key: 'studentPlans', label: 'خطط الطلاب'/);
   assert.match(accountPortal, /settings\.teacherManualPointsEnabled[\s\S]*key: 'teacherPoints', label: 'الإضافة والخصم'/);
   assert.ok(accountPortal.indexOf("key: 'staffAttendance', label: 'التحضير'") < accountPortal.indexOf("key: 'quranEvaluation', label: 'جلسات التسميع'"));

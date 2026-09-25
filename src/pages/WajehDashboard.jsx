@@ -3,6 +3,7 @@ import DashboardUndoNotice from '@/components/dashboard/DashboardUndoNotice';
 import useDashboardUndoRefresh from '@/hooks/useDashboardUndoRefresh';
 import PageLoadingBoundary from '@/components/ui/page-loading-boundary';
 import { defaultAccountSection } from '@/lib/defaultAccountSection';
+import OfflineConnectionRequired from '@/components/network/OfflineConnectionRequired';
 import useStaffAttendance from '@/hooks/useStaffAttendance';
 import NotificationButton from '@/components/notifications/NotificationButton';
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
@@ -294,7 +295,7 @@ const WajehDashboard = () => {
       if (isSupervisor && section.key === 'studentPlans') return true;
       if (isSupervisor && ['teacherPoints', 'culturalCompetition', 'calls', 'reports'].includes(section.key)) return true;
       if (section.key === 'staffAttendance') return canDisplayStaffAttendance({ settings, alreadyPresentToday, isSupervisor, isReciter, isAdmin, dashboardPermissions });
-      if (section.key === 'mushaf') return isManager || isSupervisor || isReciter;
+      if (section.key === 'mushaf') return isSupervisor || isReciter;
       const permissionKeys = section.permissionKeys || [section.permissionKey || section.key];
       if (!isManager && !permissionKeys.some((key) => dashboardPermissions.includes(key))) return false;
       if (!isSupervisor && section.key === 'manualAttendance' && (!settings.attendanceManualEnabled || settings.recitationAttendanceSource === 'teacher')) return false;
@@ -328,18 +329,22 @@ const WajehDashboard = () => {
     section.key === requestedSection
     || section.children?.some((child) => child.key === requestedSection)
   ));
-  const visibleActiveSection = isVisibleSection
+  // A failed connectivity probe hides online-only sections. Keep the user on the
+  // page they opened instead of redirecting them to another section.
+  const waitingForConnection = !isOnline && !isVisibleSection
+    && Boolean(requestedSection) && !offlineDashboardSections.has(requestedSection);
+  const visibleActiveSection = isVisibleSection || waitingForConnection
     ? requestedSection
     : defaultAccountSection(role, sections);
 
   useEffect(() => {
-    if (navigationLoading || !hasDashboardAccess || !visibleActiveSection) return;
+    if (navigationLoading || !hasDashboardAccess || !visibleActiveSection || waitingForConnection) return;
     const canonicalSlug = dashboardSectionRoutes.getSlug(visibleActiveSection);
     if (sectionSlug !== canonicalSlug) {
       const tab = userSectionKeys.includes(routeSection) && visibleActiveSection === 'users' ? `?tab=${routeSection}` : '';
       navigate(`/dashboard/${canonicalSlug}${tab}`, { replace: true });
     }
-  }, [hasDashboardAccess, navigationLoading, navigate, routeSection, sectionSlug, visibleActiveSection]);
+  }, [hasDashboardAccess, navigationLoading, navigate, routeSection, sectionSlug, visibleActiveSection, waitingForConnection]);
 
   const changeSection = useCallback((key) => {
     const slug = dashboardSectionRoutes.getSlug(key);
@@ -352,6 +357,7 @@ const WajehDashboard = () => {
   const restoreActiveCall = useCallback(() => changeSection('calls'), [changeSection]);
 
   const renderSection = () => {
+    if (waitingForConnection) return <OfflineConnectionRequired message="انقطع الاتصال بالخادم. ستعود الصفحة تلقائيًا عند عودة الاتصال." />;
     // Select the requested view without evaluating unrelated page branches.
     switch (visibleActiveSection) {
       case 'users': return <UsersSection tabs={sections.find(({ key }) => key === 'users')?.userTabs} />;

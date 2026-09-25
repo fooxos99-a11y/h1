@@ -17,7 +17,7 @@ test('all safe teacher operations use one durable offline queue', async () => {
     read('../src/components/dashboard/NarrationDaySection.jsx'),
     read('../src/components/dashboard/StudentPlansSection.jsx'),
   ]);
-  for (const type of ['student_attendance', 'staff_attendance', 'quran_test_result', 'narration_part', 'narration_student_status']) {
+  for (const type of ['student_attendance', 'staff_attendance', 'quran_test_result', 'narration_part', 'narration_juz', 'narration_student_status']) {
     assert.match(operations, new RegExp(type));
   }
   assert.match(store, /dedupeKey/);
@@ -26,7 +26,7 @@ test('all safe teacher operations use one durable offline queue', async () => {
   assert.match(attendance, /navigator\.onLine !== false[\s\S]*checkInMyStaffAttendance\(coordinates\)/);
   assert.match(attendance, /pending_sync/);
   assert.match(tests, /quran_test_result/);
-  assert.match(narration, /narration_part/);
+  assert.match(narration, /narration_juz/);
   assert.match(plans, /loadOfflineSnapshot/);
 });
 

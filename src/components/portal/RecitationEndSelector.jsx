@@ -104,9 +104,10 @@ const RecitationEndSelector = ({
     </div>
   );
   if (!compact) return controls;
+  // Same wording as the read-only amount so every card reads alike.
   const range = Number(start.surah) === Number(selected.surah)
-    ? `${surahLabel(start)} ${start.ayah}–${selected.ayah}`
-    : `${surahLabel(start)} ${start.ayah} – ${surahLabel(selected)} ${selected.ayah}`;
+    ? `من ${surahLabel(start)} ${start.ayah} إلى ${selected.ayah}`
+    : `من ${surahLabel(start)} ${start.ayah} إلى ${surahLabel(selected)} ${selected.ayah}`;
   return (
     <Popover>
       <PopoverTrigger asChild>

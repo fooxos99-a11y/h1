@@ -262,6 +262,7 @@ export const studentsApi = {
   getNarrationPartAyahs: (eventId, partId) => request(`/narration-events/${eventId}/parts/${partId}/ayahs`),
   deleteNarrationEvent: (eventId) => request(`/narration-events/${eventId}`, { method: 'DELETE' }),
   createNarrationEvent: (payload) => request('/narration-events', { method: 'POST', body: JSON.stringify(payload) }),
+  updateNarrationJuz: (eventId, entryId, juzNumber, payload) => request(`/narration-events/${eventId}/students/${entryId}/juz/${juzNumber}`, { method: 'PUT', body: JSON.stringify(payload) }),
   updateNarrationPart: (eventId, partId, payload) => request(`/narration-events/${eventId}/parts/${partId}`, { method: 'PUT', body: JSON.stringify(payload) }),
   updateNarrationStudentStatus: (eventId, entryId, status, metadata = {}) => request(`/narration-events/${eventId}/students/${entryId}/status`, {
     method: 'PUT',

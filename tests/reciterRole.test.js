@@ -51,7 +51,7 @@ test('reciter dashboard exposes recitation and own attendance while server check
 
   assert.match(dashboard, /if \(isReciter\) return localizeSections\(baseSections[\s\S]*\['quranEvaluation', 'staffAttendance', 'mushaf'\]\.includes\(section\.key\)[\s\S]*section\.key !== 'staffAttendance' \|\| \(settings\.staffAttendanceSource === 'teacher' && !alreadyPresentToday\)[\s\S]*reciterSectionOrder/);
   assert.match(dashboard, /const reciterSectionOrder = new Map\(\[[\s\S]*\['staffAttendance', 0\][\s\S]*\['quranEvaluation', 1\][\s\S]*\['mushaf', 3\]/);
-  assert.match(dashboard, /section\.key === 'mushaf'\) return isManager \|\| isSupervisor \|\| isReciter/);
+  assert.match(dashboard, /section\.key === 'mushaf'\) return isSupervisor \|\| isReciter/);
   assert.match(dashboard, /<StudentMushafSection onBack=/);
   assert.match(login, /\['supervisor', 'admin', 'reciter'\]/);
   assert.match(routes, /\['reciters', 'reciters'\]/);

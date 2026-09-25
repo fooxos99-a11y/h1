@@ -1,3 +1,18 @@
+const isScored = (part) => part.score !== null && part.score !== undefined;
+
+// A juz is graded once, however many separate memorized segments it contains.
+function summarizeJuz(parts) {
+  const evaluated = parts.length > 0 && parts.every(isScored);
+  return {
+    evaluated,
+    score: evaluated ? parts.reduce((sum, part) => sum + Number(part.score), 0) / parts.length : null,
+    warningCount: parts.reduce((sum, part) => sum + Number(part.warningCount || 0), 0),
+    mistakeCount: parts.reduce((sum, part) => sum + Number(part.mistakeCount || 0), 0),
+    evaluatorNames: [...new Set(parts.map((part) => part.evaluatorName).filter(Boolean))],
+    pendingSync: parts.some((part) => part.pendingSync),
+  };
+}
+
 export function groupNarrationParts(parts = []) {
   const groups = new Map();
   for (const part of parts) {
@@ -5,11 +20,16 @@ export function groupNarrationParts(parts = []) {
     if (!groups.has(juzNumber)) groups.set(juzNumber, { juzNumber, parts: [] });
     groups.get(juzNumber).parts.push(part);
   }
-  return [...groups.values()].sort((a, b) => a.juzNumber - b.juzNumber).map(group => ({
-    ...group,
-    parts: [...group.parts].sort((a, b) => Number(a.startSurah) - Number(b.startSurah)
-      || Number(a.startAyah) - Number(b.startAyah)),
-  }));
+  return [...groups.values()].sort((a, b) => a.juzNumber - b.juzNumber).map((group) => {
+    const sortedParts = [...group.parts].sort((a, b) => Number(a.startSurah) - Number(b.startSurah)
+      || Number(a.startAyah) - Number(b.startAyah));
+    return { ...group, parts: sortedParts, ...summarizeJuz(sortedParts) };
+  });
+}
+
+export function narrationOverallScore(groups = []) {
+  if (!groups.length || !groups.every((group) => group.evaluated)) return null;
+  return groups.reduce((sum, group) => sum + Number(group.score), 0) / groups.length;
 }
 
 export function narrationRangeLabel(part) {

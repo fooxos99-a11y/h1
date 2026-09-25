@@ -138,20 +138,21 @@ const NarrationDaySection = () => {
     }
     catch (error) { toast({ title: 'تعذر تحديث يوم السرد', description: error.message, variant: 'destructive' }); }
   };
-  const savePart = async (partId, payload) => {
+  const saveJuz = async (entryId, juzNumber, payload) => {
     try {
       const action = await commitOfflineOperation(
         getAccountId(),
-        'narration_part',
-        { eventId: event.id, partId, evaluation: payload },
-        { dedupeKey: `narration-part:${event.id}:${partId}` },
+        'narration_juz',
+        { eventId: event.id, entryId, juzNumber, evaluation: payload },
+        { dedupeKey: `narration-juz:${event.id}:${entryId}:${juzNumber}` },
       );
-      const marks = Array.isArray(payload.wordMarks) ? payload.wordMarks : [];
+      const marksByPart = new Map((payload.parts || []).map((item) => [String(item.partId), Array.isArray(item.wordMarks) ? item.wordMarks : []]));
+      const allMarks = [...marksByPart.values()].flat();
       const warningCount = payload.evaluationMode === 'mushaf'
-        ? marks.filter((mark) => mark.markType === 'warning').length
+        ? allMarks.filter((mark) => mark.markType === 'warning').length
         : Number(payload.warningCount || 0);
       const mistakeCount = payload.evaluationMode === 'mushaf'
-        ? marks.filter((mark) => mark.markType === 'mistake').length
+        ? allMarks.filter((mark) => mark.markType === 'mistake').length
         : Number(payload.mistakeCount || 0);
       const policy = event.evaluationPolicy || {};
       const localScore = Math.max(0, Number(policy.maxScore || 100)
@@ -160,11 +161,23 @@ const NarrationDaySection = () => {
       setEvent((current) => ({
         ...current,
         students: current.students.map((student) => {
-          if (!student.parts.some((part) => String(part.id) === String(partId))) return student;
-          const parts = student.parts.map((part) => String(part.id) === String(partId)
-            ? { ...part, warningCount, mistakeCount, score: localScore, wordMarks: marks, pendingSync: true }
-            : part);
-          return { ...student, parts, status: parts.every((part) => part.score !== null) ? 'completed' : 'in_progress' };
+          if (String(student.id) !== String(entryId)) return student;
+          const juzParts = student.parts.filter((part) => Number(part.juzNumber) === Number(juzNumber));
+          const firstPartId = String(juzParts[0]?.id);
+          const parts = student.parts.map((part) => {
+            if (Number(part.juzNumber) !== Number(juzNumber)) return part;
+            const partMarks = marksByPart.get(String(part.id)) || [];
+            const isFirst = String(part.id) === firstPartId;
+            return {
+              ...part,
+              score: localScore,
+              warningCount: payload.evaluationMode === 'mushaf' ? partMarks.filter((mark) => mark.markType === 'warning').length : (isFirst ? warningCount : 0),
+              mistakeCount: payload.evaluationMode === 'mushaf' ? partMarks.filter((mark) => mark.markType === 'mistake').length : (isFirst ? mistakeCount : 0),
+              wordMarks: partMarks,
+              pendingSync: true,
+            };
+          });
+          return { ...student, parts, status: parts.every((part) => part.score !== null && part.score !== undefined) ? 'completed' : 'in_progress' };
         }),
       }));
       const synced = navigator.onLine === false
@@ -306,7 +319,7 @@ const NarrationDaySection = () => {
                   eventId={event.id}
                   student={student}
                   archived={event.status === 'archived'}
-                  onSavePart={savePart}
+                  onSaveJuz={saveJuz}
                   onStart={startStudent}
                 />
               )) : (

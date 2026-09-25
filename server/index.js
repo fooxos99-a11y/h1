@@ -7042,10 +7042,7 @@ app.put('/api/narration-events/:eventId/parts/:partId', requireNarrationAccess, 
     const score = Math.max(0, Number(settings.narrationMaxScore) - warnings * Number(settings.narrationWarningDeduction) - mistakes * Number(settings.narrationMistakeDeduction));
     await connection.beginTransaction();
     await connection.query(`UPDATE narration_event_parts SET warning_count = ?, mistake_count = ?, score = ?, notes = NULL, evaluated_by = ?, evaluated_at = NOW(), evaluation_mode = ?, word_marks_json = ? WHERE id = ?`, [warnings, mistakes, score, Number(req.auth.id || 0) || null, evaluationMode, evaluationMode === 'mushaf' ? JSON.stringify(normalizedWordMarks) : null, partId]);
-    const [[summary]] = await connection.query(`SELECT COUNT(*) AS total, SUM(score IS NOT NULL) AS evaluated, AVG(score) AS averageScore FROM narration_event_parts WHERE event_student_id = ?`, [part.eventStudentId]);
-    const complete = Number(summary.evaluated) === Number(summary.total);
-    const finalScore = complete ? Number(summary.averageScore) : null;
-    await connection.query(`UPDATE narration_event_students SET status = ?, final_score = ?, final_rating = ? WHERE id = ?`, [complete ? 'completed' : 'in_progress', finalScore, complete ? getNarrationRating(finalScore) : null, part.eventStudentId]);
+    const { complete, finalScore } = await refreshNarrationStudentResult(connection, part.eventStudentId);
     await connection.commit();
     if (complete) {
       void getNarrationEvent(eventId, req.auth)
@@ -7054,6 +7051,89 @@ app.put('/api/narration-events/:eventId/parts/:partId', requireNarrationAccess, 
     }
     res.json({ ok: true, score, finalScore, finalRating: complete ? getNarrationRating(finalScore) : null });
   } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }
+});
+
+/** Each juz is one graded unit; its final score is the mean of the juz scores. */
+async function refreshNarrationStudentResult(connection, eventStudentId) {
+  const [juzRows] = await connection.query(
+    `SELECT juz_number AS juzNumber, COUNT(*) AS total, SUM(score IS NOT NULL) AS evaluated, AVG(score) AS juzScore
+     FROM narration_event_parts WHERE event_student_id = ? GROUP BY juz_number`,
+    [eventStudentId]
+  );
+  const complete = juzRows.length > 0 && juzRows.every((row) => Number(row.evaluated) === Number(row.total));
+  const finalScore = complete
+    ? juzRows.reduce((sum, row) => sum + Number(row.juzScore), 0) / juzRows.length
+    : null;
+  await connection.query(
+    'UPDATE narration_event_students SET status = ?, final_score = ?, final_rating = ? WHERE id = ?',
+    [complete ? 'completed' : 'in_progress', finalScore, complete ? getNarrationRating(finalScore) : null, eventStudentId]
+  );
+  return { complete, finalScore };
+}
+
+app.put('/api/narration-events/:eventId/students/:studentEntryId/juz/:juzNumber', requireNarrationAccess, async (req, res, next) => {
+  const connection = await db().getConnection();
+  try {
+    const eventId = Number(req.params.eventId);
+    const entryId = Number(req.params.studentEntryId);
+    const juzNumber = Number(req.params.juzNumber);
+    const [parts] = await connection.query(
+      `SELECT p.id, p.event_student_id AS eventStudentId, es.committee_id AS committeeId, e.status,
+        p.start_surah AS startSurah, p.start_ayah AS startAyah, p.start_page AS startPage,
+        p.end_surah AS endSurah, p.end_ayah AS endAyah, p.end_page AS endPage
+       FROM narration_event_parts p JOIN narration_event_students es ON es.id = p.event_student_id JOIN narration_events e ON e.id = es.event_id
+       WHERE es.id = ? AND e.id = ? AND p.juz_number = ? AND es.archived_at IS NULL
+       ORDER BY p.start_page ASC, p.id ASC`,
+      [entryId, eventId, juzNumber]
+    );
+    if (!parts.length || parts[0].status !== 'open') return res.status(404).json({ message: 'التقييم غير متاح.' });
+    if (!await canAccessNarrationCommittee(req.auth, parts[0].committeeId)) return res.status(403).json({ message: 'لا يمكنك تقييم هذا الطالب.' });
+    const evaluationMode = ['mushaf', 'count'].includes(req.body.evaluationMode) ? req.body.evaluationMode : null;
+    if (!evaluationMode) return res.status(422).json({ message: 'اختر طريقة تسجيل نتيجة السرد.' });
+    const marksByPart = new Map();
+    if (evaluationMode === 'mushaf') {
+      const submitted = new Map((Array.isArray(req.body.parts) ? req.body.parts : [])
+        .map((item) => [String(item?.partId), item?.wordMarks]));
+      if ([...submitted.keys()].some((partId) => !parts.some((part) => String(part.id) === partId))) {
+        return res.status(422).json({ message: 'مقاطع الجزء غير صحيحة.' });
+      }
+      for (const part of parts) {
+        const normalized = await normalizeQuranRangeWordMarks(connection, part, submitted.get(String(part.id)) || []);
+        if (normalized === null) return res.status(422).json({ message: 'تحديد أخطاء المصحف غير صحيح.' });
+        marksByPart.set(String(part.id), normalized);
+      }
+    } else if (Array.isArray(req.body.parts) || Array.isArray(req.body.wordMarks)) {
+      return res.status(422).json({ message: 'لا ترسل علامات كلمات مع النتيجة اليدوية.' });
+    }
+    const allMarks = [...marksByPart.values()].flat();
+    const warnings = evaluationMode === 'mushaf'
+      ? allMarks.filter((mark) => mark.markType === 'warning').length
+      : Math.max(0, Number(req.body.warningCount || 0));
+    const mistakes = evaluationMode === 'mushaf'
+      ? allMarks.filter((mark) => mark.markType === 'mistake').length
+      : Math.max(0, Number(req.body.mistakeCount || 0));
+    const settings = await loadSettings();
+    const score = Math.max(0, Number(settings.narrationMaxScore) - warnings * Number(settings.narrationWarningDeduction) - mistakes * Number(settings.narrationMistakeDeduction));
+    await connection.beginTransaction();
+    for (const [index, part] of parts.entries()) {
+      const partMarks = marksByPart.get(String(part.id)) || [];
+      // Manual counts belong to the juz as a whole, so they are kept once on its first segment.
+      const partWarnings = evaluationMode === 'mushaf' ? partMarks.filter((mark) => mark.markType === 'warning').length : (index === 0 ? warnings : 0);
+      const partMistakes = evaluationMode === 'mushaf' ? partMarks.filter((mark) => mark.markType === 'mistake').length : (index === 0 ? mistakes : 0);
+      await connection.query(
+        'UPDATE narration_event_parts SET warning_count = ?, mistake_count = ?, score = ?, notes = NULL, evaluated_by = ?, evaluated_at = NOW(), evaluation_mode = ?, word_marks_json = ? WHERE id = ?',
+        [partWarnings, partMistakes, score, Number(req.auth.id || 0) || null, evaluationMode, evaluationMode === 'mushaf' ? JSON.stringify(partMarks) : null, part.id]
+      );
+    }
+    const { complete, finalScore } = await refreshNarrationStudentResult(connection, entryId);
+    await connection.commit();
+    if (complete) {
+      void getNarrationEvent(eventId, req.auth)
+        .then((updatedEvent) => updatedEvent && sendNarrationMessages(updatedEvent, { type: 'result', eventStudentId: String(entryId) }))
+        .catch(() => undefined);
+    }
+    res.json({ ok: true, score, warningCount: warnings, mistakeCount: mistakes, finalScore, finalRating: complete ? getNarrationRating(finalScore) : null });
+  } catch (error) { await connection.rollback().catch(() => undefined); next(error); } finally { connection.release(); }
 });
 
 app.put('/api/narration-events/:eventId/students/:studentEntryId/status', requireNarrationAccess, async (req, res, next) => {
