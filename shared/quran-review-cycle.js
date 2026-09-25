@@ -39,7 +39,7 @@ export function selectReviewFaces(cycle, faces) {
 }
 
 export function reviewRangeLabel(range) {
-  const label = value => `${value.surahName || `سورة ${value.surah}`} آية ${value.ayah}`;
+  const label = value => `${value.surahName || 'سورة ' + value.surah} آية ${value.ayah}`;
   return `${label(range.start)} إلى ${label(range.end)}`;
 }
 

@@ -15,7 +15,8 @@ function storage() {
 test('disabled events do not write inbox or push deliveries', async()=>{
  for(const type of ['program','station','city','violation','storeOrder']) {
   const config=normalizeEventNotifications({[type]:{enabled:false}});
-  await emitEventNotification({query:()=>{throw new Error('must not query');}},{type,key:'1',config,recipients:[{role:'student',id:1}]});
+  const result=await emitEventNotification({query:()=>{throw new Error('must not query');}},{type,key:'1',config,recipients:[{role:'student',id:1}]});
+  assert.equal(result,null,`${type} must stay silent when disabled`);
  }
 });
 test('store notifications target only selected active administrators and queue their devices once',async()=>{

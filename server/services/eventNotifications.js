@@ -30,8 +30,8 @@ export async function notifyStudentsOfEvent(connection, event) {
 export async function notifyCityTransition(connection, studentId, previousPoints, nextPoints, settings) {
   if (!settings?.eventNotifications?.city?.enabled || !settings.summitEnabled || nextPoints <= previousPoints) return;
   const cities = [...(settings.summitMapConfig?.cities || [])].sort((a, b) => a.kilometer - b.kilometer);
-  const previous = cities.filter(city => city.kilometer <= previousPoints).at(-1);
-  const current = cities.filter(city => city.kilometer <= nextPoints).at(-1);
+  const previous = cities.findLast(city => city.kilometer <= previousPoints);
+  const current = cities.findLast(city => city.kilometer <= nextPoints);
   if (!current || current.id === previous?.id) return;
   await emitEventNotification(connection, {type:'city', key:studentId + ':' + current.id, values:{city:current.name}, recipients:[{role:'student',id:studentId}],config:settings.eventNotifications});
 }

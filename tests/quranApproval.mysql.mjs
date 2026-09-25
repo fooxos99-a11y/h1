@@ -5,7 +5,7 @@ import { setTimeout } from 'node:timers/promises';
 import crypto from 'node:crypto';
 const db=await mysql.createConnection({host:'127.0.0.1',port:33316,user:'root',database:'quran_audit_approval'});
 const clock='outputs/quran-quality-audit/approval-clock.txt';
-async function day(n){await writeFile(clock+'.next',`2026-10-${String(n).padStart(2,'0')}T12:00:00Z`);for(let i=0;i<20;i++){try{await rename(clock+'.next',clock);return;}catch(e){if(e.code!=='EPERM'||i===19)throw e;await setTimeout(25);}}}
+async function day(n){await writeFile(clock+'.next',`2026-10-${String(n).padStart(2,'0')}T12:00:00Z`);for(let i=0;i<20;i++){try{await rename(clock+'.next',clock);return;}catch(e){if(e.code!=='EPERM'||i===19){throw e;}await setTimeout(25);}}}
 async function api(path,token,body,method=body?'POST':'GET'){
  const r=await globalThis.fetch('http://127.0.0.1:33313/api'+path,{method,headers:{'Content-Type':'application/json','X-Madarij-Native':'1','X-Registration-Number':'909090',...(token?{Authorization:'Bearer '+token}:{})},body:body?JSON.stringify(body):undefined});const data=await r.json();assert.equal(r.status,200,`${path}: ${data.message}`);return data;
 }

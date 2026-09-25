@@ -85,7 +85,10 @@ await runPool(pageNumbers, async (page) => {
 // Never replace a complete package with an incomplete upstream response.
 const packagedVerses = new Set([...pageContents.values()].flatMap(({ words }) => words.map((word) => word.verseKey)));
 const missingVerses = pageReference.ayahs.filter(({ surah, ayah }) => !packagedVerses.has(`${surah}:${ayah}`));
-if (missingVerses.length) throw new Error(`Incomplete Mushaf: ${missingVerses.map(({ surah, ayah }) => `${surah}:${ayah}`).join(', ')}`);
+if (missingVerses.length) {
+  const missingKeys = missingVerses.map(({ surah, ayah }) => surah + ':' + ayah).join(', ');
+  throw new Error(`Incomplete Mushaf: ${missingKeys}`);
+}
 const versePages = new Map();
 for (const page of pageNumbers) {
   for (const word of pageContents.get(page).words) {
@@ -130,4 +133,5 @@ await fs.writeFile(path.join(OUTPUT_ROOT, 'index.json'), JSON.stringify({
   pageHashes,
 }));
 
-process.stdout.write(`حزمة المصحف المحلية: ${PAGE_COUNT} صفحة، ${packagedVerses.size} آية${pagesOnly ? '، مع الإبقاء على الخطوط الحالية' : ` و${PAGE_COUNT + 1} خط`}.\n`);
+const fontsSummary = pagesOnly ? '، مع الإبقاء على الخطوط الحالية' : ' و' + (PAGE_COUNT + 1) + ' خط';
+process.stdout.write(`حزمة المصحف المحلية: ${PAGE_COUNT} صفحة، ${packagedVerses.size} آية${fontsSummary}.\n`);

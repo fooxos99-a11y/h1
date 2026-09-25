@@ -2,6 +2,17 @@ import React, { useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MAX_REVIEW_FACES, selectReviewFaces, reviewRangeLabel } from '../../../shared/quran-review-cycle.js';
 
+// A range can repeat after the cycle wraps, so count repeats to keep keys unique.
+function rangeItems(ranges = []) {
+  const seen = new Map();
+  return ranges.map((range, position) => {
+    const base = `${range.start.surah}:${range.start.ayah}-${range.end.surah}:${range.end.ayah}`;
+    const repeat = seen.get(base) || 0;
+    seen.set(base, repeat + 1);
+    return { id: `${base}#${repeat}`, range, first: position === 0 };
+  });
+}
+
 export default function ReviewAmountSelector({ cycle, value, onChange, editable = true }) {
   const [visibleFaces, setVisibleFaces] = useState(20);
   const valid = Number(value) >= 0.25 && Number(value) <= MAX_REVIEW_FACES;
@@ -15,7 +26,7 @@ export default function ReviewAmountSelector({ cycle, value, onChange, editable 
           className="relative z-[1] h-11 w-auto min-w-11 justify-center px-2 text-center text-xs font-black text-primary [&>span]:text-center">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent align="center" sideOffset={2} className="z-[140] !w-24 !min-w-24 max-h-56"
+        <SelectContent align="center" sideOffset={2} className="z-[150] !w-auto !min-w-16 max-h-56 border-primary/25 bg-background/95 text-xs font-black shadow-xl shadow-primary/10 backdrop-blur"
           onScrollCapture={event => {
             const viewport = event.target;
             if (viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 88) {
@@ -23,11 +34,11 @@ export default function ReviewAmountSelector({ cycle, value, onChange, editable 
             }
           }}>
           {amounts.map(amount => <SelectItem key={amount} value={String(amount)} showIndicator={false}
-            className="min-h-11 justify-center px-2 text-xs" textClassName="text-center">{amount}</SelectItem>)}
+            className="h-9 justify-center px-2 text-center text-xs font-black data-[state=checked]:bg-primary/15 data-[state=checked]:text-primary [&>span:last-child]:text-center" textClassName="text-center">{amount}</SelectItem>)}
         </SelectContent>
       </Select>
       <span>وجه</span>
     </div>}
-    {selection?.ranges.map((range, index) => <span key={index}>{index > 0 ? 'ثم ' : ''}{reviewRangeLabel(range)}</span>)}
+    {rangeItems(selection?.ranges).map(({ id, range, first }) => <span key={id}>{first ? '' : 'ثم '}{reviewRangeLabel(range)}</span>)}
   </div>;
 }
