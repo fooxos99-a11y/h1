@@ -1,3 +1,4 @@
+import { emitEventNotification } from '../services/eventNotifications.js';
 import { decideStoreOrder } from '../services/storeOrderDecision.js';
 import express from 'express';
 import { db } from '../db.js';
@@ -19,7 +20,7 @@ const imageByteLength = (imageData) => {
   return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
 };
 
-function normalizeProductPayload(body = {}, current = null) {
+export function normalizeProductPayload(body = {}, current = null) {
   const name = cleanText(body.name ?? current?.name, 180);
   const imageData = String(body.imageData ?? current?.imageData ?? '').trim();
   const pointsPrice = Math.trunc(Number(body.pointsPrice ?? current?.pointsPrice ?? 0));
@@ -30,7 +31,7 @@ function normalizeProductPayload(body = {}, current = null) {
   const isActive = body.isActive === undefined ? current?.isActive !== false : body.isActive === true;
 
   if (!name) throw Object.assign(new Error('اسم المنتج مطلوب.'), { statusCode: 422 });
-  if (!IMAGE_DATA_PATTERN.test(imageData) || imageByteLength(imageData) > MAX_IMAGE_BYTES) {
+  if (imageData && (!IMAGE_DATA_PATTERN.test(imageData) || imageByteLength(imageData) > MAX_IMAGE_BYTES)) {
     throw Object.assign(new Error('صورة المنتج غير صالحة أو يتجاوز حجمها 10 ميجابايت.'), { statusCode: 422 });
   }
   if (!Number.isFinite(pointsPrice) || pointsPrice < 1) {
@@ -295,7 +296,7 @@ export function createStoreRouter({
 
       await connection.beginTransaction();
       const [[student]] = await connection.query(
-        'SELECT id, points, store_balance AS storeBalance FROM students WHERE id = ? FOR UPDATE',
+        'SELECT id, name, points, store_balance AS storeBalance FROM students WHERE id = ? FOR UPDATE',
         [req.auth.id],
       );
       if (requestId) {
@@ -351,6 +352,7 @@ export function createStoreRouter({
         await connection.query('UPDATE store_products SET stock = stock - 1 WHERE id = ?', [product.id]);
       }
 
+      await emitEventNotification(connection, { type: 'storeOrder', key: String(orderResult.insertId), values: { student: student.name || String(student.id), product: product.name }, config: settings.eventNotifications });
       await applyStoreRankingDeduction({ settings, applyStudentPointDelta, connection, student, price, purchaseDate, logStudentPointTransaction, req, product, orderResult });
 
       await connection.commit();

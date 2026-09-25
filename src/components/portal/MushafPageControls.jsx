@@ -1,4 +1,5 @@
 import React from 'react';
+import MushafPageNumber from './MushafPageNumber';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
 
@@ -12,10 +13,8 @@ const MushafPageControls = ({ pageNumber, isSaving, onFinish, onNextRandom }) =>
     dir="rtl"
     data-recitation-control
   >
-    <span className={CONTROL_CLASS} aria-label={`رقم الصفحة ${pageNumber}`}>
-      <span className={`${CONTROL_SURFACE} border border-border/80 bg-secondary text-secondary-foreground`}>
-        {String(pageNumber)}
-      </span>
+    <span className={CONTROL_CLASS}>
+      <MushafPageNumber pageNumber={pageNumber} />
     </span>
     {onNextRandom && (
       <Button type="button" variant="ghost" onClick={onNextRandom} disabled={isSaving} className="relative h-11 min-h-11 w-28 min-w-28 rounded-full bg-transparent p-0 shadow-none hover:bg-transparent">

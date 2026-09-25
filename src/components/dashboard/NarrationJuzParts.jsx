@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { narrationRangeLabel } from '@/lib/narrationParts';
 
-export default function NarrationJuzParts({ groups, archived, onResult, onRecite }) {
+export default function NarrationJuzParts({ groups, archived, onRecite }) {
   return <div className="space-y-3 py-2 [font-family:var(--font-ui)]" dir="rtl">
     {groups.map(group => <section key={group.juzNumber} aria-label={`الجزء ${group.juzNumber}`} className="rounded-xl border border-primary/15 bg-background/60 p-3 sm:p-4">
       <h3 className="mb-3 font-black text-foreground">الجزء {group.juzNumber}</h3>
@@ -19,7 +19,6 @@ export default function NarrationJuzParts({ groups, archived, onResult, onRecite
             <div className="flex flex-wrap items-center justify-between gap-3">
               {evaluated && <span className="text-sm font-black text-muted-foreground">{part.mistakeCount} خطأ · {part.warningCount} تنبيه</span>}
               {!archived && <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" onClick={() => onResult(part)} className="min-h-11">النتيجة</Button>
                 <Button type="button" onClick={() => onRecite(part)} className="min-h-11">بدء التسميع</Button>
               </div>}
             </div>

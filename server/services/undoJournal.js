@@ -95,6 +95,18 @@ async function beforeMutation(connection, statement, values) {
   return { plan, snapshots };
 }
 
+function snapshotChanges(meta, before, after) {
+  const changes = [];
+  const previous = new Map(before.map(row => [identity(meta, row), row]));
+  const current = new Map(after.map(row => [identity(meta, row), row]));
+  for (const key of new Set([...previous.keys(), ...current.keys()])) {
+    const left = previous.get(key) || null;
+    const right = current.get(key) || null;
+    if (!isDeepStrictEqual(left, right)) changes.push({ key, meta, before: left, after: right });
+  }
+  return changes;
+}
+
 async function afterMutation(connection, capture, result) {
   const changes = [];
   for (const [index, snapshot] of capture.snapshots.entries()) {
@@ -112,13 +124,7 @@ async function afterMutation(connection, capture, result) {
       const merged = new Map([...after, ...inserted].map(row => [identity(meta, row), row]));
       after = [...merged.values()];
     }
-    const previous = new Map(before.map(row => [identity(meta, row), row]));
-    const current = new Map(after.map(row => [identity(meta, row), row]));
-    for (const key of new Set([...previous.keys(), ...current.keys()])) {
-      const left = previous.get(key) || null;
-      const right = current.get(key) || null;
-      if (!isDeepStrictEqual(left, right)) changes.push({ key, meta, before: left, after: right });
-    }
+    changes.push(...snapshotChanges(meta, before, after));
   }
   if (JSON.stringify(changes).length > MAX_BYTES || changes.length > MAX_ROWS) throw new Error('Undo snapshot limit exceeded');
   return changes;
@@ -165,7 +171,10 @@ function wrapConnection(connection, journal) {
     if (key === 'beginTransaction') return async () => { await target.beginTransaction(); transaction = true; staged = []; };
     if (key === 'commit') return async () => { await target.commit(); staged.forEach(group => append(journal, group)); transaction = false; staged = []; };
     if (key === 'rollback') return async () => { await target.rollback(); transaction = false; staged = []; };
-    if (key === 'release') return () => { if (transaction) journal.disabled = true; return target.release(); };
+    if (key === 'release') return () => {
+      if (transaction) journal.disabled = true;
+      return target.release();
+    };
     return typeof target[key] === 'function' ? target[key].bind(target) : target[key];
   } });
 }
@@ -193,13 +202,7 @@ export function finalChanges(groups) {
   return [...all.values()];
 }
 
-export async function restoreJournal(connection, groups) {
-  const final = finalChanges(groups);
-  for (const change of final) {
-    const key = predicate(change.meta, [change.after || change.before]);
-    const rows = await selectRows(connection, change.meta, key.sql, key.values);
-    if (!isDeepStrictEqual(rows[0] || null, change.after)) throw new Error('Concurrent modification');
-  }
+async function validateInsertedChildren(connection, final) {
   // Deleting a newly inserted parent must not cascade into someone else's new rows.
   const capturedKeys = new Set(final.map(change => change.key));
   for (const change of final.filter(change => !change.before && change.after)) {
@@ -208,20 +211,34 @@ export async function restoreJournal(connection, groups) {
       if (child.rows.some(row => !capturedKeys.has(identity(child.meta, row)))) throw new Error('Concurrent child modification');
     }
   }
+}
+
+async function restoreChange(connection, change) {
+  const table = quoteIdentifier(change.meta.table);
+  const key = predicate(change.meta, [change.after || change.before]);
+  if (!change.before) await connection.query(`DELETE FROM ${table} WHERE ${key.sql}`, key.values);
+  else if (!change.after) await connection.query(`INSERT INTO ${table} SET ?`, [writableRow(change.meta, change.before)]);
+  else {
+    const previous = writableRow(change.meta, change.before);
+    const versioned = typeof previous.revision === 'number';
+    if (versioned) delete previous.revision;
+    const revision = versioned ? ', `revision` = `revision` + 1' : '';
+    await connection.query(`UPDATE ${table} SET ?${revision} WHERE ${key.sql}`, [previous, ...key.values]);
+  }
+}
+
+export async function restoreJournal(connection, groups) {
+  const final = finalChanges(groups);
+  for (const change of final) {
+    const key = predicate(change.meta, [change.after || change.before]);
+    const rows = await selectRows(connection, change.meta, key.sql, key.values);
+    if (!isDeepStrictEqual(rows[0] || null, change.after)) throw new Error('Concurrent modification');
+  }
+  await validateInsertedChildren(connection, final);
   for (const group of [...groups].reverse()) {
     // Parent rows were captured before their cascaded children.
     for (const change of group) {
-      const table = quoteIdentifier(change.meta.table);
-      const key = predicate(change.meta, [change.after || change.before]);
-      if (!change.before) await connection.query(`DELETE FROM ${table} WHERE ${key.sql}`, key.values);
-      else if (!change.after) await connection.query(`INSERT INTO ${table} SET ?`, [writableRow(change.meta, change.before)]);
-      else {
-        const previous = writableRow(change.meta, change.before);
-        const versioned = typeof previous.revision === 'number';
-        if (versioned) delete previous.revision;
-        const revision = versioned ? ', `revision` = `revision` + 1' : '';
-        await connection.query(`UPDATE ${table} SET ?${revision} WHERE ${key.sql}`, [previous, ...key.values]);
-      }
+      await restoreChange(connection, change);
     }
   }
 }

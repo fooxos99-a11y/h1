@@ -1,12 +1,17 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
+import { animate, motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import MushafPageControls from '@/components/portal/MushafPageControls';
 import '@/components/portal/MushafPageCarousel.css';
 
 const SWIPE_DISTANCE = 52;
 const SWIPE_BLOCK_SELECTOR = 'button, input, textarea, [data-recitation-control], [data-mushaf-no-swipe]';
 
-const MushafPageCarousel = ({ index, total, pageNumber, pageNumbers = [], isSaving, onFinish, onNextRandom, pageAction, onIndexChange, onInteractionCancel, children }) => {
+const MushafPageCarousel = ({ index, total, pageNumber, pageNumbers = [], isSaving, onFinish, onNextRandom, pageAction, onIndexChange, onInteractionCancel, previousPage, nextPage, children }) => {
   const pointer = useRef(null);
+  const surface = useRef(null);
+  const dragX = useMotionValue(0);
+  const reduceMotion = useReducedMotion();
+  const suppressClick = useRef(false);
   const previousPageNumber = useRef(Number(pageNumber));
   const currentPageNumber = Number(pageNumber);
   const _resolveTurnDirection = () => {
@@ -22,7 +27,8 @@ const MushafPageCarousel = ({ index, total, pageNumber, pageNumbers = [], isSavi
 
   useEffect(() => {
     previousPageNumber.current = currentPageNumber;
-  }, [currentPageNumber]);
+    dragX.set(0);
+  }, [currentPageNumber, dragX]);
 
   const getPageIndex = (pageDirection) => {
     const currentPageNumber = Number(pageNumber);
@@ -48,8 +54,12 @@ const MushafPageCarousel = ({ index, total, pageNumber, pageNumbers = [], isSavi
     if (nextIndex >= 0) moveTo(nextIndex);
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const onKeyDown = (event) => {
+      const topDialog = [...document.querySelectorAll('[role="dialog"]')].at(-1);
+      if (event.defaultPrevented || (topDialog && !topDialog.contains(surface.current))
+        || event.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') event.preventDefault();
       if (event.key === 'ArrowRight') moveByPage(1);
       if (event.key === 'ArrowLeft') moveByPage(-1);
     };
@@ -58,8 +68,10 @@ const MushafPageCarousel = ({ index, total, pageNumber, pageNumbers = [], isSavi
   });
 
   const startSwipe = (event) => {
+    if (!event.isPrimary || event.button !== 0) return;
     if (event.target.closest?.(SWIPE_BLOCK_SELECTOR)) return;
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    dragX.stop();
+    suppressClick.current = false;
     pointer.current = {
       id: event.pointerId,
       startX: event.clientX,
@@ -76,13 +88,20 @@ const MushafPageCarousel = ({ index, total, pageNumber, pageNumbers = [], isSavi
     if (current.horizontal === null && Math.max(Math.abs(deltaX), Math.abs(deltaY)) > 8) {
       current.horizontal = Math.abs(deltaX) > Math.abs(deltaY);
     }
-    if (current.horizontal) event.preventDefault();
+    if (current.horizontal) {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+      suppressClick.current = true;
+      const canMove = getPageIndex(deltaX < 0 ? -1 : 1) >= 0;
+      dragX.set(reduceMotion ? 0 : deltaX * (canMove ? 0.75 : 0.15));
+    }
   };
 
   const endSwipe = (event) => {
     const current = pointer.current;
     if (!current || current.id !== event.pointerId) return;
     pointer.current = null;
+    animate(dragX, 0, { duration: reduceMotion ? 0 : 0.22, ease: [0.22, 0.75, 0.3, 1] });
     if (!current.horizontal) return;
     event.preventDefault();
     event.stopPropagation();
@@ -99,13 +118,17 @@ const MushafPageCarousel = ({ index, total, pageNumber, pageNumbers = [], isSavi
 
   return (
     <div
+      ref={surface}
       className="relative flex h-full min-h-0 w-full flex-col overflow-hidden touch-pan-y"
       onPointerDownCapture={startSwipe}
       onPointerMoveCapture={moveSwipe}
       onPointerUpCapture={endSwipe}
-      onPointerCancelCapture={() => { pointer.current = null; }}
+      onPointerCancelCapture={() => { pointer.current = null; animate(dragX, 0, { duration: reduceMotion ? 0 : 0.22 }); }}
+      onClickCapture={(event) => { if (suppressClick.current) { event.preventDefault(); event.stopPropagation(); suppressClick.current = false; } }}
     >
-      <div className="relative min-h-0 w-full flex-1 sm:px-14">
+      <motion.div style={{ x: dragX }} className="relative min-h-0 w-full flex-1 sm:px-14" data-mushaf-drag-surface>
+        {nextPage && <div aria-hidden="true" inert="" className="pointer-events-none absolute inset-0 -translate-x-full">{nextPage}</div>}
+        {previousPage && <div aria-hidden="true" inert="" className="pointer-events-none absolute inset-0 translate-x-full">{previousPage}</div>}
         <div
           key={currentPageNumber}
           className={`mushaf-page-turn absolute inset-0 h-full min-h-0 w-full ${turnDirection ? 'mushaf-page-turn--' + turnDirection : ''}`}
@@ -113,7 +136,7 @@ const MushafPageCarousel = ({ index, total, pageNumber, pageNumbers = [], isSavi
         >
           {page}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };

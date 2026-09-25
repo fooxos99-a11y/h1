@@ -44,6 +44,16 @@ test('partial review checks the last verse before advancing to the next page', a
   assert.equal(await getReviewStartForDate(connection, { id: 1, startPage: 4 }, '2026-09-07'), 6);
 });
 
+test('teacher approval of a partial review never skips its unfinished pages', async () => {
+  for (const [actualToAyah, expected] of [[19, 4], [20, 5]]) {
+    const connection = { query: async (sql) => sql.includes('FROM quran_ayah_pages')
+      ? [[{ surah: 2, ayah: 20 }]]
+      : [[{ ...done(2, 6), teacherCompleted: 1, executionState: 'partial', actualToPage: 4, actualToSurah: 2, actualToAyah }]],
+    };
+    assert.equal(await getReviewStartForDate(connection, { id: 1, startPage: 22 }, '2026-09-07'), expected);
+  }
+});
+
 test('rotation wraps over disjoint memorized ranges without forgetting the lower segment', () => {
   assert.equal(reviewStartFromHistory([
     done(590, 599, '2026-09-05'), done(600, 604), done(518, 522),

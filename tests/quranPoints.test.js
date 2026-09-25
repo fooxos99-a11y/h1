@@ -21,10 +21,10 @@ test('repetition earns five points once regardless of the historical count', () 
     expectedRepeatCount: 30,
     settings: { memorizationEvaluationMaxScore: 10 },
   }), {
-    taskPoints: 0,
+    taskPoints: 5,
     repeatPoints: 5,
     listeningPoints: 0,
-    total: 5,
+    total: 10,
     label: 'الحفظ والتكرار والسماع',
   });
 });
@@ -109,4 +109,15 @@ test('yes/no practice awards are independent across both tracks', () => {
       }
     }
   }
+});
+
+test('recorded memorization earns its score now, while practice-only calls never award memorization', () => {
+ for (const track of ['memorization', 'mastery']) {
+  const settings = { memorizationEvaluationMaxScore: 100, masteryEvaluationMaxScore: 80 };
+  const args = {taskType:'memorization', track, settings, completedRepeatCount:1, completedListeningCount:1};
+  assert.equal(calculateStudentExecutionPoints(args).total, 10);
+  assert.equal(calculateStudentExecutionPoints({...args,completedAmount:1,expectedAmount:1}).total, track === 'memorization' ? 110 : 90);
+  assert.equal(calculateStudentExecutionPoints({...args,completedAmount:0.5,expectedAmount:1}).taskPoints, track === 'memorization' ? 50 : 40);
+  assert.equal(calculateStudentExecutionPoints({...args,completedAmount:0,expectedAmount:1,completedRepeatCount:0,completedListeningCount:0}).total, 0);
+ }
 });

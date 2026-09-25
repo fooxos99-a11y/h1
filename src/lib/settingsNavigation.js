@@ -1,6 +1,6 @@
 import {
+  Bell,
   ArchiveX,
-  Newspaper,
   BookOpenCheck,
   CalendarCheck2,
   Link2,
@@ -10,8 +10,8 @@ import {
 import { getSiteConfig } from '@/site/siteConfigs';
 
 const allSettingsNavigationItems = [
+  { key: 'settingsNotifications', slug: 'settings-notifications', label: 'إعدادات الإشعارات', icon: Bell },
   { key: 'settingsAttendance', slug: 'settings-attendance', label: 'التحضير وجلسات التسميع', icon: CalendarCheck2 },
-  { key: 'settingsNews', slug: 'settings-news', label: 'الأخبار', icon: Newspaper },
   { key: 'settingsNarration', slug: 'settings-narration', label: 'يوم السرد والاختبار', icon: BookOpenCheck },
   { key: 'settingsPoints', slug: 'settings-points', label: 'الكيلومترات والترتيب', icon: Trophy },
   { key: 'settingsMap', slug: 'settings-map', label: 'الخريطة والتحدي اليومي', icon: Map },
@@ -25,7 +25,7 @@ export const settingsNavigationItems = Object.freeze(allSettingsNavigationItems.
   item.key !== 'settingsMap' || (siteFeatures.summit !== false || siteFeatures.dailyChallenge !== false)
 )));
 
-export const defaultSettingsNavigationKey = settingsNavigationItems[0].key;
+export const defaultSettingsNavigationKey = 'settingsAttendance';
 
 export const isSettingsNavigationKey = (key) => (
   settingsNavigationItems.some((item) => item.key === key)

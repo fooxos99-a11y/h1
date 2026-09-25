@@ -111,7 +111,8 @@ test('shared mobile actions keep accessible touch targets and the UI font token'
   assert.match(popoverText, /overscroll-contain[\s\S]*touch-pan-y \[-webkit-overflow-scrolling:touch\]/);
   const settingsContent = settingsText.slice(settingsText.indexOf('<CardContent'));
   assert.doesNotMatch(settingsContent, /قوالب التسجيل/);
-  assert.match(registrationRequestsText, /RegistrationTemplatesDialog/);
+  assert.doesNotMatch(registrationRequestsText, /RegistrationTemplatesDialog/);
+  assert.match(settingsContent, /NotificationSettings/);
   assert.match(datePickerText, /grid grid-cols-7 gap-0\.5/);
   assert.match(datePickerText, /'flex h-11 min-w-0/);
   assert.equal((reportsText.match(/flex min-h-11 w-full items-center/g) || []).length, 3);

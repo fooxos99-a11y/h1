@@ -1,7 +1,8 @@
 export const getQcfSourcePages = (pageNumber) => {
   const page = Number(pageNumber || 0);
-  if (page <= 1) return page === 1 ? [1] : [];
-  return [page - 1, page];
+  if (!Number.isInteger(page) || page < 1 || page > 604) return [];
+  // API verse pagination and QCF font pages differ in both directions.
+  return [page - 1, page, page + 1].filter((sourcePage) => sourcePage >= 1 && sourcePage <= 604);
 };
 
 export const getInclusiveQcfPages = (fromPage, toPage) => {

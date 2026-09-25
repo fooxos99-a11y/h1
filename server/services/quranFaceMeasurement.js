@@ -46,13 +46,14 @@ export function measureQuranFaces(start,end) {
 export function quranRangeFacesSql(alias='t',end='expected') {
   if (!/^[a-zA-Z_]\w*$/.test(alias) || !['actual','expected'].includes(end)) throw new Error('Invalid Quran range SQL selector');
   const endColumn=key => end==='actual' ? `COALESCE(${alias}.actual_to_${key},${alias}.to_${key})` : `${alias}.to_${key}`;
-  return `COALESCE((SELECT GREATEST(0.25, ROUND(GREATEST(0, CASE
+  const measured = `COALESCE((SELECT GREATEST(0.25, ROUND(GREATEST(0, CASE
     WHEN first_pos.surah > last_pos.surah THEN last_pos.reverse_end - first_pos.reverse_start + 1
     ELSE GREATEST(last_pos.forward_end, first_pos.forward_end) - LEAST(first_pos.forward_start, last_pos.forward_start) + 1
     END) * 4 / 15) / 4)
     FROM quran_face_positions first_pos JOIN quran_face_positions last_pos
       ON last_pos.surah = ${endColumn('surah')} AND last_pos.ayah = ${endColumn('ayah')}
     WHERE first_pos.surah = ${alias}.from_surah AND first_pos.ayah = ${alias}.from_ayah), 0)`;
+  return end === 'actual' ? `CASE WHEN ${alias}.review_execution_json IS NOT NULL THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(${alias}.review_execution_json, '$.faces')) AS DECIMAL(10,4)) ELSE ${measured} END` : measured;
 }
 
 export function acceptedQuranExecutionSql(alias='t') {

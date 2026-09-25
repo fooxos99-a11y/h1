@@ -6,7 +6,7 @@ const WINDOW_MS = 10_000;
 const MAX_STORED_BYTES = 64 * 1024 * 1024;
 const isStaff = req => ['manager', 'admin', 'supervisor', 'reciter'].includes(req.auth?.role);
 const identity = (req, database) => JSON.stringify([database, req.auth?.role, req.auth?.id, req.auth?.tokenHash]);
-const externalOperation = path => /\/(?:auth|calls|whatsapp|nazem|backups|notification-management|account-deletion)(?:\/|$)|\/(?:send|send-whatsapp|reset-points|delete-program-data|end-term)$/.test(path);
+const externalOperation = path => /(?:\/(?:auth|calls|whatsapp|nazem|backups|notification-management|account-deletion)(?:\/|$))|(?:\/(?:send|send-whatsapp|reset-points|delete-program-data|end-term)$)/.test(path);
 
 export function createDashboardUndo({ db, databaseName, hasPermission, now = Date.now, schedule = setTimeout }) {
   const actions = new Map();
@@ -45,7 +45,7 @@ export function createDashboardUndo({ db, databaseName, hasPermission, now = Dat
   const router = express.Router();
   router.post('/:id', async (req, res, next) => {
     const action = actions.get(req.params.id);
-    if (!isStaff(req) || !action || action.owner !== identity(req, databaseName())) return res.status(404).json({ message: 'التراجع غير متاح.' });
+    if (!isStaff(req) || action?.owner !== identity(req, databaseName())) return res.status(404).json({ message: 'التراجع غير متاح.' });
     if (action.expiresAt <= now()) { forget(req.params.id); return res.status(410).json({ message: 'انتهت مهلة التراجع.' }); }
     if (action.busy) return res.status(409).json({ message: 'جارٍ التراجع عن هذا الأمر.' });
     action.busy = true;

@@ -23,7 +23,7 @@ test('each amount switch independently protects execution, history and repeat ra
     const config = { hideStudentAmounts: true, ...Object.fromEntries(keys.map((key, i) => [key, Boolean(mask & (1 << i))])) };
     const executionAyahsByType = Object.fromEntries(tasks.map(task => [task.taskType, [{ surah: 2, ayah: task.id + 1 }]]));
     const result = studentVisibleToday({ ...data, executionAyahsByType }, config, 'student');
-    assert.equal('executionAyahsByType' in result, false);
+    assert.deepEqual(Object.keys(result.executionAyahsByType).sort(), tasks.filter((_, i) => !config[keys[i]]).map(task => task.taskType).sort());
     for (const [i, task] of result.tasks.entries()) {
       assert.equal(Boolean(task.amountHidden), config[keys[i]]);
       assert.equal(Boolean(task.preview), !config[keys[i]]);

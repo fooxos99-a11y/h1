@@ -90,7 +90,7 @@ test('memorization reduction, compensation, and forward increase are independent
   assert.equal(canStudentSetQuranTaskEnd({ ...fixed, allowQuranCompensation: true }, 'memorization', -1), false);
   assert.equal(canStudentSetQuranTaskEnd({ ...fixed, allowQuranCompensation: true }, 'memorization', 1), true);
   assert.equal(canStudentSetQuranTaskEnd({ ...fixed, allowQuranExtra: true }, 'memorization', 1), true);
-  assert.equal(canStudentSetQuranTaskEnd({ ...fixed, allowQuranCompensation: true }, 'review', 1), false);
+  assert.equal(canStudentSetQuranTaskEnd({ ...fixed, allowQuranCompensation: true, studentReviewAmountEditable: false }, 'review', 1), false);
 });
 
 test('execution ownership and configured count limits are enforced on the server', async () => {
@@ -130,7 +130,7 @@ test('Nazem isolates linked plans and restores normal settings when disabled', a
   assert.match(server, /allowQuranExtra: settings\.allowQuranExtra === 'true'/);
   assert.match(server, /task\.nazemManaged[\s\S]*allowQuranCompensation: false, allowQuranExtra: !nazemLate/);
   assert.match(server, /canTeacherExecuteQuranTask\(settings, task\.taskType\)/);
-  assert.match(settings, /\{!settings\.nazemIntegrationEnabled && \(\s*<div className="grid gap-3 sm:grid-cols-2">[\s\S]*?<Label>تنفيذ الحفظ عن طريق<\/Label>[\s\S]*?<Label>تحضير الطلاب عن طريق<\/Label>[\s\S]*?<\/div>\s*\)\}/);
+  assert.match(settings, /\{!settings\.nazemIntegrationEnabled && \(\s*<div className="space-y-2">[\s\S]*?<Label>مسؤول تحضير الطلاب<\/Label>[\s\S]*?<\/div>\s*\)\}/);
   assert.doesNotMatch(settings, /!settings\.nazemIntegrationEnabled[\s\S]{0,120}label="حد النجاح"/);
   assert.doesNotMatch(settings, /!settings\.nazemIntegrationEnabled[\s\S]{0,200}label="السماح بإكمال الحفظ المتأخر/);
 });
@@ -164,4 +164,9 @@ test('Nazem review keeps its remote day while memorization remains editable', as
   assert.match(server, /if \(partial \|\| extended\) \{\s*return requestedEnd\.surah;/);
   assert.match(server, /if \(extended\) \{\s*return 'extra';\s*\}\s*return 'complete';/);
   assert.match(server, /normalEnd: nazemScheduledEnd[\s\S]*extraEnd: nazemLate \? nazemScheduledEnd : nazemPlanEnd/);
+});
+
+test('link amount cannot change even with legacy permission enabled', () => {
+ for (const comparison of [-1, 1]) assert.equal(canStudentSetQuranTaskEnd({ studentLinkAmountEditable: true }, 'link', comparison), false);
+ assert.equal(canStudentSetQuranTaskEnd({}, 'link', 0), true);
 });

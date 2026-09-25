@@ -9,6 +9,7 @@ import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from
 import { Helmet } from 'react-helmet';
 import { useNavigate, useParams } from '@/lib/router';
 import {
+  Newspaper,
   Bell,
   Building2,
   BookMarked,
@@ -64,6 +65,7 @@ const QuranTestsSection = lazy(() => import('@/components/dashboard/QuranTestsSe
 const RegistrationRequestsSection = lazy(() => import('@/components/dashboard/RegistrationRequestsSection'));
 const NotificationsSection = lazy(() => import('@/components/dashboard/NotificationsSection'));
 const ReportsSection = lazy(() => import('@/components/dashboard/ReportsSection'));
+const StudentNewsEditor = lazy(() => import('@/components/dashboard/StudentNewsEditor'));
 const SettingsSection = lazy(() => import('@/components/dashboard/SettingsSection'));
 const StoreSection = lazy(() => import('@/components/dashboard/StoreSection'));
 const ProgramsSection = lazy(() => import('@/components/dashboard/ProgramsSection'));
@@ -92,6 +94,7 @@ const dashboardSectionPreloaders = {
   reciters: () => import('@/components/dashboard/RecitersSection'),
   settings: () => import('@/components/dashboard/SettingsSection'),
   store: () => import('@/components/dashboard/StoreSection'),
+  settingsNews: () => import('@/components/dashboard/StudentNewsEditor'),
   programs: () => import('@/components/dashboard/ProgramsSection'),
   studentPlans: () => import('@/components/dashboard/StudentPlansSection'),
   studentExecutionCorrections: () => import('@/components/dashboard/StudentExecutionCorrectionsSection'),
@@ -142,6 +145,7 @@ const baseSections = [
   { key: 'mushaf', label: 'المصحف', icon: BookOpen },
   { key: 'reports', label: 'التقارير', icon: ClipboardList, permissionKeys: ['reports', 'executionFollowup'] },
   { key: 'students', label: 'الطلاب', icon: GraduationCap },
+  { key: 'families', label: 'الحلقات', icon: Building2 },
   { key: 'studentPlans', label: 'خطط الطلاب', icon: ListChecks },
   {
     key: 'studentExecutionCorrections',
@@ -151,7 +155,6 @@ const baseSections = [
     managementOnly: true,
   },
   { key: 'teacherPoints', label: 'الإضافة والخصم', icon: PlusCircle, supervisorOnly: true },
-  { key: 'families', label: 'الحلقات', icon: Building2 },
   { key: 'supervisors', label: 'المعلمين', icon: Users },
   { key: 'reciters', label: 'المقرئون', icon: Mic2 },
   { key: 'administrators', label: 'الإداريين', icon: ShieldCheck },
@@ -165,6 +168,7 @@ const baseSections = [
   { key: 'contactMessages', label: 'التواصل', icon: MessageSquare },
   { key: 'registrationRequests', label: 'طلبات التسجيل', icon: UserPlus },
   { key: 'store', label: 'المتجر', icon: Store, managementOnly: true },
+  { key: 'settingsNews', label: 'الأخبار', icon: Newspaper, permissionKey: 'settings', managementOnly: true },
   { key: 'settings', label: 'الإعدادات', icon: Settings, children: settingsNavigationItems },
   { key: 'quranEvaluation', label: 'جلسات التسميع', icon: ClipboardCheck, supervisorOnly: true },
   {
@@ -290,7 +294,7 @@ const WajehDashboard = () => {
       if (isSupervisor && section.key === 'studentPlans') return true;
       if (isSupervisor && ['teacherPoints', 'culturalCompetition', 'calls', 'reports'].includes(section.key)) return true;
       if (section.key === 'staffAttendance') return canDisplayStaffAttendance({ settings, alreadyPresentToday, isSupervisor, isReciter, isAdmin, dashboardPermissions });
-      if (section.key === 'mushaf') return isSupervisor || isReciter;
+      if (section.key === 'mushaf') return isManager || isSupervisor || isReciter;
       const permissionKeys = section.permissionKeys || [section.permissionKey || section.key];
       if (!isManager && !permissionKeys.some((key) => dashboardPermissions.includes(key))) return false;
       if (!isSupervisor && section.key === 'manualAttendance' && (!settings.attendanceManualEnabled || settings.recitationAttendanceSource === 'teacher')) return false;
@@ -389,6 +393,7 @@ const WajehDashboard = () => {
         canResetPoints={isManager}
       />
     );
+    if (visibleActiveSection === 'settingsNews') return <StudentNewsEditor />;
     if (visibleActiveSection === 'store') return <StoreSection />;
     return (
       <Card className="border-primary/30 bg-card">

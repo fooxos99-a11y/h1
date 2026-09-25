@@ -10,9 +10,6 @@ export default function StudentPlanDayPoints({ points }) {
       <span dir="ltr" className="inline-flex items-center gap-1"><bdi>{Number(points.earned).toLocaleString('ar-SA-u-nu-latn')}</bdi><span>/</span><bdi>{Number(points.maximum).toLocaleString('ar-SA-u-nu-latn')}</bdi></span>
       <PointIcon className="h-4 w-4" />
     </summary>
-    {points.maximumDetails?.length > 0 && <ul className="space-y-1 border-b pb-2 mb-2 text-xs" aria-label="توزيع الدرجة الكاملة">
-      {points.maximumDetails.map((item, index) => <li key={`${item.label}:${index}`}><span>{item.label}: <bdi>{item.maximum}</bdi></span>{item.parts && <span className="block text-muted-foreground">{item.parts.map(part => `${part.label} ${part.maximum}`).join(' + ')}</span>}</li>)}
-    </ul>}
     <ul className="space-y-1 pb-2">
       {points.details.map((item, index) => <li key={`${item.label}:${index}`} className="flex items-center justify-between gap-3"><span>{item.label}</span><RankingPointsValue value={item.earned} iconClassName="h-4 w-4" /></li>)}
     </ul>

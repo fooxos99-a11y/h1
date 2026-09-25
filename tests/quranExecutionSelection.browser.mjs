@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
+import process from 'node:process';
+import { URL } from 'node:url';
 import { chromium, webkit } from 'playwright';
+
+const base = process.env.PORTAL_TEST_URL || 'http://127.0.0.1:3000';
+assert.ok(['127.0.0.1', 'localhost'].includes(new URL(base).hostname), 'Local test server required');
 
 for (const engine of [chromium, webkit]) {
   const browser = await engine.launch();
@@ -8,7 +13,7 @@ for (const engine of [chromium, webkit]) {
       const page = await browser.newPage({ viewport: { width, height: 900 } });
       const errors = [];
       page.on('pageerror', (error) => errors.push(error.message));
-      await page.goto('http://127.0.0.1:3000/tests/fixtures/quran-execution-selection.html');
+      await page.goto(`${base}/tests/fixtures/quran-execution-selection.html`);
       const end = page.getByRole('combobox', { name: 'صفحة النهاية' });
       await end.waitFor();
       assert.equal(await end.textContent(), '24');

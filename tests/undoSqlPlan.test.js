@@ -39,3 +39,23 @@ test('journal composition refuses an intervening write to the same row', () => {
   assert.deepEqual(finalChanges([[change], [next]])[0], { ...change, after: next.after });
   assert.throws(() => finalChanges([[change], [{ ...next, before: { id: 1, value: 9 } }]]), /Concurrent modification/);
 });
+
+test('insert constants preserve decimal, exponent, hex, boolean, null and quoted values', () => {
+  for (const value of ['NULL', 'true', 'FALSE', '+12', '-1.25', '2e-3', '0xAf', "'WHERE, -- ;'"]) {
+    const plan = createUndoSqlPlan(`INSERT INTO items (name) VALUES (${value})`, [], meta);
+    assert.equal(plan.kind, 'insert');
+    assert.ok(plan.selector.includes(value));
+  }
+  for (const value of ['1 + 2', '1e', '0x', 'CURRENT_USER()', '(SELECT 1)']) {
+    assert.throws(() => createUndoSqlPlan(`INSERT INTO items (name) VALUES (${value})`, [], meta));
+  }
+});
+
+test('mutation table parsing preserves verb and identifier boundaries', () => {
+  for (const sql of ['update Items_2 set value=1', 'DELETE FROM `Items_2` WHERE id=1', 'INSERT IGNORE INTO Items_2(name) VALUES (1)']) {
+    assert.equal(mutationTable(sql), 'Items_2');
+  }
+  for (const sql of ['UPDATEitems SET value=1', 'DELETE FROM outside.items WHERE id=1', 'INSERT INTO 2items(name) VALUES (1)', 'REPLACE INTO items(name) VALUES (1)']) {
+    assert.equal(mutationTable(sql), null);
+  }
+});

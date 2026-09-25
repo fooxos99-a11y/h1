@@ -53,40 +53,57 @@ const roleHeader = async () => {
   };
 };
 
-export async function request(path, options = {}) {
+async function fetchRequest(path, options, captureUndo, requestBase) {
   const { apiBaseOverride, authSnapshot, ...requestOptions } = options;
+  requestCooldown.check(requestBase, path);
+  const traceId = globalThis.crypto?.randomUUID?.() || '';
+  const timedRequest = prepareTimedRequest(requestOptions);
+  try {
+    return await fetch(`${apiBaseOverride || getApiBase()}${path}`, {
+      ...timedRequest.options,
+      cache: 'no-store',
+      credentials: 'include',
+      headers: {
+        ...await (authSnapshot || roleHeader()),
+        ...(options.headers),
+        ...(captureUndo ? { 'X-Dashboard-Undo': '1' } : {}),
+        ...(traceId ? { 'X-Request-Id': traceId } : {}),
+      },
+    });
+  } catch (error) {
+    if (timedRequest.didTimeOut()) {
+      const timeoutError = new Error(requestTimeoutMessage, { cause: error });
+      timeoutError.code = 'REQUEST_TIMEOUT';
+      timeoutError.requestId = traceId;
+      if (traceId) timeoutError.message += ` رقم المتابعة: ${traceId}`;
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    timedRequest.cleanup();
+  }
+}
+
+function registerRequestUndo(response, { path, options, sessionVersion, requestBase, apiBaseOverride }) {
+  const value = response.headers?.get('X-Dashboard-Undo');
+  let undo;
+  try { undo = value ? JSON.parse(value) : null; } catch { undo = null; }
+  if (undo?.id && /^[a-f0-9]{64}$/.test(undo.id)) {
+    const sourcePage = globalThis.location?.href;
+    deferredActions.register(options.method === 'DELETE' ? 'حُذف العنصر' : 'حُفظت التغييرات', async () => {
+      if (sessionVersion !== getAuthSessionVersion() || requestBase !== (apiBaseOverride || getApiBase())) throw new Error('تغير الحساب؛ لا يمكن التراجع من حساب آخر.');
+      await request(`/dashboard-undo/${undo.id}`, { method: 'POST', body: '{}' });
+      globalThis.dispatchEvent(new CustomEvent('dashboard-undo-completed', { detail: { path, sourcePage } }));
+    }, Number(undo.durationMs || 0));
+  }
+}
+
+export async function request(path, options = {}) {
+  const { apiBaseOverride, authSnapshot } = options;
   const sessionVersion = getAuthSessionVersion();
   const requestBase = apiBaseOverride || getApiBase();
   const captureUndo = isDashboardUndoActive() && !authSnapshot && isDeferredMutation(path, options);
-  const fetchOnce = async () => {
-    requestCooldown.check(requestBase, path);
-    const traceId = globalThis.crypto?.randomUUID?.() || '';
-    const timedRequest = prepareTimedRequest(requestOptions);
-    try {
-      return await fetch(`${apiBaseOverride || getApiBase()}${path}`, {
-        ...timedRequest.options,
-        cache: 'no-store',
-        credentials: 'include',
-        headers: {
-          ...await (authSnapshot || roleHeader()),
-          ...(options.headers),
-          ...(captureUndo ? { 'X-Dashboard-Undo': '1' } : {}),
-          ...(traceId ? { 'X-Request-Id': traceId } : {}),
-        },
-      });
-    } catch (error) {
-      if (timedRequest.didTimeOut()) {
-        const timeoutError = new Error(requestTimeoutMessage, { cause: error });
-        timeoutError.code = 'REQUEST_TIMEOUT';
-        timeoutError.requestId = traceId;
-        if (traceId) timeoutError.message += ` رقم المتابعة: ${traceId}`;
-        throw timeoutError;
-      }
-      throw error;
-    } finally {
-      timedRequest.cleanup();
-    }
-  };
+  const fetchOnce = () => fetchRequest(path, options, captureUndo, requestBase);
 
   let response = await fetchOnce();
   if (response.status === 401 && path !== '/auth/login' && !authSnapshot
@@ -125,17 +142,7 @@ export async function request(path, options = {}) {
     throw error;
   }
   if (captureUndo && sessionVersion === getAuthSessionVersion() && isDashboardUndoActive()) {
-    const value = response.headers?.get('X-Dashboard-Undo');
-    let undo;
-    try { undo = value ? JSON.parse(value) : null; } catch { undo = null; }
-    if (undo?.id && /^[a-f0-9]{64}$/.test(undo.id)) {
-      const sourcePage = globalThis.location?.href;
-      deferredActions.register(options.method === 'DELETE' ? 'حُذف العنصر' : 'حُفظت التغييرات', async () => {
-        if (sessionVersion !== getAuthSessionVersion() || requestBase !== (apiBaseOverride || getApiBase())) throw new Error('تغير الحساب؛ لا يمكن التراجع من حساب آخر.');
-        await request(`/dashboard-undo/${undo.id}`, { method: 'POST', body: '{}' });
-        globalThis.dispatchEvent(new CustomEvent('dashboard-undo-completed', { detail: { path, sourcePage } }));
-      }, Number(undo.durationMs || 0));
-    }
+    registerRequestUndo(response, { path, options, sessionVersion, requestBase, apiBaseOverride });
   }
   return data;
 }
@@ -533,6 +540,7 @@ export const studentsApi = {
       method: 'PATCH',
       body: JSON.stringify({ committeeId }),
     }),
+  getNotificationAdministrators: () => request('/settings/notification-administrators'),
   getStudentQuranToday: loadStudentToday,
   getStudentQuranSessions: (studentId) => request(`/students/${studentId}/quran-sessions`),
   getStudentPlanOverview: (studentId) => request(`/students/${studentId}/quran-sessions?view=plan&includePoints=1`),

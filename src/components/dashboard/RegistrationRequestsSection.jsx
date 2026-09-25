@@ -9,7 +9,6 @@ import LabeledField from '@/components/ui/labeled-field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import DashboardLoader from '@/components/dashboard/DashboardLoader';
-import RegistrationTemplatesDialog from '@/components/dashboard/RegistrationTemplatesDialog';
 import { formatJuzNumbers } from '@/lib/juzRanges';
 import { studentsApi } from '@/services/studentsApi';
 
@@ -196,7 +195,6 @@ const RegistrationRequestsSection = () => {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-xl font-black leading-8 text-primary sm:text-2xl">طلبات التسجيل</h2>
           <div className="flex flex-wrap gap-2">
-            <RegistrationTemplatesDialog />
             <Button
               type="button"
               variant="outline"

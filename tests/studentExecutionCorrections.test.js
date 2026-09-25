@@ -5,7 +5,7 @@ import test from 'node:test';
 test('execution reminder exclusions are persisted and skipped by the automatic sender', async () => {
   const [server, settings] = await Promise.all([
     readFile(new URL('../server/index.js', import.meta.url), 'utf8'),
-    readFile(new URL('../src/components/dashboard/SettingsSection.jsx', import.meta.url), 'utf8'),
+    Promise.all(['SettingsSection.jsx', 'NotificationSettings.jsx'].map(name => readFile(new URL('../src/components/dashboard/' + name, import.meta.url), 'utf8'))).then(parts => parts.join('\n')),
   ]);
 
   assert.match(server, /executionReminderExcludedStudentIds: normalizePositiveIdList/);

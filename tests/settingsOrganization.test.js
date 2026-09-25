@@ -12,8 +12,8 @@ test('manager settings keep store and programs activation in their own pages', a
   const titles = [...navigation.matchAll(/label: '([^']+)'/g)].map((match) => match[1]);
 
   assert.deepEqual(titles, [
+    'إعدادات الإشعارات',
     'التحضير وجلسات التسميع',
-    'الأخبار',
     'يوم السرد والاختبار',
     'الكيلومترات والترتيب',
     'الخريطة والتحدي اليومي',
@@ -31,19 +31,19 @@ test('manager settings keep store and programs activation in their own pages', a
   assert.doesNotMatch(settings, /خصم الكيلومترات من الترتيب عند الشراء من المتجر/);
 });
 
-test('registration templates are managed from the registration requests page', async () => {
+test('registration templates are managed from notification settings', async () => {
   const [requests, dialog] = await Promise.all([
     readFile(new URL('../src/components/dashboard/RegistrationRequestsSection.jsx', import.meta.url), 'utf8'),
-    readFile(new URL('../src/components/dashboard/RegistrationTemplatesDialog.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/dashboard/NotificationSettings.jsx', import.meta.url), 'utf8'),
   ]);
 
-  assert.match(requests, /<RegistrationTemplatesDialog \/>/);
-  assert.match(dialog, />\s*القوالب\s*</);
+  assert.doesNotMatch(requests, /<RegistrationTemplatesDialog \/>/);
+  assert.match(dialog, /قوالب التسجيل/);
   assert.match(dialog, /registrationPreAcceptTemplate/);
   assert.match(dialog, /registrationAcceptTemplate/);
   assert.match(dialog, /registrationRejectTemplate/);
-  assert.match(dialog, /studentsApi\.getSettings\(\)/);
-  assert.match(dialog, /studentsApi\.updateSettings\(settings\)/);
+  assert.match(dialog, /settings,setSettings/);
+  assert.match(dialog, /setSettings\(\{\.\.\.settings/);
 });
 
 test('legacy teacher rating options are removed from settings and persisted data', async () => {

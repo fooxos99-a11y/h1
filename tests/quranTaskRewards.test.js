@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { calculateStudentExecutionPoints } from '../server/services/quranPoints.js';
+import { calculateEvaluatedGroupReward } from '../server/services/recitationRewards.js';
 import { setQuranTaskGroupReward } from '../server/services/quranTaskRewards.js';
 
 function memoryConnection(oldReward = 20, otherAwards = 58, { ledger = oldReward, previousDay = false } = {}) {
@@ -61,4 +63,36 @@ test('moving an unchanged old reward preserves its total without a daily cap', a
   const before = { ...connection.state };
   await reward(connection, 20);
   assert.deepEqual(connection.state, before);
+});
+
+test('provisional memorization credit is replaced on passing and revoked on failing without duplication', async () => {
+  const settings = { memorizationEvaluationMaxScore: 100 };
+  const provisional = calculateStudentExecutionPoints({ taskType: 'memorization', track: 'memorization', completedAmount: 1, expectedAmount: 1, settings });
+  assert.equal(provisional.taskPoints, 100);
+  for (const completed of [true, false]) {
+    const connection = memoryConnection(0, 20);
+    await reward(connection, provisional.taskPoints);
+    await reward(connection, provisional.taskPoints);
+    assert.equal(connection.state.points, 120);
+    const settled = calculateEvaluatedGroupReward([{ evaluatedAt: '2026-09-25', teacherCompleted: completed, evaluationScore: completed ? 96 : 50 }]);
+    await reward(connection, settled);
+    await reward(connection, settled);
+    assert.equal(connection.state.points, completed ? 116 : 20);
+    assert.equal(connection.state.ledger, completed ? 96 : 0);
+  }
+});
+
+test('execution credits configured task and practice points once and undo reverses them', async () => {
+  const settings = { memorizationEvaluationMaxScore: 100, memorizationRepeatPointValue: 5, memorizationListeningPointValue: 7, reviewEvaluationMaxScore: 40, linkEvaluationMaxScore: 30 };
+  for (const [taskType, expected] of [['memorization', 112], ['review', 40], ['link', 30]]) {
+    const connection = memoryConnection(0, 0);
+    const execution = calculateStudentExecutionPoints({ taskType, track: 'memorization', completedAmount: 1, expectedAmount: 1, completedRepeatCount: 10, completedListeningCount: 3, settings });
+    assert.equal(execution.total, expected);
+    await reward(connection, execution.total);
+    await reward(connection, execution.total);
+    assert.deepEqual(connection.state, { points: expected, reward: expected, ledger: expected });
+    await reward(connection, 0);
+    await reward(connection, 0);
+    assert.deepEqual(connection.state, { points: 0, reward: 0, ledger: 0 });
+  }
 });

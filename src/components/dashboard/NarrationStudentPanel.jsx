@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { loadOfflineSnapshot } from '@/services/offlineOperationsService';
 import { studentsApi } from '@/services/studentsApi';
 import NarrationJuzParts from './NarrationJuzParts';
+import NarrationMethodDialog from './NarrationMethodDialog';
 import { groupNarrationParts } from '@/lib/narrationParts';
 
 const getAccountId = () => Number(localStorage.getItem('wajeh_supervisor_id') || 0);
@@ -16,6 +17,7 @@ const NarrationStudentPanel = ({ eventId, student, archived, onSavePart, onStart
   const [open, setOpen] = useState(false);
   const [selectedPart, setSelectedPart] = useState(null);
   const [mushafPart, setMushafPart] = useState(null);
+  const [methodPart, setMethodPart] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const evaluatedParts = useMemo(
     () => student.parts.filter((part) => part.score !== null && part.score !== undefined),
@@ -102,7 +104,7 @@ const NarrationStudentPanel = ({ eventId, student, archived, onSavePart, onStart
             <p className="text-sm font-bold text-muted-foreground">{student.committeeName} · {student.totalFaces} وجه</p>
           </DialogHeader>
 
-          <NarrationJuzParts groups={juzGroups} archived={archived} onResult={setSelectedPart} onRecite={setMushafPart} />
+          <NarrationJuzParts groups={juzGroups} archived={archived} onRecite={setMethodPart} />
 
           <div className="grid gap-3 border-t border-primary/15 pt-4 sm:grid-cols-2">
             <div className="rounded-xl border border-primary/15 bg-primary/5 p-4">
@@ -123,6 +125,15 @@ const NarrationStudentPanel = ({ eventId, student, archived, onSavePart, onStart
         </DialogContent>
       </Dialog>
 
+      <NarrationMethodDialog
+        open={Boolean(methodPart)}
+        onOpenChange={(nextOpen) => !nextOpen && setMethodPart(null)}
+        onSelect={(mode) => {
+          if (mode === 'mushaf') setMushafPart(methodPart);
+          else setSelectedPart(methodPart);
+          setMethodPart(null);
+        }}
+      />
       <CountOnlyEvaluationDialog
         open={Boolean(selectedPart)}
         onOpenChange={(nextOpen) => !nextOpen && setSelectedPart(null)}

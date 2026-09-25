@@ -10,7 +10,7 @@ const validDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || '') && getBusin
 export const planWeekStart = (date) => shiftDateOnly(date, -new Date(`${date}T12:00:00Z`).getUTCDay());
 export const planDayName = (date) => new Intl.DateTimeFormat('ar-SA', { weekday: 'long', timeZone: 'Asia/Riyadh' }).format(new Date(`${date}T12:00:00Z`));
 export const planTaskCompleted = (task) => task.teacherCompleted === true || task.teacherCompleted === 1;
-export const planTaskAmount = (task) => task.amountHidden ? '' : task.ayahPreview || task.preview || formatQuranRangeText({
+export const planTaskAmount = (task) => task.amountHidden ? '' : (task.reviewExecution && task.actualPreview) || task.ayahPreview || task.preview || formatQuranRangeText({
   startSurah: task.fromSurah, startSurahName: task.fromSurahName, startAyah: task.fromAyah,
   endSurah: task.toSurah, endSurahName: task.toSurahName, endAyah: task.toAyah,
   startPage: task.fromPage, endPage: task.toPage,
@@ -43,6 +43,13 @@ export const buildStudentPlanWeeks = ({ rows = [], todayData = null, points = nu
 };
 
 export const buildPlanMushafTarget = (tasks, label) => {
+  const review = tasks.find(task => !task.amountHidden && task.reviewExecution)?.reviewExecution;
+  if (review) {
+    const ranges = review.ranges.map(({ start, end }) => ({ page: start.page, range: {
+      fromSurah: start.surah, fromAyah: start.ayah, toSurah: end.surah, toAyah: end.ayah, direction: review.direction,
+    } }));
+    return { ...ranges[0], label, ranges };
+  }
   const ranges = tasks.filter((task) => !task.amountHidden && Number(task.fromPage) >= 1 && Number(task.fromPage) <= 604).map((task) => ({
     page: Number(task.fromPage), preview: planTaskAmount(task),
     range: Number(task.fromSurah) > 0 && Number(task.toSurah) > 0 && Number(task.fromAyah) > 0 && Number(task.toAyah) > 0 ? {

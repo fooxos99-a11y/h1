@@ -9,9 +9,22 @@ import {
 import { readLocalMushafPage } from '../server/services/localMushaf.js';
 import { formatQuranSelectionText, toArabicIndicDigits } from '../shared/quranSelectionText.js';
 
-test('loads the prior source page to retain verses that continue onto the displayed face', () => {
-  assert.deepEqual(getQcfSourcePages(586), [585, 586]);
-  assert.deepEqual(getQcfSourcePages(1), [1]);
+test('loads both neighboring source pages when verse pagination differs from the QCF face', () => {
+  assert.deepEqual(getQcfSourcePages(586), [585, 586, 587]);
+  assert.deepEqual(getQcfSourcePages(1), [1, 2]);
+  assert.deepEqual(getQcfSourcePages(604), [603, 604]);
+  assert.deepEqual(getQcfSourcePages(0), []);
+  assert.deepEqual(getQcfSourcePages(605), []);
+});
+
+test('retains Ar-Rahman verses returned on API page 532 but printed on QCF page 531', () => {
+  const payloads = new Map([[532, { verses: [{ verse_key: '55:17', words: [{
+    id: 19356, page_number: 531, line_number: 14, position: 1, location: '55:17:1',
+    code_v2: 'ﲱ', text_qpc_hafs: 'رَبُّ',
+  }] }] }]]);
+  const words = collectQcfPageWords(getQcfSourcePages(531).map((page) => payloads.get(page)), 531);
+  assert.equal(words.length, 1);
+  assert.equal(words[0].verseKey, '55:17');
 });
 
 test('opens every QCF face reached by the task boundary', () => {
@@ -144,7 +157,13 @@ test('renders a stable fifteen-line Mushaf face with coordinated themes and comp
   assert.ok(Math.abs((4 + 3.5) - (((24 / 13) * 100 * 0.08) / 2)) < 0.2, 'controls must be centered between the divider and page edge');
   assert.match(controls, /: 'إنهاء'/);
   assert.match(controls, /pageNumber/);
-  assert.match(controls, /String\(pageNumber\)/);
+  assert.match(controls, /<MushafPageNumber pageNumber=\{pageNumber\}/);
+  const pageNumber = await readFile(new URL('../src/components/portal/MushafPageNumber.jsx', import.meta.url), 'utf8');
+  const studentControls = await readFile(new URL('../src/components/portal/StudentMushafPageControls.jsx', import.meta.url), 'utf8');
+  assert.match(pageNumber, /String\(pageNumber\)/);
+  assert.doesNotMatch(pageNumber, /rounded|bg-|shadow|border/);
+  assert.match(studentControls, /<MushafPageNumber pageNumber=\{pageNumber\}/);
+  assert.doesNotMatch(studentMushaf, /MushafReaderNavigation|readingMode/);
   assert.doesNotMatch(controls, /ChevronLeft|ChevronRight|إنهاء التسميع/);
   assert.match(decoration, /decoration\?\.type === 'surah'/);
   assert.match(decoration, /MushafSurahBanner/);
@@ -176,7 +195,8 @@ test('renders a stable fifteen-line Mushaf face with coordinated themes and comp
   assert.match(dialog, /fontReady=\{activeFontReady\}/);
   assert.doesNotMatch(dialog, /\[loadTaskData, loadVersion, open/);
   assert.doesNotMatch(studentMushaf, /getCachedOfflineMushafPage/);
-  assert.match(studentMushaf, /setPageData\(null\);\s*setFontReady\(false\);\s*setPage\(boundedPage\)/);
+  assert.doesNotMatch(studentMushaf, /setPageData\(null\)/);
+  assert.match(studentMushaf, /setPage\(boundedPage\)/);
   assert.match(dialog, /formatQuranSelectionText\(selectedWords\)/);
   assert.doesNotMatch(dialog, /const mistakeCount|const warningCount|MushafPageFooter|MushafPageMeta|MushafFinishButton/);
   assert.match(markDialog, /<DialogTitle className="sr-only">تحديد موضع التسميع<\/DialogTitle>/);

@@ -37,10 +37,20 @@ test('home plan never shows a previous business day as today', () => {
   assert.deepEqual(studentHomePlan({ date: '2026-09-07', tasks: [{ taskType: 'memorization', studentStatus: 'done' }] }, '2026-09-08'), { groups: [], percent: 0 });
 });
 
+test('teacher-only memorization remains readable when student execution is enabled for review', () => {
+  const memorization = { id: 1, taskType: 'memorization', fromPage: 208, toPage: 208, fromSurah: 10, toSurah: 10, fromAyah: 1, toAyah: 4 };
+  const review = { ...memorization, id: 2, taskType: 'review' };
+  const model = studentHomePlan({ date: '2026-09-25', todayAmounts: [memorization, review], tasks: [review] }, '2026-09-25');
+  assert.equal(model.groups.length, 2);
+  assert.equal(model.groups[0].studentExecutable, false);
+  assert.equal(model.groups[0].target.page, 208);
+  assert.equal(model.groups[1].studentExecutable, true);
+});
+
 test('home groups all real ranges, preserving separate Mushaf targets', () => {
   const make = (page, status) => ({ taskType: 'memorization', studentStatus: status, fromPage: page, toPage: page, fromSurah: 2, toSurah: 2, fromAyah: page, toAyah: page + 1 });
   const model = studentHomePlan({ date: '2026-09-08', plan: { track: 'mastery' }, todayAmounts: [make(3, 'done'), make(6, null), { ...make(9, null), taskType: 'review', teacherCompleted: true }] }, '2026-09-08');
-  assert.equal(model.percent, 67);
+  assert.equal(model.percent, 50);
   assert.equal(model.groups[0].label, 'الإتقان');
   assert.equal(model.groups[0].complete, false);
   assert.deepEqual(model.groups[0].target.ranges.map((range) => range.page), [3, 6]);
@@ -90,4 +100,12 @@ test('student home uses the real feature settings and site restrictions', () => 
   assert.equal(on.store, true);
   assert.equal(studentHomeFeatures({ storeEnabled: true, pointsSystemEnabled: true }, { store: false }).store, false);
   assert.equal(studentHomeFeatures({ storeEnabled: true, pointsSystemEnabled: false }).store, false);
+});
+
+test('today progress counts three task types equally regardless of split records',()=>{
+ const tasks=['memorization','review','link','link'].map(taskType=>({taskType,studentStatus:'pending'}));
+ for(const [types,percent] of [[[],0],[['memorization'],33],[['memorization','review'],66],[['memorization','review','link'],100]]){
+  const today={date:'2026-09-25',tasks:tasks.map(task=>({...task,studentStatus:types.includes(task.taskType)?'done':'pending'}))};
+  assert.equal(studentHomePlan(today,today.date).percent,percent);
+ }
 });

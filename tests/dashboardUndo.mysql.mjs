@@ -26,6 +26,7 @@ await pool.query('INSERT INTO student_news VALUES (1, ?, 0)', [JSON.stringify({ 
 let time = 1000;
 let permitted = true;
 const app = express();
+app.disable('x-powered-by');
 app.use(express.json());
 app.use((req, _res, next) => { req.auth = { role: req.get('Role') || 'manager', id: req.get('Actor') || '1', tokenHash: req.get('Session') || 'test-session' }; next(); });
 const undo = createDashboardUndo({ db: () => pool, databaseName: () => 'undo_test', hasPermission: async () => permitted, now: () => time, schedule: () => ({ unref() {} }) });
@@ -42,13 +43,17 @@ app.post('/api/mutate', async (req, res, next) => {
   } catch (error) { await connection.rollback(); next(error); }
   finally { connection.release(); }
 });
-app.use((error, _req, res, next) => { if (res.headersSent) return next(error); return res.status(500).json({ message: error.message }); });
+app.use((error, _req, res, next) => {
+  if (res.headersSent) return next(error);
+  return res.status(500).json({ message: error.message });
+});
 const server = app.listen(0, '127.0.0.1');
 await new Promise(resolve => server.once('listening', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 const execute = async (commands, extra = {}, headers = {}) => {
   const response = await globalThis.fetch(`${base}/api/mutate`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Dashboard-Undo': '1', ...headers }, body: JSON.stringify({ commands, ...extra }) });
   assert.equal(response.status, 200, await response.clone().text());
+  assert.equal(response.headers.get('x-powered-by'), null);
   return JSON.parse(response.headers.get('X-Dashboard-Undo') || 'null');
 };
 const reverse = (action, headers = {}) => globalThis.fetch(`${base}/api/dashboard-undo/${action.id}`, { method: 'POST', headers });

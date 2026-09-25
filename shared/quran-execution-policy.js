@@ -78,6 +78,8 @@ const isEnabled = (value, fallback = false) => (
 export function canStudentSetQuranTaskEnd(settings = {}, taskType = '', comparisonToAssignedEnd = 0) {
   const comparison = Math.sign(Number(comparisonToAssignedEnd || 0));
   if (comparison === 0) return true;
+  if (taskType === 'link') return false;
+  if (taskType === 'review') return isEnabled(settings.studentReviewAmountEditable, true);
   if (comparison < 0) {
     const _resolveEditableKey = () => {
       if (taskType === 'review') {

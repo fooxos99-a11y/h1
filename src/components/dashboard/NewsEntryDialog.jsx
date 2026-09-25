@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import DateTimePicker from '@/components/ui/date-time-picker';
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@/components/ui/dialog';
 import MultiSelectSetting from '@/components/ui/multi-select-setting';
+import { DEFAULT_NEWS_TEXT_COLOR } from '../../../shared/student-news';
 
 export default function NewsEntryDialog({ entry, committees, pending, onClose, onSave }) {
   const [draft, setDraft] = useState(entry);
@@ -48,6 +49,7 @@ export default function NewsEntryDialog({ entry, committees, pending, onClose, o
         <fieldset disabled={pending || reading} className="min-w-0 space-y-4">
           <div className="space-y-1.5"><Label htmlFor="news-title">الخبر</Label><Input id="news-title" required maxLength={80} value={draft.title} onChange={event => update('title', event.target.value)} /></div>
           <div className="space-y-1.5"><Label htmlFor="news-body">نص الخبر</Label><Textarea id="news-body" maxLength={2000} value={draft.body || ''} onChange={event => update('body', event.target.value)} /></div>
+          <div className="space-y-1.5"><Label htmlFor="news-text-color">لون نص الخبر</Label><Input id="news-text-color" type="color" className="h-11 w-20 cursor-pointer p-1" value={draft.textColor || DEFAULT_NEWS_TEXT_COLOR} onChange={event => update('textColor', event.target.value)} /></div>
           <div className="space-y-1.5"><Label>الحلقات</Label>
             <MultiSelectSetting value={draft.committeeIds.length ? draft.committeeIds : ['all']} placeholder="جميع الحلقات"
               options={[{ value: 'all', label: 'جميع الحلقات' }, ...committees.map(row => ({ value: Number(row.id), label: row.name }))]}

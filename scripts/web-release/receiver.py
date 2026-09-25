@@ -21,7 +21,12 @@ from urllib.parse import urlparse
 ROOTS = {'server', 'shared', 'src', 'scripts', 'config', 'public', 'dist'}
 INDEX_FILE = 'index.html'
 LOCK_FILE = 'package-lock.json'
-FILES = {'package.json', LOCK_FILE, INDEX_FILE, 'vite.config.js',
+PACKAGE_FILE = 'package.json'
+CONFIG_FILE = 'config.json'
+READY_FILE = '.ready'
+INVALID_CONFIGURED_PATH = 'Invalid configured path'
+SERVICE_NAME_PATTERN = r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}'
+FILES = {PACKAGE_FILE, LOCK_FILE, INDEX_FILE, 'vite.config.js',
          'tailwind.config.js', 'postcss.config.js'}
 RELEASE_NAME = r'github-\d{8}-\d{6}-[a-f0-9]{12}'
 BROWSER_CHECK = "import { chromium } from 'playwright'; const b=await chromium.launch({headless:true}); await b.close();"
@@ -35,12 +40,12 @@ def checked_token(value, pattern):
 
 def configured_path(value):
     if not isinstance(value, (str, Path)) or not re.fullmatch(r'(?:/[A-Za-z0-9_.-]+)+|[A-Za-z]:[\\/][A-Za-z0-9_./\\-]+', str(value)):
-        raise ValueError('Invalid configured path')
+        raise ValueError(INVALID_CONFIGURED_PATH)
     if any(part in {'.', '..'} for part in re.split(r'[/\\]', str(value))):
-        raise ValueError('Invalid configured path')
+        raise ValueError(INVALID_CONFIGURED_PATH)
     path = Path(value)
     if not path.is_absolute() or any(part in {'.', '..'} for part in path.parts):
-        raise ValueError('Invalid configured path')
+        raise ValueError(INVALID_CONFIGURED_PATH)
     return path
 
 
@@ -73,8 +78,8 @@ def load_config(config_path):
     services = raw.get('services')
     if not isinstance(services, list) or not services:
         raise ValueError('Missing deployment services')
-    config['services'] = [checked_token(name, r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}') for name in services]
-    config['config_path'] = str(control / 'config.json')
+    config['services'] = [checked_token(name, SERVICE_NAME_PATTERN) for name in services]
+    config['config_path'] = str(control / CONFIG_FILE)
     return config
 
 
@@ -138,7 +143,7 @@ def run(operation, cwd=None, *, services=(), release=None):
     if operation in {'stop', 'restart'}:
         if not services or isinstance(services, str):
             raise ValueError('Missing service names')
-        names = [checked_token(name, r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}') for name in services]
+        names = [checked_token(name, SERVICE_NAME_PATTERN) for name in services]
         args = ['pm2', operation, *names]
         if operation == 'restart':
             args.append('--update-env')
@@ -146,7 +151,7 @@ def run(operation, cwd=None, *, services=(), release=None):
         control = Path(__file__).resolve().parent
         release = inside(control.parent.parent / 'releases', configured_path(release))
         checked_token(release.name, RELEASE_NAME)
-        args = ['node', str(control / 'preflight.mjs'), str(release), str(control / 'config.json')]
+        args = ['node', str(control / 'preflight.mjs'), str(release), str(control / CONFIG_FILE)]
     elif operation in fixed:
         args = fixed[operation]
     else:
@@ -200,22 +205,22 @@ def unpack(archive, destination):
 
 def prepare_dependencies(release, config):
     release = release_path(config, release)
-    manifests = {name: inside(release, release / name) for name in ('package.json', LOCK_FILE)}
+    manifests = {name: inside(release, release / name) for name in (PACKAGE_FILE, LOCK_FILE)}
     digest = hashlib.sha256(manifests[LOCK_FILE].read_bytes()).hexdigest()
     cache = configured_path(config['dependency_cache'])
     cache.mkdir(parents=True, exist_ok=True)
     cache = cache.resolve(strict=True)
     folder = inside(cache, cache / checked_token(digest, r'[a-f0-9]{64}'))
     if folder.exists():
-        for name in ('.ready', 'package.json', LOCK_FILE, 'node_modules'):
+        for name in (READY_FILE, PACKAGE_FILE, LOCK_FILE, 'node_modules'):
             inside(folder, folder / name)
-    if not (folder / '.ready').is_file():
+    if not (folder / READY_FILE).is_file():
         folder.mkdir(parents=True, exist_ok=True)
-        for name in ('package.json', LOCK_FILE):
+        for name in (PACKAGE_FILE, LOCK_FILE):
             shutil.copyfile(manifests[name], folder / name)
         run('dependencies', folder)
         run('browser-install', folder)
-        (folder / '.ready').write_text(digest)
+        (folder / READY_FILE).write_text(digest)
     (release / 'node_modules').symlink_to(folder / 'node_modules')
     run('browser-check', release)
 
@@ -356,7 +361,7 @@ def activate(release, config):
     if not isinstance(services, list) or not services:
         raise ValueError('Missing deployment services')
     for name in services:
-        checked_token(name, r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}')
+        checked_token(name, SERVICE_NAME_PATTERN)
     try:
         if len(services) > 1:
             run('stop', services=services[1:])
@@ -421,7 +426,7 @@ def deploy(config, sha, digest):
 
 def main():
     import fcntl  # Linux server only; pure validation functions are portable.
-    config_path = Path(__file__).with_name('config.json')
+    config_path = Path(__file__).with_name(CONFIG_FILE)
     config = load_config(config_path)
     sha, digest = command(os.environ.get('SSH_ORIGINAL_COMMAND', ''))
     with config_path.with_suffix('.lock').open('w') as lock:

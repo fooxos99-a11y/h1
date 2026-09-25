@@ -3,7 +3,7 @@ import mysql from 'mysql2/promise';
 // Only application-generated DML is accepted. Unsupported SQL is executed normally,
 // but its request cannot advertise an undo that would restore only part of a change.
 export const quoteIdentifier = value => {
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) throw new Error('Unsupported SQL identifier');
+  if (!/^[A-Za-z_]\w*$/.test(value)) throw new Error('Unsupported SQL identifier');
   return `\`${value}\``;
 };
 
@@ -41,6 +41,21 @@ function splitExpressions(value) {
   return parts;
 }
 
+function isConstantExpression(expression) {
+  return /^(?:NULL|TRUE|FALSE|0x[\da-f]+)$/i.test(expression)
+    || /^[+-]?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(expression)
+    || /^\s*$/.test(maskSqlLiterals(expression));
+}
+
+function validateUpsert(rows, assignments, meta) {
+  if (assignments.some(part => meta.primaryKey.includes(/^`?([A-Za-z_]\w*)`?\s*=/.exec(part)?.[1]))) throw new Error('Cannot journal changed primary key');
+  for (const row of rows) for (const key of meta.uniqueKeys) {
+    const complete = key.every(column => row[column]);
+    const cannotConflict = key.some(column => /^NULL$/i.test(row[column] || '') || (!row[column] && (meta.autoIncrement?.includes(column) || meta.nullableDefault?.includes(column))));
+    if (!complete && !cannotConflict) throw new Error('Unspecified conflicting unique key');
+  }
+}
+
 function insertSelector(sql, match, meta) {
   const columns = match[1].split(',').map(name => name.trim().replaceAll('`', ''));
   columns.forEach(quoteIdentifier);
@@ -55,12 +70,7 @@ function insertSelector(sql, match, meta) {
   });
   if (duplicate) {
     const assignments = splitExpressions(tail.slice(duplicate.index + duplicate[0].length));
-    if (assignments.some(part => meta.primaryKey.includes(/^`?([A-Za-z_][A-Za-z0-9_]*)`?\s*=/.exec(part)?.[1]))) throw new Error('Cannot journal changed primary key');
-    for (const row of rows) for (const key of meta.uniqueKeys) {
-      const complete = key.every(column => row[column]);
-      const cannotConflict = key.some(column => /^NULL$/i.test(row[column] || '') || (!row[column] && (meta.autoIncrement?.includes(column) || meta.nullableDefault?.includes(column))));
-      if (!complete && !cannotConflict) throw new Error('Unspecified conflicting unique key');
-    }
+    validateUpsert(rows, assignments, meta);
   }
   const selectors = rows.map(row => {
     const keys = meta.uniqueKeys.filter(key => key.every(column => row[column] && !/^NULL$/i.test(row[column])));
@@ -70,14 +80,15 @@ function insertSelector(sql, match, meta) {
   });
   // Expressions with side effects, subqueries, or volatile values cannot be replayed as selectors.
   for (const row of rows) for (const expression of Object.values(row)) {
-    if (!/^(?:NULL|TRUE|FALSE|[+-]?\d+(?:\.\d+)?(?:e[+-]?\d+)?|0x[\da-f]+)$/i.test(expression)
-      && !/^\s*$/.test(maskSqlLiterals(expression))) throw new Error('Unsupported insert expression');
+    if (!isConstantExpression(expression)) throw new Error('Unsupported insert expression');
   }
   return selectors.map(selector => `(${selector})`).join(' OR ');
 }
 
 export function mutationTable(sql) {
-  const match = /^\s*(?:UPDATE\s+|DELETE\s+FROM\s+|INSERT(?:\s+IGNORE)?\s+INTO\s+)`?([A-Za-z_][A-Za-z0-9_]*)`?(?=\s|\()/i.exec(sql);
+  const prefix = /^\s*(?:UPDATE\s+|DELETE\s+FROM\s+|INSERT(?:\s+IGNORE)?\s+INTO\s+)/i.exec(sql);
+  if (!prefix) return null;
+  const match = /^`?([a-z_]\w*)`?(?=\s|\()/i.exec(sql.slice(prefix[0].length));
   return match?.[1] || null;
 }
 
@@ -86,17 +97,17 @@ export function createUndoSqlPlan(statement, values, meta) {
   const mask = maskSqlLiterals(sql);
   if (/;|--|\/\*|#/.test(mask)) throw new Error('Unsupported SQL structure');
   const table = quoteIdentifier(meta.table);
-  const insert = /^INSERT(?:\s+IGNORE)?\s+INTO\s+`?[A-Za-z_][A-Za-z0-9_]*`?\s*\(([^)]+)\)\s*VALUES\s*/i.exec(sql);
+  const insert = /^INSERT(?:\s+IGNORE)?\s+INTO\s+`?[a-z_]\w*`?\s*\(([^)]+)\)\s*VALUES\s*/i.exec(sql);
   if (insert) return { kind: 'insert', table: meta.table, selector: insertSelector(sql, insert, meta) };
-  const update = /^UPDATE\s+`?[A-Za-z_][A-Za-z0-9_]*`?\s+SET\s+/i.exec(mask);
-  const remove = /^DELETE\s+FROM\s+`?[A-Za-z_][A-Za-z0-9_]*`?\s*(?=WHERE|$)/i.exec(mask);
+  const update = /^UPDATE\s+`?[a-z_]\w*`?\s+SET\s+/i.exec(mask);
+  const remove = /^DELETE\s+FROM\s+`?[a-z_]\w*`?\s*(?=WHERE|$)/i.exec(mask);
   if (!update && !remove) throw new Error('Unsupported mutation');
   const where = /\bWHERE\b/i.exec(mask);
   const tail = where ? sql.slice(where.index + where[0].length).trim() : '1 = 1';
   if (/\b(?:JOIN|SELECT|LIMIT|ORDER|RETURNING)\b/i.test(maskSqlLiterals(tail))) throw new Error('Unsupported mutation predicate');
   if (update) {
     const assignments = splitExpressions(sql.slice(update[0].length, where?.index ?? sql.length));
-    const changed = assignments.map(part => /^`?([A-Za-z_][A-Za-z0-9_]*)`?\s*=/.exec(part)?.[1]);
+    const changed = assignments.map(part => /^`?([A-Za-z_]\w*)`?\s*=/.exec(part)?.[1]);
     if (changed.some(column => !column || meta.primaryKey.includes(column))) throw new Error('Cannot journal changed primary key');
   }
   if (!table || !tail) throw new Error('Missing mutation target');

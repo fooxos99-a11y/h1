@@ -17,7 +17,7 @@ test('teacher dashboard exposes student plans while keeping other student admini
   assert.match(dashboard, /key: 'previousRecitationSessions'[\s\S]*permissionKey: 'quranEvaluation'/);
   assert.match(dashboard, /<TeacherPreviousSessionsPanel \/>/);
   assert.match(dashboard, /key: 'mushaf', label: 'المصحف'/);
-  assert.match(dashboard, /section\.key === 'mushaf'\) return isSupervisor \|\| isReciter/);
+  assert.match(dashboard, /section\.key === 'mushaf'\) return isManager \|\| isSupervisor \|\| isReciter/);
   assert.match(accountPortal, /key: 'studentPlans', label: 'خطط الطلاب'/);
   assert.match(accountPortal, /settings\.teacherManualPointsEnabled[\s\S]*key: 'teacherPoints', label: 'الإضافة والخصم'/);
   assert.ok(accountPortal.indexOf("key: 'staffAttendance', label: 'التحضير'") < accountPortal.indexOf("key: 'quranEvaluation', label: 'جلسات التسميع'"));
@@ -93,7 +93,7 @@ test('teacher reports expose execution only for student execution mode and keep 
 test('attendance source does not override the independent Quran execution sources', async () => {
   const [dashboard, settings, server] = await Promise.all([
     readFile(new URL('../src/pages/WajehDashboard.jsx', import.meta.url), 'utf8'),
-    readFile(new URL('../src/components/dashboard/SettingsSection.jsx', import.meta.url), 'utf8'),
+    Promise.all(['SettingsSection.jsx', 'NotificationSettings.jsx'].map(name => readFile(new URL('../src/components/dashboard/' + name, import.meta.url), 'utf8'))).then(parts => parts.join('\n')),
     readFile(new URL('../server/index.js', import.meta.url), 'utf8'),
   ]);
 
@@ -252,7 +252,7 @@ test('attendance stays unselected until an explicit choice and absence messages 
   const [server, attendance, settings] = await Promise.all([
     readFile(new URL('../server/index.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/dashboard/ManualAttendanceSection.jsx', import.meta.url), 'utf8'),
-    readFile(new URL('../src/components/dashboard/SettingsSection.jsx', import.meta.url), 'utf8'),
+    Promise.all(['SettingsSection.jsx', 'NotificationSettings.jsx'].map(name => readFile(new URL('../src/components/dashboard/' + name, import.meta.url), 'utf8'))).then(parts => parts.join('\n')),
   ]);
 
   assert.match(attendance, /value=\{row\.status \|\| ''\}/);

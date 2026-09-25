@@ -1,4 +1,3 @@
-import StudentNewsEditor from '@/components/dashboard/StudentNewsEditor';
 import EvaluationUnitSelector from './EvaluationUnitSelector';
 import StaffAttendanceSettings from './StaffAttendanceSettings';
 import EndTermDialog from './EndTermDialog';
@@ -20,9 +19,9 @@ import EvaluationScalingHelp from '@/components/dashboard/EvaluationScalingHelp'
 import NazemIntegrationSettings from '@/components/dashboard/NazemIntegrationSettings';
 import SummitMapEditor from '@/components/dashboard/SummitMapEditor';
 import SettingsCategoryPanel from '@/components/dashboard/SettingsCategoryPanel';
-import MessageTemplateField, { TemplateVariablesHint } from '@/components/dashboard/MessageTemplateField';
+import NotificationSettings from '@/components/dashboard/NotificationSettings';
 import { studentsApi } from '@/services/studentsApi';
-import SettingToggle, { ToggleSwitch } from '@/components/ui/setting-toggle';
+import SettingToggle from '@/components/ui/setting-toggle';
 import MultiSelectSetting from '@/components/ui/multi-select-setting';
 import InlineToggleNumberSetting from '@/components/ui/inline-toggle-number-setting';
 import TeacherPointTypesSetting from '@/components/dashboard/TeacherPointTypesSetting';
@@ -55,7 +54,7 @@ const defaultSettings = {
 
   studentTaskAmountEditable: true,
   studentReviewAmountEditable: true,
-  studentLinkAmountEditable: true,
+  studentLinkAmountEditable: false,
   allowQuranCompensation: true,
   quranCompensationPointsPercent: 100,
   allowQuranExtra: false,
@@ -360,30 +359,25 @@ const SettingsSection = ({
     }
     return 'محفوظ تلقائياً';
   };
-  if (activeCategory === 'settingsNews') return <StudentNewsEditor />;
   return (
     <div className="space-y-7">
       <Card className="mx-auto w-full max-w-5xl overflow-visible border-primary/25 bg-card/90 shadow-lg shadow-primary/5">
         <CardContent className="p-0">
+          <SettingsCategoryPanel category="settingsNotifications" activeCategory={activeCategory} title="إعدادات الإشعارات">
+            <NotificationSettings settings={settings} setSettings={setSettings} executionReminderStudents={executionReminderStudents} toggleListValue={toggleListValue} />
+          </SettingsCategoryPanel>
           <SettingsCategoryPanel category="settingsAttendance" activeCategory={activeCategory} title="التحضير وجلسات التسميع">
-          <SettingToggle
-            label="إخفاء المقدار عن الطلاب"
-            checked={Boolean(settings.hideStudentAmounts)}
-            onCheckedChange={(checked) => setSettings({ ...settings, hideStudentAmounts: checked })}
-          />
-          {settings.hideStudentAmounts && <SettingsGroup>
-            <SettingToggle label="إخفاء الحفظ والإتقان" checked={settings.hideStudentMemorizationAmount !== false} onCheckedChange={(checked) => setSettings({ ...settings, hideStudentMemorizationAmount: checked })} />
-            <SettingToggle label="إخفاء المراجعة" checked={settings.hideStudentReviewAmount !== false} onCheckedChange={(checked) => setSettings({ ...settings, hideStudentReviewAmount: checked })} />
-            <SettingToggle label="إخفاء الربط" checked={settings.hideStudentLinkAmount !== false} onCheckedChange={(checked) => setSettings({ ...settings, hideStudentLinkAmount: checked })} />
-          </SettingsGroup>}
           <SettingsGroup>
-            <h3 className="text-sm font-black text-primary">أيام الإجازة الأسبوعية</h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+            <Label>أيام الإجازة الأسبوعية</Label>
             <MultiSelectSetting
               value={settings.weeklyHolidayDays || []}
               options={weekDays}
               placeholder="اختر أيام الإجازة"
               onToggle={(value) => toggleListValue('weeklyHolidayDays', value)}
             />
+            </div>
             <div className="space-y-2">
               <Label>أيام جلسات التسميع</Label>
               <MultiSelectSetting
@@ -394,7 +388,7 @@ const SettingsSection = ({
               />
             </div>
             <div className="space-y-2">
-              <Label>ماذا تريد في الإجازة؟</Label>
+              <Label>مهام أيام الإجازة</Label>
               <MultiSelectSetting
                 value={settings.holidayTaskTypes || []}
                 options={holidayTaskTypes}
@@ -417,25 +411,14 @@ const SettingsSection = ({
                 </Select>
               </div>
             )}
+            </div>
           </SettingsGroup>
 
-          <StaffAttendanceSettings settings={settings} setSettings={setSettings} />
-
-          <SettingsGroup>
-            <h3 className="text-sm font-black text-primary">جلسات التسميع</h3>
+          <StaffAttendanceSettings settings={settings} setSettings={setSettings}>
             {!settings.nazemIntegrationEnabled && (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
                 <div className="space-y-2">
-                  <Label>تنفيذ الحفظ عن طريق</Label>
-                  <Select value="teacher" disabled>
-                    <SelectTrigger aria-label="طريقة تنفيذ الحفظ" className="border-primary/30 bg-card"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="teacher">المعلم في جلسة التسميع</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>تحضير الطلاب عن طريق</Label>
+                  <Label>مسؤول تحضير الطلاب</Label>
                   <Select
                     value={settings.recitationAttendanceSource || 'supervisor'}
                     onValueChange={(value) => setSettings({
@@ -456,65 +439,54 @@ const SettingsSection = ({
                 </div>
               </div>
             )}
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          </StaffAttendanceSettings>
+
+          <SettingsGroup>
+            <h3 className="text-sm font-black text-primary">جلسات التسميع</h3>
+            <h4 className="text-sm font-black text-foreground">تسجيل التنفيذ</h4>
+            <div className="grid gap-3 sm:grid-cols-2">
               {[
-                ['memorizationExecutionSource', 'تنفيذ الحفظ والإتقان والتكرار والسماع عن طريق'],
-                ['reviewExecutionSource', 'تنفيذ المراجعة عن طريق'],
-                ['linkExecutionSource', 'تنفيذ الربط عن طريق'],
+                ['memorizationExecutionSource', 'الحفظ والتكرار والسماع'],
+                ['reviewExecutionSource', 'تسجيل التنفيذ للمراجعة والربط'],
               ]
                 .map(([key, label]) => (
                   <div key={key} className="space-y-2">
                     <Label>{label}</Label>
-                    <Select value={settings[key] || 'both'} onValueChange={(value) => setSettings({ ...settings, [key]: value })}>
-                      <SelectTrigger aria-label={label} className="border-primary/30 bg-card"><SelectValue /></SelectTrigger>
+                    <Select value={key === 'reviewExecutionSource' && settings.reviewExecutionSource !== settings.linkExecutionSource ? '' : settings[key] || 'both'} onValueChange={(value) => setSettings({ ...settings, [key]: value, ...(key === 'reviewExecutionSource' ? { linkExecutionSource: value } : {}) })}>
+                      <SelectTrigger aria-label={label} className="border-primary/30 bg-card"><SelectValue placeholder="اختر مسؤول تسجيل التنفيذ" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="student">الطالب</SelectItem>
                         <SelectItem value="teacher">المعلم</SelectItem>
-                        <SelectItem value="both">الطالب أو المعلم — الأسبق يعتمد</SelectItem>
+                        <SelectItem value="both">{key === 'memorizationExecutionSource' ? 'الطالب أو المعلم — تسجيل الإنجاز' : 'الطالب أو المعلم — الأسبق يعتمد'}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 ))}
             </div>
+            {[settings.memorizationExecutionSource, settings.reviewExecutionSource].some(source => ['student', 'both'].includes(source)) && <>
+            <h4 className="text-sm font-black text-foreground">صلاحيات الطالب</h4>
+            <div className="grid gap-2 sm:grid-cols-2">
             {['student', 'both'].includes(settings.memorizationExecutionSource) && (
               <SettingToggle
-                label="السماح للطالب بتقليل مقدار حفظ اليوم"
+                label="تعديل مقدار الحفظ اليومي"
                 checked={Boolean(settings.studentTaskAmountEditable)}
                 onCheckedChange={(checked) => setSettings({ ...settings, studentTaskAmountEditable: checked })}
               />
             )}
             {['student', 'both'].includes(settings.reviewExecutionSource) && (
               <SettingToggle
-                label="السماح للطالب بتعديل مقدار المراجعة"
+                label="تعديل مقدار المراجعة اليومية"
                 checked={Boolean(settings.studentReviewAmountEditable)}
                 onCheckedChange={(checked) => setSettings({ ...settings, studentReviewAmountEditable: checked })}
               />
             )}
-            {['student', 'both'].includes(settings.linkExecutionSource) && (
-              <SettingToggle
-                label="السماح للطالب بتعديل مقدار الربط"
-                checked={Boolean(settings.studentLinkAmountEditable)}
-                onCheckedChange={(checked) => setSettings({ ...settings, studentLinkAmountEditable: checked })}
-              />
-            )}
-            {['student', 'both'].includes(settings.memorizationExecutionSource) && (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <SettingToggle
-                  label="السماح للطالب بتعديل التكرار"
-                  checked={Boolean(settings.allowRepeatCountEditing)}
-                  onCheckedChange={(checked) => setSettings({ ...settings, allowRepeatCountEditing: checked })}
-                />
-                <SettingToggle
-                  label="السماح للطالب بتعديل السماع"
-                  checked={Boolean(settings.allowListeningCountEditing)}
-                  onCheckedChange={(checked) => setSettings({ ...settings, allowListeningCountEditing: checked })}
-                />
-              </div>
-            )}
-            <div className="space-y-3">
+            </div>
+            </>}
+          </SettingsGroup>
+          <SettingsGroup>
                 <h3 className="text-sm font-black text-primary">التعويض والزيادة</h3>
                 <InlineToggleNumberSetting
-                  label="السماح بإكمال الحفظ المتأخر (التعويض)"
+                  label="تعويض الحفظ المتأخر"
                   inputLabel="نسبة التعويض بالمئة"
                   checked={Boolean(settings.allowQuranCompensation)}
                   onCheckedChange={(checked) => setSettings({ ...settings, allowQuranCompensation: checked })}
@@ -524,7 +496,7 @@ const SettingsSection = ({
                   suffix="%"
                 />
                 <InlineToggleNumberSetting
-                  label="السماح بتجاوز مقدار اليوم والتقدم في الخطة"
+                  label="تجاوز مقدار اليوم والتقدم في الخطة"
                   inputLabel={rewardUnits.text('نسبة كيلومترات زيادة الحفظ اليومي')}
                   checked={Boolean(settings.allowQuranExtra)}
                   onCheckedChange={(checked) => setSettings({ ...settings, allowQuranExtra: checked })}
@@ -533,7 +505,7 @@ const SettingsSection = ({
                   valueLabel={rewardUnits.text('نسبة الكيلومترات عند الزيادة')}
                   suffix="%"
                 />
-            </div>
+
           </SettingsGroup>
 
           <SettingsGroup>
@@ -616,6 +588,16 @@ const SettingsSection = ({
                   <SelectItem value="page">أرقام الصفحات</SelectItem>
                 </SelectContent>
               </Select>
+          <SettingToggle
+            label="إخفاء المقدار عن الطلاب"
+            checked={Boolean(settings.hideStudentAmounts)}
+            onCheckedChange={(checked) => setSettings({ ...settings, hideStudentAmounts: checked })}
+          />
+          {settings.hideStudentAmounts && <SettingsGroup>
+            <SettingToggle label="إخفاء الحفظ والإتقان" checked={settings.hideStudentMemorizationAmount !== false} onCheckedChange={(checked) => setSettings({ ...settings, hideStudentMemorizationAmount: checked })} />
+            <SettingToggle label="إخفاء المراجعة" checked={settings.hideStudentReviewAmount !== false} onCheckedChange={(checked) => setSettings({ ...settings, hideStudentReviewAmount: checked })} />
+            <SettingToggle label="إخفاء الربط" checked={settings.hideStudentLinkAmount !== false} onCheckedChange={(checked) => setSettings({ ...settings, hideStudentLinkAmount: checked })} />
+          </SettingsGroup>}
           </SettingsGroup>
 
           {settings.pointsSystemEnabled && <SettingsGroup>
@@ -642,72 +624,7 @@ const SettingsSection = ({
             </div>
           </SettingsGroup>}
 
-          <SettingsGroup>
-            <div className="flex items-start justify-between gap-3">
-              <h3 className="text-sm font-black text-primary">قوالب التحضير والتنفيذ</h3>
-              <TemplateVariablesHint />
-            </div>
-            <div className="space-y-5">
-              <MessageTemplateField
-                id="attendance-absent-template"
-                label="قالب رسالة الغياب"
-                value={settings.attendanceAbsentTemplate || ''}
-                onChange={(value) => setSettings({ ...settings, attendanceAbsentTemplate: value })}
-                placeholder="استخدم {name} و {date} و {committee}"
-                action={(
-                  <ToggleSwitch
-                    ariaLabel="الإرسال التلقائي لرسالة الغياب"
-                    checked={settings.automaticAbsenceMessageEnabled}
-                    onCheckedChange={(checked) => setSettings({
-                      ...settings,
-                      automaticAbsenceMessageEnabled: checked,
-                    })}
-                  />
-                )}
-              />
 
-              {[
-                settings.memorizationExecutionSource,
-                settings.reviewExecutionSource,
-                settings.linkExecutionSource,
-              ]
-                .some((source) => ['student', 'both'].includes(source)) && (
-                <>
-                  <MessageTemplateField
-                    id="execution-reminder-template"
-                    label="قالب رسالة عدم التنفيذ"
-                    value={settings.executionReminderTemplate || ''}
-                    onChange={(value) => setSettings({ ...settings, executionReminderTemplate: value })}
-                    placeholder="استخدم {name} و {date} و {tasks}"
-                    action={(
-                      <ToggleSwitch
-                        ariaLabel="الإرسال التلقائي لرسالة عدم التنفيذ"
-                        checked={settings.automaticExecutionMessageEnabled}
-                        onCheckedChange={(checked) => setSettings({
-                          ...settings,
-                          automaticExecutionMessageEnabled: checked,
-                        })}
-                      />
-                    )}
-                  />
-                  <div className="space-y-2">
-                    <Label>استثناء طلاب</Label>
-                    <MultiSelectSetting
-                      value={settings.executionReminderExcludedStudentIds || []}
-                      options={executionReminderStudents.map((student) => ({
-                        value: student.id,
-                        label: student.committeeName
-                          ? `${student.name} — ${student.committeeName}`
-                          : student.name,
-                      }))}
-                      placeholder="اختر الطلاب المستثنين من رسالة عدم التنفيذ"
-                      onToggle={(studentId) => toggleListValue('executionReminderExcludedStudentIds', studentId)}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          </SettingsGroup>
           </SettingsCategoryPanel>
 
           <SettingsCategoryPanel category="settingsNarration" activeCategory={activeCategory} title="يوم السرد والاختبار">
@@ -755,24 +672,7 @@ const SettingsSection = ({
             </div>
           </SettingsGroup>
 
-          <SettingsGroup>
-            <div className="flex items-start justify-between gap-3">
-              <h3 className="text-sm font-black text-primary">قوالب يوم السرد والاختبار</h3>
-              <TemplateVariablesHint />
-            </div>
-            <div className="space-y-5">
-              <MessageTemplateField
-                id="quran-test-message-template"
-                label="قالب موعد الاختبار"
-                value={settings.quranTestMessageTemplate || ''}
-                onChange={(value) => setSettings({ ...settings, quranTestMessageTemplate: value })}
-                placeholder="استخدم {name} و {juz} و {date}"
-              />
-              <MessageTemplateField id="narration-start-template" label="قالب بداية يوم السرد" value={settings.narrationStartTemplate || ''} onChange={(value) => setSettings({ ...settings, narrationStartTemplate: value })} />
-              <MessageTemplateField id="narration-end-template" label="قالب نهاية يوم السرد" value={settings.narrationEndTemplate || ''} onChange={(value) => setSettings({ ...settings, narrationEndTemplate: value })} />
-              <MessageTemplateField id="narration-result-template" label="قالب نتيجة يوم السرد" value={settings.narrationResultTemplate || ''} onChange={(value) => setSettings({ ...settings, narrationResultTemplate: value })} />
-            </div>
-          </SettingsGroup>
+
           </SettingsCategoryPanel>
 
           <SettingsCategoryPanel category="settingsPoints" activeCategory={activeCategory} title={rewardUnits.text('الكيلومترات والترتيب')}>

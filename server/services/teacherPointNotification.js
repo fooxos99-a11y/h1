@@ -1,8 +1,10 @@
+import { emitEventNotification } from './eventNotifications.js';
 // Use the same transaction as the point movement: neither may outlive a rollback.
 export async function notifyTeacherPointAdjustment(connection, {
   transactionId, studentId, type, points, reason, actor,
 }) {
   if (((Number(transactionId) || 0) <= 0) || ((Number(points) || 0) <= 0)) return null;
+  if (type === 'deduction') return emitEventNotification(connection, { type: 'violation', key: String(transactionId), values: { reason, points }, recipients: [{role:'student',id:studentId}] });
   const increase = type === 'increase';
   const [notification] = await connection.query(
     `INSERT INTO app_notifications

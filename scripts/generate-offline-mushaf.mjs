@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
+import process from 'node:process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collectQcfPageWords, getQcfSourcePages } from '../server/services/quranMushafWordLayout.js';
+import { MUSHAF_DATA_VERSION } from '../shared/mushaf-package.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUTPUT_ROOT = path.join(ROOT, 'public', 'quran', 'hafs');
@@ -13,6 +15,7 @@ const PAGE_COUNT = 604;
 const CONCURRENCY = 12;
 const QURAN_API = 'https://api.quran.com/api/v4';
 const FONT_BASE = 'https://verses.quran.foundation/fonts/quran/hafs';
+const pagesOnly = process.argv.includes('--pages-only');
 
 const fetchWithRetry = async (url, attempts = 4) => {
   let lastError;
@@ -54,6 +57,7 @@ await runPool(pageNumbers, async (page) => {
 });
 
 const pageHashes = {};
+const pageContents = new Map();
 await runPool(pageNumbers, async (page) => {
   const payloads = getQcfSourcePages(page).map((sourcePage) => sourcePages.get(sourcePage)).filter(Boolean);
   const words = collectQcfPageWords(payloads, page);
@@ -75,20 +79,40 @@ await runPool(pageNumbers, async (page) => {
   });
   const content = JSON.stringify({ page, words, decorations });
   pageHashes[page] = createHash('sha256').update(content).digest('hex');
-  await fs.writeFile(path.join(PAGE_OUTPUT, `${page}.json`), content);
+  pageContents.set(page, { content, words });
 });
 
-await runPool(pageNumbers, async (page) => {
-  const response = await fetchWithRetry(`${FONT_BASE}/v2/woff2/p${page}.woff2`);
-  await fs.writeFile(path.join(FONT_OUTPUT, `p${page}.woff2`), Buffer.from(await response.arrayBuffer()));
+// Never replace a complete package with an incomplete upstream response.
+const packagedVerses = new Set([...pageContents.values()].flatMap(({ words }) => words.map((word) => word.verseKey)));
+const missingVerses = pageReference.ayahs.filter(({ surah, ayah }) => !packagedVerses.has(`${surah}:${ayah}`));
+if (missingVerses.length) throw new Error(`Incomplete Mushaf: ${missingVerses.map(({ surah, ayah }) => `${surah}:${ayah}`).join(', ')}`);
+const versePages = new Map();
+for (const page of pageNumbers) {
+  for (const word of pageContents.get(page).words) {
+    if (!versePages.has(word.verseKey)) versePages.set(word.verseKey, page);
+  }
+}
+const indexedAyahs = pageReference.ayahs.map((ayah) => ({
+  ...ayah, page: versePages.get(`${ayah.surah}:${ayah.ayah}`),
+}));
+const indexedChapters = pageReference.chapters.map((chapter) => {
+  const pages = indexedAyahs.filter((ayah) => Number(ayah.surah) === Number(chapter.number)).map((ayah) => ayah.page);
+  return { ...chapter, startPage: Math.min(...pages), endPage: Math.max(...pages) };
 });
+await runPool(pageNumbers, (page) => fs.writeFile(path.join(PAGE_OUTPUT, `${page}.json`), pageContents.get(page).content));
 
-const uthmanicResponse = await fetchWithRetry(`${FONT_BASE}/uthmanic_hafs/UthmanicHafs1Ver18.woff2`);
-await fs.writeFile(path.join(FONT_OUTPUT, 'uthmanic-hafs.woff2'), Buffer.from(await uthmanicResponse.arrayBuffer()));
+if (!pagesOnly) {
+  await runPool(pageNumbers, async (page) => {
+    const response = await fetchWithRetry(`${FONT_BASE}/v2/woff2/p${page}.woff2`);
+    await fs.writeFile(path.join(FONT_OUTPUT, `p${page}.woff2`), Buffer.from(await response.arrayBuffer()));
+  });
+  const uthmanicResponse = await fetchWithRetry(`${FONT_BASE}/uthmanic_hafs/UthmanicHafs1Ver18.woff2`);
+  await fs.writeFile(path.join(FONT_OUTPUT, 'uthmanic-hafs.woff2'), Buffer.from(await uthmanicResponse.arrayBuffer()));
+}
 
 const juzs = Array.from({ length: 30 }, (_, index) => {
   const juz = index + 1;
-  const ayahs = pageReference.ayahs.filter((ayah) => Number(ayah.juz) === juz);
+  const ayahs = indexedAyahs.filter((ayah) => Number(ayah.juz) === juz);
   return {
     number: juz,
     startPage: Math.min(...ayahs.map((ayah) => Number(ayah.page))),
@@ -97,13 +121,13 @@ const juzs = Array.from({ length: 30 }, (_, index) => {
 });
 
 await fs.writeFile(path.join(OUTPUT_ROOT, 'index.json'), JSON.stringify({
-  version: 1,
+  version: MUSHAF_DATA_VERSION,
   riwayah: 'حفص عن عاصم',
   pageCount: PAGE_COUNT,
-  chapters: pageReference.chapters,
+  chapters: indexedChapters,
   juzs,
-  ayahs: pageReference.ayahs,
+  ayahs: indexedAyahs,
   pageHashes,
 }));
 
-process.stdout.write(`حزمة المصحف المحلية: ${PAGE_COUNT} صفحة و${PAGE_COUNT + 1} خط.\n`);
+process.stdout.write(`حزمة المصحف المحلية: ${PAGE_COUNT} صفحة، ${packagedVerses.size} آية${pagesOnly ? '، مع الإبقاء على الخطوط الحالية' : ` و${PAGE_COUNT + 1} خط`}.\n`);

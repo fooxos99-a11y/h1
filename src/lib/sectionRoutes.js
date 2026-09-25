@@ -35,6 +35,7 @@ export const dashboardSectionRoutes = createSectionRoutes([
   ['contactMessages', 'contact-messages'],
   ['settings', 'settings'],
   ['store', 'store'],
+  ['settingsNews', 'news'],
   ['culturalCompetition', 'cultural-competitions'],
   ['quranEvaluation', 'recitation-sessions'],
   ['previousRecitationSessions', 'previous-recitation-sessions'],

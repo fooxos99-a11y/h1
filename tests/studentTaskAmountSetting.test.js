@@ -14,10 +14,10 @@ test('review and link amount settings are persisted independently', async () => 
   assert.match(database, /\('studentReviewAmountEditable', 'true'\)/);
   assert.match(database, /\('studentLinkAmountEditable', 'true'\)/);
   assert.match(server, /studentReviewAmountEditable: settings\.studentReviewAmountEditable !== 'false'/);
-  assert.match(server, /studentLinkAmountEditable: req\.body\.studentLinkAmountEditable === undefined[\s\S]*parseBoolean\(req\.body\.studentLinkAmountEditable\)/);
+  assert.match(server, /studentLinkAmountEditable: false/);
   assert.match(settings, /studentReviewAmountEditable: true/);
-  assert.match(settings, /label="السماح للطالب بتعديل مقدار المراجعة"/);
-  assert.match(settings, /label="السماح للطالب بتعديل مقدار الربط"/);
+  assert.match(settings, /label="تعديل مقدار المراجعة اليومية"/);
+  assert.doesNotMatch(settings, /label="تعديل مقدار الربط"/);
 });
 
 test('fixed task amount removes student controls and is enforced by the server', async () => {

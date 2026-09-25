@@ -85,7 +85,8 @@ test('count-only evaluation is shared while detailed tests and narration use the
   assert.doesNotMatch(narration, /recitationMode === 'count'/);
   const narrationParts = await read('../src/components/dashboard/NarrationJuzParts.jsx');
   assert.match(narrationParts, /بدء التسميع/);
-  assert.match(narrationParts, />النتيجة</);
+  assert.doesNotMatch(narrationParts, />النتيجة</);
+  assert.match(narration, /NarrationMethodDialog/);
   assert.match(narration, /MushafRecitationDialog/);
   assert.match(api, /getQuranTestJuzAyahs/);
   assert.match(api, /getNarrationPartAyahs/);
@@ -121,8 +122,8 @@ test('attendance points and repetition controls respect their execution actor an
   assert.match(teacher, /executionSources=\{data\?\.executionSources\}/);
   assert.doesNotMatch(settings, /تنفيذ التكرار والسماع عن طريق/);
   assert.doesNotMatch(catalog, /select\('repeatExecutionSource'/);
-  assert.match(settings, /label="السماح للطالب بتعديل التكرار"/);
-  assert.match(settings, /label="السماح للطالب بتعديل السماع"/);
+  assert.doesNotMatch(settings, /label="تعديل عدد التكرار"/);
+  assert.doesNotMatch(settings, /label="تعديل عدد السماع"/);
   assert.doesNotMatch(catalog, /toggle\('allowRepeatCountEditing'/);
   assert.match(database, /\('allowRepeatCountEditing', 'false'\)/);
   assert.match(repeatSelector, /label = 'التكرار'/);
@@ -165,8 +166,8 @@ test('attendance points and repetition controls respect their execution actor an
   assert.match(countPointsField, /\{rewardUnits\.short\}\)/);
   assert.match(server, /memorizationRepeatPointValue: Math\.max\(0, Math\.trunc\(Number/);
   assert.match(server, /masteryListeningPointValue: Math\.max\(0, Math\.trunc\(Number/);
-  assert.match(server, /allowRepeatCountEditing: settings\.allowRepeatCountEditing === 'true'/);
-  assert.match(server, /allowListeningCountEditing: settings\.allowListeningCountEditing === 'true'/);
+  assert.match(server, /allowRepeatCountEditing: false/);
+  assert.match(server, /allowListeningCountEditing: false/);
   assert.doesNotMatch(server, /settings\.allowRepeatCountEditing = true/);
   assert.match(server, /allowRepeatCountEditing: !nazemManaged[\s\S]*settings\.allowRepeatCountEditing[\s\S]*canStudentExecuteQuranTask\(settings, 'memorization'\)/);
   assert.match(server, /allowListeningCountEditing: !nazemManaged[\s\S]*settings\.allowListeningCountEditing[\s\S]*canStudentExecuteQuranTask\(settings, 'memorization'\)/);

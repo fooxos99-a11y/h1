@@ -1,4 +1,5 @@
 import { isStudentAmountHidden } from '../../shared/student-amount-visibility.js';
+import { versionedMushafAsset } from '../../shared/mushaf-package.js';
 import { resolveAssetUrl } from '@/lib/assetUrl';
 
 const PAGE_COUNT = 604;
@@ -8,7 +9,7 @@ const resolvedPages = new Map();
 const completeMushafPromise = { current: null };
 
 const fetchLocalJson = async (path) => {
-  const response = await fetch(resolveAssetUrl(path), { cache: 'force-cache' });
+  const response = await fetch(resolveAssetUrl(versionedMushafAsset(path)), { cache: 'force-cache' });
   if (!response.ok) throw new Error('تعذر فتح بيانات المصحف المحلية.');
   return response.json();
 };
@@ -69,7 +70,7 @@ export const preloadCompleteOfflineMushaf = () => {
         const asset = completeMushafAssets[cursor];
         cursor += 1;
         try {
-          const response = await fetch(resolveAssetUrl(asset), { cache: 'force-cache' });
+          const response = await fetch(resolveAssetUrl(versionedMushafAsset(asset)), { cache: 'force-cache' });
           if (response.ok) await response.arrayBuffer();
         } catch {
           // A later visit retries individual missing assets through the normal page loader.

@@ -23,7 +23,9 @@ try {
     const pictureBounds = await image.boundingBox();
     const textBounds = await page.locator('[data-news-text]').boundingBox();
     assert.ok(pictureBounds.height > 0);
-    assert.ok(pictureBounds.y + pictureBounds.height <= textBounds.y + 1, 'The entire image area ends above the text panel');
+    assert.ok(textBounds.y >= pictureBounds.y && textBounds.y + textBounds.height <= pictureBounds.y + pictureBounds.height + 1, 'News text overlays the image');
+    assert.equal(await page.locator('[data-news-label]').textContent(), 'أخبار العائلة');
+    const labelColor = await page.locator('[data-news-label]').evaluate(node => globalThis.getComputedStyle(node).color);
     const cardHeight = (await page.getByRole('region', { name: 'الأخبار', exact: true }).boundingBox()).height;
     assert.equal(await page.getByRole('heading', { name: 'خبر 1', exact: true }).isVisible(), true);
     if (width === 360) {
@@ -52,6 +54,7 @@ try {
     await page.getByRole('button', { name: 'تعديل', exact: true }).first().click();
     await page.getByLabel('الخبر', { exact: true }).fill('تكريم المتميزين');
     await page.getByLabel('نص الخبر', { exact: true }).fill('نص محفوظ بدون صورة');
+    await page.getByLabel('لون نص الخبر', { exact: true }).fill('#ffeeaa');
     await page.getByRole('button', { name: 'بداية العرض', exact: true }).click();
     await page.getByRole('button', { name: '2026-09-24', exact: true }).click();
     await page.getByLabel('وقت بداية العرض', { exact: true }).fill('09:00');
@@ -78,11 +81,16 @@ try {
     assert.equal(stored.entries[0].title, 'تكريم المتميزين');
     assert.equal(stored.entries[0].image, '');
     assert.equal(stored.entries[0].body, 'نص محفوظ بدون صورة');
+    assert.equal(stored.entries[0].textColor, '#ffeeaa');
     assert.deepEqual(stored.entries[0].committeeIds, [4, 5]);
     assert.equal(stored.entries[0].endsAt, '2026-10-01T18:30');
     assert.equal(stored.entries[1].endsAt, '', 'Second news item retains its independent schedule');
     assert.ok(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth));
     await page.screenshot({ path: `outputs/news-editor-${width}.png`, fullPage: true });
+    await page.goto(`${baseUrl}/tests/fixtures/student-news.html`);
+    await page.getByRole('heading', { name: 'تكريم المتميزين', exact: true }).waitFor();
+    assert.equal(await page.locator('[data-news-text] h3').evaluate(node => globalThis.getComputedStyle(node).color), 'rgb(255, 238, 170)');
+    assert.equal(await page.locator('[data-news-label]').evaluate(node => globalThis.getComputedStyle(node).color), labelColor, 'Family news label keeps the site color');
     if (width === 360) {
       stored.entries = [];
       await page.goto(`${baseUrl}/tests/fixtures/student-news.html`);

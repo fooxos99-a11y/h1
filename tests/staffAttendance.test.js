@@ -30,7 +30,7 @@ test('staff attendance covers teachers, reciters, and administrators with locati
   assert.match(router, /getStaffAttendanceStatus/);
   assert.match(migration, /check_in_method/);
   assert.match(server, /role IN \('supervisor', 'reciter', 'admin'\)/);
-  assert.match(settings, /تحضير المعلمين والمقرئين والإدارة عن طريق/);
+  assert.match(settings, /تحضير الكادر عن طريق/);
   assert.match(settings, /وقت التأخير بعد صلاة العصر/);
   assert.match(settings, /settings\.staffAttendanceSource === 'teacher'[\s\S]*staffAttendanceLateAfterAsrMinutes/);
   assert.match(settings, />دقيقة<\/span>/);

@@ -11,6 +11,7 @@ export function calculateStudentExecutionPoints({
   taskType,
   track,
   completedAmount,
+  completedExpectedRange = false,
   expectedAmount,
   completedRepeatCount = 0,
   completedListeningCount = 0,
@@ -29,9 +30,7 @@ export function calculateStudentExecutionPoints({
     return 0;
   };
   const categoryPoints = _resolveCategoryPoints();
-  const taskPoints = taskType === 'memorization'
-    ? 0
-    : calculateProportionalPoints(categoryPoints, completedAmount, expectedAmount);
+  const taskPoints = calculateProportionalPoints(categoryPoints, taskType === 'review' && completedExpectedRange ? expectedAmount : completedAmount, expectedAmount);
   const _resolveRepeatPoints = () => {
     if (taskType === 'memorization') {
       return Number(Number(completedRepeatCount) > 0)

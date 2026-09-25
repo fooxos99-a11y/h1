@@ -298,13 +298,13 @@ test('schema, settings, plan UI, and teacher range endpoint persist the new mode
   assert.doesNotMatch(plans, /النقص \{numberText/);
   assert.match(plans, /DashboardDatePicker/);
   assert.doesNotMatch(plans, /setForm\(\{ \.\.\.form/);
-  assert.match(settings, /label="السماح بإكمال الحفظ المتأخر \(التعويض\)"/);
+  assert.match(settings, /label="تعويض الحفظ المتأخر"/);
   assert.match(settings, /نسبة التعويض بالمئة/);
   assert.match(settings, /suffix="%"/);
   assert.match(inlineSetting, /font-normal/);
-  assert.match(settings, /label="السماح بتجاوز مقدار اليوم والتقدم في الخطة"/);
-  assert.match(settings, /label="السماح للطالب بتعديل مقدار المراجعة"/);
-  assert.match(settings, /label="السماح للطالب بتعديل مقدار الربط"/);
+  assert.match(settings, /label="تجاوز مقدار اليوم والتقدم في الخطة"/);
+  assert.match(settings, /label="تعديل مقدار المراجعة اليومية"/);
+  assert.doesNotMatch(settings, /label="تعديل مقدار الربط"/);
   assert.doesNotMatch(settings, /label="السماح للطالب بتغيير عدد التكرارات"/);
   assert.ok(settings.indexOf('ماذا تريد في الإجازة؟') < settings.indexOf('المقادير التي تظهر في جلسة التسميع'));
   assert.match(settings, /settings\.pointsSystemEnabled && <SettingsGroup>[\s\S]*كيلومترات التحضير/);
@@ -320,7 +320,7 @@ test('schema, settings, plan UI, and teacher range endpoint persist the new mode
   assert.match(server, /getQuranTraversalPageEnd\(connection, cursor, endLimit, 1\)/);
   assert.match(server, /repairUnevaluatedMemorizationTaskRange/);
   assert.match(server, /student_quran_recitation_attempts attempt WHERE attempt\.task_id = t\.id/);
-  assert.match(settings, /تحضير الطلاب عن طريق/);
+  assert.match(settings, /مسؤول تحضير الطلاب/);
   assert.match(settings, /المقادير المقررة حتى اليوم السابق للجلسة/);
   assert.match(settings, /المقادير المقررة حتى يوم الجلسة/);
   assert.doesNotMatch(server, /requestedTargetEndDate/);

@@ -1,3 +1,4 @@
+import { notifyStudentsOfEvent } from '../services/eventNotifications.js';
 import { groupProgramSections } from '../../shared/program-sections.js';
 import { countTrailingCharacter } from '../../shared/string-suffix.js';
 import { saveProgramSections } from '../services/programSections.js';
@@ -207,6 +208,7 @@ export function createProgramRouter({ loadSettings, applyStudentPointDelta, logS
       );
       await replaceProgramChildren(connection, result.insertId, payload);
       await saveProgramSections(connection, result.insertId, payload.sections, replaceProgramChildren);
+      if (payload.status === 'open') await notifyStudentsOfEvent(connection, { type:'program', key: String(result.insertId), values:{program:payload.title} });
       await connection.commit();
       res.status(201).json({ program: (await loadPrograms({ pathId: result.insertId, includeAnswers: true }))[0] });
     } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }
@@ -216,7 +218,7 @@ export function createProgramRouter({ loadSettings, applyStudentPointDelta, logS
     try {
       const payload = normalizePayload(req.body);
       await connection.beginTransaction();
-      const [[current]] = await connection.query('SELECT parent_path_id AS parentPathId FROM learning_paths WHERE id = ? FOR UPDATE', [req.params.id]);
+      const [[current]] = await connection.query('SELECT parent_path_id AS parentPathId, status FROM learning_paths WHERE id = ? FOR UPDATE', [req.params.id]);
       if (current?.parentPathId) payload.allowMultipleAttempts = false;
       if (current?.parentPathId && payload.sections.length) throw fail('لا يمكن إضافة أقسام داخل القسم.');
       const [prior] = await connection.query('SELECT student_id FROM student_path_progress WHERE path_id = ? LIMIT 1', [req.params.id]);
@@ -228,6 +230,7 @@ export function createProgramRouter({ loadSettings, applyStudentPointDelta, logS
       if (!result.affectedRows) throw fail('المستوى غير موجود.', 404);
       await replaceProgramChildren(connection, req.params.id, payload);
       await saveProgramSections(connection, req.params.id, payload.sections, replaceProgramChildren);
+      if (current.status !== 'open' && payload.status === 'open' && !current.parentPathId) await notifyStudentsOfEvent(connection, {type:'program',key:String(req.params.id),values:{program:payload.title}});
       await connection.commit();
       res.json({ program: (await loadPrograms({ pathId: req.params.id, includeAnswers: true }))[0] });
     } catch (error) { await connection.rollback(); next(error); } finally { connection.release(); }

@@ -5,23 +5,24 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 /** Edit staff attendance source, grace period and location through the shared controls. */
-export default function StaffAttendanceSettings({ settings, setSettings }) {
+export default function StaffAttendanceSettings({ settings, setSettings, children }) {
   return (<SettingsGroup>
-    <h3 className="text-sm font-black text-primary">تحضير المعلمين والمقرئين والإدارة</h3>
-    <div className={`grid gap-3 ${settings.staffAttendanceSource === 'teacher' ? 'sm:grid-cols-2' : ''}`}>
+    <h3 className="text-sm font-black text-primary">التحضير</h3>
+    <div className="grid gap-3 sm:grid-cols-2">
       <div className="space-y-2">
-        <Label>تحضير المعلمين والمقرئين والإدارة عن طريق</Label>
+        <Label>تحضير الكادر عن طريق</Label>
         <Select
           value={settings.staffAttendanceSource || 'supervisor'}
           onValueChange={(value) => setSettings({ ...settings, staffAttendanceSource: value })}
         >
-          <SelectTrigger aria-label="تحضير المعلمين والمقرئين والإدارة عن طريق" className="h-11 border-primary/30 bg-card"><SelectValue /></SelectTrigger>
+          <SelectTrigger aria-label="تحضير الكادر عن طريق" className="h-11 border-primary/30 bg-card"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="supervisor">المشرف</SelectItem>
             <SelectItem value="teacher">حساباتهم</SelectItem>
           </SelectContent>
         </Select>
       </div>
+      {children}
       {settings.staffAttendanceSource === 'teacher' && (
         <div className="space-y-2">
           <Label htmlFor="staffAttendanceLateAfterAsrMinutes">وقت التأخير بعد صلاة العصر</Label>

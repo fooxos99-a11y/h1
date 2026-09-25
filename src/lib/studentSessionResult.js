@@ -6,3 +6,12 @@ export function studentSessionResult(task) {
   if (mistakes || warnings) return { label: [mistakes && `${mistakes} أخطاء`, warnings && `${warnings} تنبيهات`].filter(Boolean).join('، '), tone: 'mistakes' };
   return completed ? { label: 'متقن', tone: 'completed' } : { label: 'لم يكمل', tone: 'incomplete' };
 }
+
+export function studentSessionGroupResult(tasks) {
+  if (tasks.some(task => task.teacherCompleted == null)) return studentSessionResult({});
+  return studentSessionResult({
+    teacherCompleted: tasks.every(task => task.teacherCompleted === true || task.teacherCompleted === 1),
+    mistakeCount: tasks.reduce((sum, task) => sum + Math.max(0, Number(task.mistakeCount) || 0), 0),
+    warningCount: tasks.reduce((sum, task) => sum + Math.max(0, Number(task.warningCount) || 0), 0),
+  });
+}

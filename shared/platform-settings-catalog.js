@@ -61,7 +61,6 @@ export const platformSettingsGroups = [
       toggle('hideStudentReviewAmount', 'إخفاء المراجعة', true),
       toggle('hideStudentLinkAmount', 'إخفاء الربط', true),
       toggle('studentReviewAmountEditable', 'تعديل الطالب لمقدار المراجعة', true),
-      toggle('studentLinkAmountEditable', 'تعديل الطالب لمقدار الربط', true),
       toggle('studentTaskAmountEditable', 'السماح للطالب بتقليل مقدار حفظ اليوم', true),
       toggle('allowQuranCompensation', 'السماح بإكمال الحفظ المتأخر (التعويض)', true),
       number('quranCompensationPointsPercent', 'نسبة كيلومترات التعويض', 100, 0, 100),

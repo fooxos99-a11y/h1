@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { getRecitationDraft, saveRecitationDraft } from '@/services/offlineRecitationService';
 
 const normalizeCount = (value) => Math.min(1000, Math.max(0, Math.trunc(Number(value) || 0)));
+const EMPTY_ITEMS = Object.freeze([]);
 
 const CountField = ({ id, label, value, onChange }) => (
   <div className="space-y-2">
@@ -35,7 +36,7 @@ const CountOnlyEvaluationDialog = ({
   isSaving = false,
   submitLabel = 'إنهاء',
   children,
-  items = [],
+  items = EMPTY_ITEMS,
   supervisorId,
   studentId,
 }) => {

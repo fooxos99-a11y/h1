@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import useNativeSurfaceTheme from '@/hooks/useNativeSurfaceTheme';
 import { preloadMushafFonts } from '@/lib/quranFonts';
+import { resolveStudentMushafTarget } from '@/lib/studentMushafTarget';
 import {
   readStudentMushafState,
   saveStudentMushafBookmarks,
@@ -44,6 +45,8 @@ const StudentMushafSection = ({ studentId, onBack, initialTarget = null }) => {
   const [pageError, setPageError] = useState('');
   const [indexOpen, setIndexOpen] = useState(false);
   const [loadVersion, setLoadVersion] = useState(0);
+  const [indexLoadVersion, setIndexLoadVersion] = useState(0);
+  const [neighbors, setNeighbors] = useState({});
   const [theme, setTheme] = useState(() => (
     localStorage.getItem('madarij_student_mushaf_theme') === 'dark' ? 'dark' : 'light'
   ));
@@ -69,7 +72,7 @@ const StudentMushafSection = ({ studentId, onBack, initialTarget = null }) => {
       try {
         const localIndex = await getOfflineMushafIndex();
         if (!active) return;
-        const target = initialTarget || buildTodayMushafTarget(cachedToday);
+        const target = resolveStudentMushafTarget(initialTarget || buildTodayMushafTarget(cachedToday), localIndex);
         setIndex(localIndex);
         setTodayTarget(target);
         setBookmarks(stored.bookmarks);
@@ -79,7 +82,7 @@ const StudentMushafSection = ({ studentId, onBack, initialTarget = null }) => {
           void studentsApi.getStudentQuranToday(studentId).then(today => {
             if (!active) return;
             saveStudentMushafToday(studentId, today);
-            setTodayTarget(buildTodayMushafTarget(today));
+            setTodayTarget(resolveStudentMushafTarget(buildTodayMushafTarget(today), localIndex));
           }).catch(error => {
             if (active && !stored.today) toast({ title: 'تعذر تحديث حفظ اليوم', description: error.message, variant: 'destructive' });
           });
@@ -92,14 +95,13 @@ const StudentMushafSection = ({ studentId, onBack, initialTarget = null }) => {
     };
     initialize();
     return () => { active = false; };
-  }, [initialTarget, loadVersion, readerStorageId, studentId, toast]);
+  }, [initialTarget, indexLoadVersion, readerStorageId, studentId, toast]);
 
   useEffect(() => {
     if (!index) return;
     let active = true;
     const loadPage = async () => {
       setPageError('');
-      setFontReady(false);
       try {
         const nextPage = await getOfflineMushafPage(page);
         const fontLoaded = await preloadMushafFonts([page]);
@@ -109,6 +111,11 @@ const StudentMushafSection = ({ studentId, onBack, initialTarget = null }) => {
         saveStudentMushafLastPage(readerStorageId, page);
         preloadOfflineMushafPages(page, 10);
         preloadMushafFonts(getNearbyMushafPages(page, 10));
+        const nearby = await Promise.allSettled([page - 1, page + 1].filter((number) => number >= 1 && number <= MUSHAF_PAGE_COUNT).map(async (number) => {
+          const [data, ready] = await Promise.all([getOfflineMushafPage(number), preloadMushafFonts([number])]);
+          return [number, { data, ready }];
+        }));
+        if (active) setNeighbors(Object.fromEntries(nearby.filter((result) => result.status === 'fulfilled').map((result) => result.value)));
       } catch (error) {
         if (active) {
           setPageError(error.message);
@@ -129,14 +136,12 @@ const StudentMushafSection = ({ studentId, onBack, initialTarget = null }) => {
   )), [activeSurahNumber, displayedPage, index?.chapters]);
   const toolbarControlClass = theme === 'light'
     ? '!border-teal-200 !bg-teal-50 !text-[#06465c] shadow-none hover:border-slate-400 hover:bg-slate-100 hover:text-[#06465c]'
-    : '!border-slate-500 !bg-slate-700 !text-amber-100 shadow-none hover:border-white/30 hover:bg-white/10 hover:text-white';
+    : '!border-slate-500 !bg-slate-700 !text-white shadow-none hover:border-white/30 hover:bg-white/10 hover:text-white';
   const isBookmarked = bookmarks.includes(displayedPage);
 
   const goToPage = (nextPage) => {
     const boundedPage = clampMushafPage(nextPage);
     if (boundedPage === displayedPage) return;
-    setPageData(null);
-    setFontReady(false);
     setPage(boundedPage);
   };
 
@@ -152,13 +157,17 @@ const StudentMushafSection = ({ studentId, onBack, initialTarget = null }) => {
     toast({ title: isBookmarked ? 'أزيلت العلامة' : 'حُفظت علامة الصفحة' });
   };
 
+  const renderNeighbor = (number) => neighbors[number] && <MadaniMushafPage
+    page={neighbors[number].data} theme={theme} fontReady={neighbors[number].ready}
+    pageAction={<StudentMushafPageControls pageNumber={number} />} />;
+
   if (isInitializing) return <DashboardLoader className="min-h-[calc(100svh-8rem)]" />;
 
   if (!index) {
     return (
       <div className="flex min-h-[420px] flex-col items-center justify-center gap-3 text-center">
         <p className="font-bold text-muted-foreground">تعذر فتح حزمة المصحف المحلية.</p>
-        <Button type="button" variant="outline" onClick={() => setLoadVersion((value) => value + 1)} className="h-11"><RotateCcw className="h-4 w-4" />إعادة المحاولة</Button>
+        <Button type="button" variant="outline" onClick={() => setIndexLoadVersion((value) => value + 1)} className="h-11"><RotateCcw className="h-4 w-4" />إعادة المحاولة</Button>
       </div>
     );
   }
@@ -171,11 +180,13 @@ const StudentMushafSection = ({ studentId, onBack, initialTarget = null }) => {
             pageNumber={displayedPage}
             pageNumbers={MUSHAF_PAGES}
             theme={theme}
+            previousPage={renderNeighbor(displayedPage - 1)}
+            nextPage={renderNeighbor(displayedPage + 1)}
             pageAction={<StudentMushafPageControls pageNumber={displayedPage} />}
             onIndexChange={(nextIndex) => goToPage(nextIndex + 1)}
           >
             <MadaniMushafPage
-              key={page}
+              key={displayedPage}
               page={pageData}
               surahName={activeChapter?.name}
               theme={theme}
@@ -222,9 +233,14 @@ const StudentMushafSection = ({ studentId, onBack, initialTarget = null }) => {
 
       <div className="relative min-h-0 flex-1">
         {_resolveStudentMushafSection()}
+        {pageError && pageData && <div role="alert" className="absolute inset-x-4 bottom-4 z-40 rounded-xl bg-background p-3 text-center text-foreground shadow-lg">
+          <p>{pageError}</p><Button variant="outline" onClick={() => setLoadVersion((value) => value + 1)}>إعادة المحاولة</Button>
+        </div>}
       </div>
 
+
       <StudentMushafIndexDialog
+        theme={theme}
         open={indexOpen}
         onOpenChange={setIndexOpen}
         index={index}

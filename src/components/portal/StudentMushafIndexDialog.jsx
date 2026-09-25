@@ -1,3 +1,4 @@
+import './student-mushaf-index.css';
 import React, { useMemo, useRef, useState } from 'react';
 import { Bookmark, BookOpen, Hash, Layers, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,7 @@ const tabs = [
 const normalizeSearch = (value) => String(value || '').trim().toLowerCase();
 const normalizeDigits = (value) => String(value || '').replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
 
-const StudentMushafIndexDialog = ({ open, onOpenChange, index, currentPage, bookmarks = [], onSelectPage }) => {
+const StudentMushafIndexDialog = ({ open, onOpenChange, theme = 'light', index, currentPage, bookmarks = [], onSelectPage }) => {
   const [activeTab, setActiveTab] = useState('surahs');
   const [search, setSearch] = useState('');
   const previousFocus = useRef(null);
@@ -62,7 +63,8 @@ const StudentMushafIndexDialog = ({ open, onOpenChange, index, currentPage, book
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         overlayClassName="z-[100]"
-        className="z-[101] h-[min(42rem,calc(100svh-1rem))] max-w-2xl grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-3 overflow-hidden p-3 [font-family:var(--font-ui)] sm:h-[min(42rem,calc(100svh-2rem))] sm:p-5"
+        data-reader-theme={theme}
+        className="student-mushaf-index z-[101] h-[min(42rem,calc(100svh-1rem))] max-w-2xl grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-3 overflow-hidden p-3 [font-family:var(--font-ui)] sm:h-[min(42rem,calc(100svh-2rem))] sm:p-5"
         dir="rtl"
         aria-labelledby="student-mushaf-index-title"
         aria-describedby={undefined}
@@ -149,7 +151,7 @@ const StudentMushafIndexDialog = ({ open, onOpenChange, index, currentPage, book
           {activeTab === 'pages' && (
             <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
               {filteredPages.map((page) => (
-                <Button key={page} type="button" variant={Number(currentPage) === page ? 'default' : 'outline'} onClick={() => selectPage(page)} className="h-11 bg-card px-1">
+                <Button key={page} type="button" variant={Number(currentPage) === page ? 'default' : 'outline'} onClick={() => selectPage(page)} className="h-11 px-1">
                   {String(page)}
                 </Button>
               ))}

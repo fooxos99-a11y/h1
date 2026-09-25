@@ -1,4 +1,5 @@
 import sharp from 'sharp';
+import { DEFAULT_NEWS_TEXT_COLOR } from '../../shared/student-news.js';
 const invalid = message => Object.assign(new Error(message), { statusCode: 422 });
 function validTime(value) {
   if (!value) return true;
@@ -21,12 +22,14 @@ async function normalizeEntry(entry, saved) {
   if (!title || title.length > 80) throw invalid('اكتب الخبر بحد أقصى ٨٠ حرفًا.');
   if (entry.body != null && typeof entry.body !== 'string') throw invalid('نص الخبر غير صالح.');
   const body = (entry.body || '').trim();
+  const textColor = entry.textColor ?? DEFAULT_NEWS_TEXT_COLOR;
+  if (typeof textColor !== 'string' || !/^#[\da-f]{6}$/i.test(textColor)) throw invalid('اختر لونًا صالحًا لنص الخبر.');
   if (body.length > 2000) throw invalid('نص الخبر يجب ألا يتجاوز ٢٠٠٠ حرف.');
   if (!/^[a-zA-Z0-9-]{1,80}$/.test(entry.id || '')) throw invalid('معرّف الخبر غير صالح.');
   if (!Array.isArray(entry.committeeIds) || entry.committeeIds.some(id => !Number.isSafeInteger(id) || id < 1)) throw invalid('الحلقات غير صالحة.');
   const startsAt = String(entry.startsAt || ''), endsAt = String(entry.endsAt || '');
   if (!validTime(startsAt) || !validTime(endsAt) || (startsAt && endsAt && startsAt > endsAt)) throw invalid('وقت نهاية الخبر يجب أن يكون بعد بدايته.');
-  const result = { id: entry.id, title, body, startsAt, endsAt, committeeIds: [...new Set(entry.committeeIds)], enabled: entry.enabled !== false,
+  const result = { id: entry.id, title, body, textColor, startsAt, endsAt, committeeIds: [...new Set(entry.committeeIds)], enabled: entry.enabled !== false,
     image: await normalizeImage(entry.image, saved.map(item => item.image)) };
   const previous = saved.find(item => item.id === entry.id);
   if (previous?.legacyStudentIds?.length && entry.legacyStudentIds !== undefined) result.legacyStudentIds = previous.legacyStudentIds;

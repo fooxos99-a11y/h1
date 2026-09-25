@@ -125,8 +125,8 @@ const StoreSection = () => {
   };
 
   const saveProduct = async () => {
-    if (!form.name.trim() || !form.imageData || Number(form.pointsPrice) < 1) {
-      toast({ title: rewardUnits.text('أكمل اسم المنتج وصورته وسعره بالكيلومترات.'), variant: 'destructive' });
+    if (!form.name.trim() || Number(form.pointsPrice) < 1) {
+      toast({ title: rewardUnits.text('أكمل اسم المنتج وسعره بالكيلومترات.'), variant: 'destructive' });
       return;
     }
     setIsSaving(true);
@@ -281,7 +281,7 @@ const StoreSection = () => {
             </div>
             <label className="flex min-h-24 cursor-pointer items-center justify-center gap-3 rounded-xl border border-dashed border-primary/30 bg-background/60 p-4 text-sm font-black text-primary">
               {form.imageData ? <img src={form.imageData} alt="معاينة المنتج" className="aspect-square h-20 w-20 rounded-xl bg-background object-contain p-1" /> : <ImagePlus className="h-6 w-6" />}
-              <span>{form.imageData ? 'تغيير الصورة' : 'اختيار صورة المنتج'}</span>
+              <span>{form.imageData ? 'تغيير الصورة' : 'إضافة صورة (اختياري)'}</span>
               <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => readImage(event.target.files?.[0])} />
             </label>
             <SettingToggle label="إظهار المنتج للطلاب" checked={form.isActive} onCheckedChange={(checked) => setForm({ ...form, isActive: checked })} />

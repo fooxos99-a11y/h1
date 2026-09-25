@@ -1,3 +1,4 @@
+import { parseReviewExecution } from '../../shared/quran-review-cycle.js';
 // Review rotates through the available memorized pages, independently of the new plan's bounds.
 export function reviewStartFromHistory(rows, fallbackPage) {
   let cursor = Number(fallbackPage || 1);
@@ -19,16 +20,23 @@ export function reviewStartFromHistory(rows, fallbackPage) {
 }
 
 function reviewCursorAfterDay(day, cursor) {
+  const cycleRow = day.find(row => parseReviewExecution(row.reviewExecution));
+  const cycle = parseReviewExecution(cycleRow?.reviewExecution);
+  if (cycle) return Number(cycleRow.teacherCompleted != null && Number(cycleRow.teacherCompleted) !== 1
+    ? cycle.ranges[0].start.page : cycle.next.page);
   const ascending = [...day].sort((a, b) => Number(a.fromPage) - Number(b.fromPage));
   let start = ascending.findIndex((row) => Number(row.toPage) >= cursor);
   if (start < 0) start = 0;
   const ordered = [...ascending.slice(start), ...ascending.slice(0, start)];
-  const incomplete = ordered.find((row) => Number(row.teacherCompleted) !== 1
-    && (row.teacherCompleted != null || row.studentStatus !== 'done' || row.executionState === 'partial'));
+  const incomplete = ordered.find((row) => row.executionState === 'partial'
+    || (Number(row.teacherCompleted) !== 1
+      && (row.teacherCompleted != null || row.studentStatus !== 'done')));
   if (incomplete) {
-    cursor = Number(incomplete.teacherCompleted == null && incomplete.executionState === 'partial'
+    const acceptedPartial = incomplete.executionState === 'partial'
+      && (incomplete.teacherCompleted == null || Number(incomplete.teacherCompleted) === 1);
+    cursor = Number(acceptedPartial
       ? incomplete.actualToPage || incomplete.fromPage : incomplete.fromPage);
-    if (incomplete.teacherCompleted == null && incomplete.executionState === 'partial' && incomplete.actualCompletesPage) cursor += 1;
+    if (acceptedPartial && incomplete.actualCompletesPage) cursor += 1;
   } else {
     const last = ordered.at(-1);
     cursor = Number(last.toPage) + 1;
@@ -42,7 +50,7 @@ export async function getReviewStartForDate(connection, plan, date) {
       from_page AS fromPage, to_page AS toPage, actual_to_page AS actualToPage,
       actual_to_surah AS actualToSurah, actual_to_ayah AS actualToAyah,
       teacher_completed AS teacherCompleted, student_status AS studentStatus,
-      execution_state AS executionState, executed_at AS executedAt
+      review_execution_json AS reviewExecution, execution_state AS executionState, executed_at AS executedAt
      FROM student_quran_tasks
      WHERE plan_id = ? AND task_type = 'review' AND task_date < ?
      ORDER BY task_date, from_page, id`,
@@ -50,7 +58,8 @@ export async function getReviewStartForDate(connection, plan, date) {
   );
   const boundaries = new Map();
   for (const row of rows) {
-    if (row.executionState !== 'partial' || !row.actualToPage || row.teacherCompleted != null) continue;
+    if (row.executionState !== 'partial' || !row.actualToPage
+      || (row.teacherCompleted != null && Number(row.teacherCompleted) !== 1)) continue;
     if (!boundaries.has(Number(row.actualToPage))) {
       const [[boundary]] = await connection.query(
         `SELECT surah_number AS surah, ayah_number AS ayah FROM quran_ayah_pages

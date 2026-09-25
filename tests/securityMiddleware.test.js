@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import {
   createIpRateLimiter,
   enforceContentLength,
   requireBearerHeader,
   securityHeaders,
 } from '../server/middleware/security.js';
+
+test('isolated undo server disables framework disclosure before registering middleware', async () => {
+  const source = await readFile(new URL('./dashboardUndo.mysql.mjs', import.meta.url), 'utf8');
+  assert.match(source, /const app = express\(\);\s*app\.disable\('x-powered-by'\);\s*app\.use\(/);
+});
 
 function createResponse() {
   const headers = {};

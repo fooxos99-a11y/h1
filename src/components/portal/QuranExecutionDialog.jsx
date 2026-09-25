@@ -1,3 +1,4 @@
+import ReviewAmountSelector from '@/components/portal/ReviewAmountSelector';
 import { isStudentAmountHidden } from '../../../shared/student-amount-visibility.js';
 import { cleanQuranPreview as cleanPreview } from '../../../shared/quran-display-text.js';
 import { getRecitationStatusLabel } from '@/lib/recitationEvaluation';
@@ -55,7 +56,7 @@ const comparePosition = (first = {}, second = {}) => {
   return Number(first.ayah || 0) - Number(second.ayah || 0);
 };
 
-const inlineSelectTriggerClass = 'inline-flex h-auto !min-h-[44px] w-auto !min-w-[44px] border-0 !bg-transparent p-0 text-xs font-black text-primary !shadow-none ring-0 hover:text-primary/80 focus:ring-0 focus:ring-offset-0 [&>span]:flex-none [&>svg]:hidden';
+const inlineSelectTriggerClass = 'inline-flex h-auto !min-h-[44px] w-auto !min-w-0 border-0 !bg-transparent p-0 text-xs font-black text-primary !shadow-none ring-0 hover:text-primary/80 focus:ring-0 focus:ring-offset-0 [&>span]:flex-none [&>svg]:hidden';
 const inlinePageSelectContentClass = 'z-[140] !w-16 !min-w-16 max-h-56 border-primary/25 bg-background/95 text-xs font-black shadow-xl shadow-primary/10 backdrop-blur';
 const inlineTextSelectContentClass = 'z-[140] !w-auto !min-w-24 max-h-56 border-primary/25 bg-background/95 text-xs font-black shadow-xl shadow-primary/10 backdrop-blur';
 const inlineSelectItemClass = '!min-h-[44px] justify-center px-2 text-center text-xs font-black data-[state=checked]:bg-primary/15 data-[state=checked]:text-primary [&>span:last-child]:text-center';
@@ -81,6 +82,7 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [savingTypes, setSavingTypes] = useState({});
+  const [reviewSelection, setReviewSelection] = useState({ context: '', value: '' });
   const [endSelection, setEndSelection] = useState({ context: '', keys: {} });
   const requestSequence = useRef(0);
   const [actualRepeatCounts, setActualRepeatCounts] = useState({});
@@ -115,6 +117,9 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
     data?.plan?.dailyPages, data?.plan?.progress, data?.executionLimits, data?.tasks]);
   const selectedEndKeys = endSelection.context === selectionContext ? endSelection.keys : {};
 
+  const requestedReviewFaces = reviewSelection.context === selectionContext ? reviewSelection.value : data?.reviewCycle?.expectedFaces;
+  const reviewFaces = data?.studentReviewAmountEditable ? Math.ceil(Number(requestedReviewFaces)) : requestedReviewFaces;
+
   const getGroupBounds = (tasks = []) => {
     const followsPlanDirection = ['memorization', 'repeat'].includes(tasks[0]?.taskType);
     const planDirection = (
@@ -145,9 +150,12 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
     const { start, expectedEnd, direction } = getGroupBounds(group?.tasks || []);
     if (!start) return [];
     const allowedEnd = data?.executionLimits?.[group?.type]
-      || (['review', 'link'].includes(group?.type) ? expectedEnd : null);
-    return (data?.executionAyahs || [])
-      .filter((ayah) => compareQuranPositionInDirection(ayah, start, direction) >= 0
+      || (group?.type === 'link' || (group?.type === 'review' && !data?.executionAyahsByType?.review) ? expectedEnd : null);
+    return (data?.executionAyahsByType?.[group?.type] || data?.executionAyahs || [])
+      .filter((ayah) => (group?.type !== 'review' || data?.executionAyahsByType?.review || group.tasks.some((task) =>
+        compareQuranPositionInDirection(ayah, taskStart(task), direction) >= 0
+        && compareQuranPositionInDirection(ayah, taskEnd(task), direction) <= 0))
+        && compareQuranPositionInDirection(ayah, start, direction) >= 0
         && (!allowedEnd || compareQuranPositionInDirection(ayah, allowedEnd, direction) <= 0)
         && canStudentSetQuranTaskEnd(
           data,
@@ -205,6 +213,7 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
       await studentsApi.updateStudentQuranTasksExecution(studentId, {
         taskIds,
         status,
+        ...(type === 'review' && data?.reviewCycle ? { reviewFaces: Number(reviewFaces) } : {}),
         actualEnd,
         repeatCount: type === 'memorization'
           ? Number(actualRepeatCounts.memorization ?? data?.repeatCount ?? 1)
@@ -257,6 +266,10 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
     });
 
   const renderEndSelector = (group) => {
+    if (group.type === 'review' && data?.reviewCycle?.ayahs?.length && !isStudentAmountHidden(data, 'review')) {
+      return <ReviewAmountSelector cycle={data.reviewCycle} value={reviewFaces} editable={data.studentReviewAmountEditable}
+        onChange={value => setReviewSelection({ context: selectionContext, value })} />;
+    }
     if (isStudentAmountHidden(data, group.type)) return null;
     if (!group.tasks.length) {
       return <div className="mt-1 text-xs font-bold text-muted-foreground">{emptyTaskLabels[group.type]}</div>;
@@ -286,7 +299,7 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
         <div className="mt-2 flex flex-wrap items-center justify-start gap-2 text-xs font-black text-muted-foreground">
           <span>من {start?.page}</span>
           <span>إلى</span>
-          <Select value={String(selectedEnd.page)} onValueChange={selectPage}>
+          {pages.length > 1 ? <Select value={String(selectedEnd.page)} onValueChange={selectPage}>
             <SelectTrigger aria-label="صفحة النهاية" appearance="inline" className={inlineSelectTriggerClass}>
               <SelectValue />
             </SelectTrigger>
@@ -295,7 +308,7 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
                 <SelectItem key={page} value={String(page)} showIndicator={false} className={inlineSelectItemClass}>{page}</SelectItem>
               ))}
             </SelectContent>
-          </Select>
+          </Select> : <span>{selectedEnd.page}</span>}
         </div>
       );
     }
@@ -312,7 +325,7 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
       <div className="mt-2 flex flex-wrap items-center justify-start gap-2 text-xs font-black text-muted-foreground">
         <span>من {start?.surahName || `سورة ${start?.surah}`} آية {start?.ayah}</span>
         <span>إلى</span>
-        <Select value={String(selectedEnd.surah)} onValueChange={selectSurah}>
+        {surahs.length > 1 ? <Select value={String(selectedEnd.surah)} onValueChange={selectSurah}>
           <SelectTrigger aria-label="سورة النهاية" appearance="inline" className={inlineSelectTriggerClass}>
             <SelectValue />
           </SelectTrigger>
@@ -321,8 +334,8 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
               <SelectItem key={option.surah} value={String(option.surah)} showIndicator={false} className={inlineSelectItemClass}>{option.surahName || `سورة ${option.surah}`}</SelectItem>
             ))}
           </SelectContent>
-        </Select>
-        <Select value={String(selectedEnd.ayah)} onValueChange={(ayah) => {
+        </Select> : <span>{selectedEnd.surahName || `سورة ${selectedEnd.surah}`}</span>}
+        {ayahs.length > 1 ? <Select value={String(selectedEnd.ayah)} onValueChange={(ayah) => {
           const option = ayahs.find((item) => Number(item.ayah) === Number(ayah));
           if (option) setSelectedEndKey(group.type, option.key);
         }}>
@@ -334,7 +347,7 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
               <SelectItem key={option.key} value={String(option.ayah)} showIndicator={false} className={inlineSelectItemClass}>{option.ayah}</SelectItem>
             ))}
           </SelectContent>
-        </Select>
+        </Select> : <span>{selectedEnd.ayah}</span>}
       </div>
     );
   };
@@ -371,7 +384,7 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
             {group.type === 'memorization' && group.tasks.length > 0 && (
               <div className="me-auto mt-3 w-full max-w-xs space-y-1 text-right" dir="rtl">
                 <RepeatCountSelector
-                  editable={Boolean(data?.allowRepeatCountEditing)}
+                  editable={false}
                   max={Math.max(1, Number(data?.repeatCount || 1))}
                   value={actualRepeatCounts.memorization ?? Math.max(1, Number(data?.repeatCount || 1))}
                   onChange={(value) => setActualRepeatCounts((current) => ({
@@ -383,7 +396,7 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
                   <RepeatCountSelector
                     label="السماع"
                     pluralLabel
-                    editable={Boolean(data?.allowListeningCountEditing)}
+                    editable={false}
                     max={Math.max(1, Number(data?.listeningCount || 3))}
                     value={actualListeningCounts.memorization ?? Math.max(1, Number(data?.listeningCount || 3))}
                     onChange={(value) => setActualListeningCounts((current) => ({
@@ -428,7 +441,7 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
     if (!data) return isLoading ? <DashboardLoader /> : <Button variant="outline" onClick={() => load()}>إعادة المحاولة</Button>;
     return <div className="student-home-task-grid">{taskGroups.filter((group) => group.type !== 'repeat' && group.tasks.length).map((group) => {
       const completed = ['done', 'partial', 'extra'].includes(group.status);
-      return <div key={group.type} className="student-home-execution-task"><Button variant="ghost" className="student-home-task" aria-pressed={completed} aria-busy={Boolean(savingTypes[group.type])} disabled={isLoading || Boolean(savingTypes[group.type])} onClick={() => updateTasks(group, completed ? 'not_done' : 'done', completed ? null : getSelectedEnd(group))}><span>{group.label}{completed && <CheckCircle2 size={15} />}</span></Button><div className="student-home-execution-amount">{renderEndSelector(group)}</div></div>;
+      return <div key={group.type} className="student-home-execution-task"><Button variant="ghost" className="student-home-task" aria-pressed={completed} aria-busy={Boolean(savingTypes[group.type])} disabled={isLoading || Boolean(savingTypes[group.type])} onClick={() => updateTasks(group, completed ? 'not_done' : 'done', completed ? null : getSelectedEnd(group))}><span>{group.label}{completed && <CheckCircle2 size={15} />}</span><span aria-hidden="true" className="absolute inset-0" /></Button>{!completed && <div className="student-home-execution-amount">{renderEndSelector(group)}</div>}</div>;
     })}</div>;
   }
 
