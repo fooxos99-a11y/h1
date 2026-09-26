@@ -3117,6 +3117,7 @@ async function repairUnevaluatedRevisionTasks(
        ) AS hasAttempt
      FROM student_quran_tasks t
      WHERE t.plan_id = ? AND t.task_date = ? AND t.task_type IN ('review', 'link')
+       AND t.compensation_index = 0
      FOR UPDATE`,
     [planId, date],
   );
@@ -3285,13 +3286,13 @@ function buildTaskRangePreview(row, referenceMode = 'ayah', endPrefix = 'to') {
   }, referenceMode);
 }
 
-async function insertPlanTask(connection, { plan, date, type, fromPage, toPage, targetPages = null, bounds = null, progress = null }) {
+async function insertPlanTask(connection, { plan, date, type, fromPage, toPage, targetPages = null, bounds = null, progress = null, compensationIndex = 0 }) {
   if (!fromPage || !toPage) return;
   const direction = Number(fromPage) <= Number(toPage) ? 1 : -1;
   if (['memorization', 'repeat'].includes(type) && Number(fromPage) !== Number(toPage)) {
     const requestedFaces = roundQuranFaces(Number(targetPages || Math.abs(Number(toPage) - Number(fromPage)) + 1));
     const remainingFaces = requestedFaces;
-    await insertSplitPlanPages({ fromPage, direction, toPage, connection, bounds, remainingFaces, plan, date, type, progress });
+    await insertSplitPlanPages({ fromPage, direction, toPage, connection, bounds, remainingFaces, plan, date, type, progress, compensationIndex });
     return;
   }
   const hasBounds = bounds?.fromSurah && bounds?.fromAyah && bounds?.toSurah && bounds?.toAyah;
@@ -3317,8 +3318,8 @@ async function insertPlanTask(connection, { plan, date, type, fromPage, toPage, 
   await connection.query(
     `
     INSERT IGNORE INTO student_quran_tasks
-      (plan_id, student_id, task_date, task_type, track, from_page, to_page, from_surah, from_ayah, to_surah, to_ayah, target_pages, normal_to_page, normal_to_surah, normal_to_ayah, scheduled_to_page, scheduled_to_surah, scheduled_to_ayah)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (plan_id, student_id, task_date, task_type, track, compensation_index, from_page, to_page, from_surah, from_ayah, to_surah, to_ayah, target_pages, normal_to_page, normal_to_surah, normal_to_ayah, scheduled_to_page, scheduled_to_surah, scheduled_to_ayah)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       plan.id,
@@ -3326,6 +3327,7 @@ async function insertPlanTask(connection, { plan, date, type, fromPage, toPage, 
       date,
       type,
       normalizeQuranPlanTrack(plan.track),
+      Math.max(0, Math.trunc(Number(compensationIndex || 0))),
       fromPage,
       toPage,
       taskBounds.fromSurah,
@@ -3344,7 +3346,7 @@ async function insertPlanTask(connection, { plan, date, type, fromPage, toPage, 
 }
 
 /** Split a multi-page task into bounded page tasks while preserving its total face allowance. */
-async function insertSplitPlanPages({ fromPage, direction, toPage, connection, bounds, remainingFaces, plan, date, type, progress }) {
+async function insertSplitPlanPages({ fromPage, direction, toPage, connection, bounds, remainingFaces, plan, date, type, progress, compensationIndex = 0 }) {
   for (let page = Number(fromPage);direction > 0 ? page <= Number(toPage) : page >= Number(toPage);page += direction) {
     const pageBoundary = await getQuranPageBoundaryInDirection(connection, page, direction);
     if (!pageBoundary) continue;
@@ -3364,7 +3366,7 @@ async function insertSplitPlanPages({ fromPage, direction, toPage, connection, b
     await insertPlanTask(connection, {
       plan, date, type, fromPage: page, toPage: page, targetPages: pageTargetFaces, bounds: {
         ...pageBounds,
-      }, progress
+      }, progress, compensationIndex
     });
     remainingFaces = Math.max(0, roundQuranFaces(remainingFaces - pageTargetFaces));
   }
@@ -3412,6 +3414,7 @@ async function splitUnevaluatedPlanTasksByFace(connection, plan, date) {
       AND task_type IN ('memorization', 'repeat')
       AND from_page <> to_page
       AND teacher_completed IS NULL
+      AND compensation_index = 0
     FOR UPDATE
     `,
     [plan.id, date]
@@ -3515,6 +3518,7 @@ async function ensureRepeatTasksForMemorizationDate(connection, plan, date) {
     WHERE m.plan_id = ?
       AND m.task_date = ?
       AND m.task_type = 'memorization'
+      AND m.compensation_index = 0
       AND NOT EXISTS (
         SELECT 1
         FROM student_quran_tasks r
@@ -3565,6 +3569,7 @@ async function repairUnevaluatedMemorizationTaskRange(connection, plan, date, se
     WHERE t.plan_id = ?
       AND t.task_date = ?
       AND t.task_type IN ('memorization', 'repeat')
+      AND t.compensation_index = 0
     FOR UPDATE
     `,
     [plan.id, date],
@@ -3626,7 +3631,7 @@ async function ensureStudentPlanTasks(connection, plan, date, settings) {
   await splitUnevaluatedPlanTasksByFace(connection, plan, date);
 
   const [existing] = await connection.query(
-    'SELECT task_type AS taskType, target_pages AS targetPages FROM student_quran_tasks WHERE plan_id = ? AND task_date = ?',
+    'SELECT task_type AS taskType, target_pages AS targetPages FROM student_quran_tasks WHERE plan_id = ? AND task_date = ? AND compensation_index = 0',
     [plan.id, date]
   );
   const existingTypes = new Set(existing.map((task) => task.taskType));
@@ -3653,6 +3658,7 @@ async function ensureStudentPlanTasks(connection, plan, date, settings) {
     WHERE plan_id = ?
       AND task_date < ?
       AND task_type IN ('memorization', 'review', 'link')
+      AND compensation_index = 0
       AND (
         student_status = 'pending'
         OR (student_status = 'not_done' AND COALESCE(execution_state, '') <> 'partial')
@@ -3706,11 +3712,16 @@ async function ensureStudentPlanTasks(connection, plan, date, settings) {
     beforeDate: addUtcDays(date, 1),
   });
   const availablePages = await getFullyMemorizedPages(connection, memorizedRangesForReview, 1, 604);
-  const memorizedBeforeToday = await getStudentMemorizedRanges(connection, plan.studentId, { beforeDate: date });
-  const linkStart = await getNextUnmemorizedPlanPosition(connection, plan, { beforeDate: date });
+  // Today's link ends with today's memorization once it is executed, so the
+  // newly memorized ayahs are linked in the same session as one continuous range.
+  // Until then it is the portion immediately before today's memorization.
+  const memorizedThroughToday = memorizedRangesForReview;
+  const linkStart = await getNextUnmemorizedPlanPosition(connection, plan, { beforeDate: addUtcDays(date, 1) })
+    || await getAdjacentQuranAyahInDirection(connection, planEnd, direction)
+    || { ...planEnd, ayah: Number(planEnd.ayah) + 1 };
   const exactLinkRanges = await buildExactLinkRanges(
     connection,
-    memorizedBeforeToday,
+    memorizedThroughToday,
     linkStart,
     direction,
     plan.linkPages || 10,
@@ -3743,6 +3754,189 @@ async function ensureStudentPlanTasks(connection, plan, date, settings) {
   await createMissingLinkTasks({ exactLinkRanges, existingTypes, settings, date, connection, plan });
 
   await createMissingReviewTasks({ existingTypes, reviewEnabledToday, pickedReview, connection, plan, date });
+}
+
+const ACCEPTED_QURAN_TASK_SQL = "(teacher_completed = 1 OR (teacher_completed IS NULL AND student_status = 'done'))";
+
+/** Link or review days due since the plan started that neither the day's task nor a compensation covered. */
+async function getOwedRevisionCompensationDays(connection, plan, date, settings, taskType) {
+  if (!settings?.allowQuranCompensation || !plan?.startDate || plan.status !== 'active') return 0;
+  if (taskType === 'link' && Number(plan.linkPages || 0) <= 0) return 0;
+  // Count only from the first day this task type existed, so a plan with nothing
+  // memorized yet does not owe link or review for its opening days.
+  const [[first]] = await connection.query(
+    `SELECT DATE_FORMAT(MIN(task_date), '%Y-%m-%d') AS firstDate FROM student_quran_tasks
+     WHERE plan_id = ? AND task_type = ? AND compensation_index = 0 AND task_date < ?`,
+    [plan.id, taskType, date],
+  );
+  const fromDate = first?.firstDate && first.firstDate > plan.startDate ? first.firstDate : plan.startDate;
+  const endDate = addUtcDays(date, -1);
+  if (!first?.firstDate || fromDate > endDate) return 0;
+  const scheduleDays = new Set(getStoredPlanScheduleDays(plan, settings));
+  const reviewDays = taskType === 'review' && Number(plan.reviewSplitWeekly || 0)
+    ? new Set(getPlanReviewDays(plan, settings))
+    : null;
+  const dueDates = new Set();
+  for (let day = fromDate; day <= endDate; day = addUtcDays(day, 1)) {
+    const weekDay = getWeekDayFromDate(day);
+    if (!scheduleDays.has(weekDay) || (reviewDays && !reviewDays.has(weekDay))) continue;
+    if (!canCreateQuranTaskOnDate(settings, day, taskType)) continue;
+    dueDates.add(day);
+  }
+  if (!dueDates.size) return 0;
+  const [rows] = await connection.query(
+    `SELECT DATE_FORMAT(task_date, '%Y-%m-%d') AS taskDate, compensation_index AS compensationIndex,
+       MAX(compensation_days) AS compensationDays
+     FROM student_quran_tasks
+     WHERE plan_id = ? AND task_type = ? AND task_date >= ? AND task_date <= ? AND ${ACCEPTED_QURAN_TASK_SQL}
+     GROUP BY task_date, compensation_index`,
+    [plan.id, taskType, fromDate, date],
+  );
+  let covered = 0;
+  for (const row of rows) {
+    if (Number(row.compensationIndex) > 0) covered += 1;
+    else {
+      if (dueDates.has(row.taskDate)) covered += 1;
+      covered += Number(row.compensationDays || 0);
+    }
+  }
+  return Math.max(0, dueDates.size - covered);
+}
+
+function quranTaskEnd(row) {
+  return {
+    page: Number(row.actualToPage || row.toPage),
+    surah: Number(row.actualToSurah || row.toSurah),
+    ayah: Number(row.actualToAyah || row.toAyah),
+  };
+}
+
+async function loadCompensationDayRows(connection, plan, date, taskType) {
+  const [rows] = await connection.query(
+    `SELECT id, compensation_index AS compensationIndex, track,
+       from_page AS fromPage, from_surah AS fromSurah, from_ayah AS fromAyah,
+       to_page AS toPage, to_surah AS toSurah, to_ayah AS toAyah,
+       actual_to_page AS actualToPage, actual_to_surah AS actualToSurah, actual_to_ayah AS actualToAyah,
+       target_pages AS targetPages, student_status AS studentStatus, teacher_completed AS teacherCompleted,
+       evaluated_at AS evaluatedAt, compensation_days AS compensationDays
+     FROM student_quran_tasks
+     WHERE plan_id = ? AND task_date = ? AND task_type = ?
+     ORDER BY compensation_index ASC, id ASC`,
+    [plan.id, date, taskType],
+  );
+  return rows;
+}
+
+const isAcceptedQuranTaskRow = (row) => Number(row.teacherCompleted) === 1
+  || (row.teacherCompleted == null && row.studentStatus === 'done');
+
+/** Group compensation rows by their index; a group is pending until the teacher accepts all of it. */
+function summarizeCompensationGroups(rows) {
+  const groups = new Map();
+  for (const row of rows.filter((item) => Number(item.compensationIndex) > 0)) {
+    const key = Number(row.compensationIndex);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  return [...groups.entries()].map(([index, groupRows]) => ({
+    index,
+    rows: groupRows,
+    accepted: groupRows.every((row) => Number(row.teacherCompleted) === 1),
+  }));
+}
+
+/** Memorization compensation: consecutive daily amounts after today's recitation up to the plan schedule. */
+async function getMemorizationCompensationState(connection, plan, date, settings) {
+  const rows = await loadCompensationDayRows(connection, plan, date, 'memorization');
+  const regular = rows.filter((row) => Number(row.compensationIndex) === 0);
+  const groups = summarizeCompensationGroups(rows);
+  const state = { items: [], done: groups.filter((group) => group.accepted).length, pending: groups.find((group) => !group.accepted) || null, blocked: null, nextIndex: Math.max(0, ...groups.map((group) => group.index)) + 1 };
+  if (!settings?.allowQuranCompensation || !plan?.startDate) return state;
+  if (!regular.length) return { ...state, blocked: 'لا يوجد حفظ لهذا اليوم.' };
+  const planStart = { page: Number(plan.startPage), surah: Number(plan.startSurah), ayah: Number(plan.startAyah) };
+  const planEnd = { page: Number(plan.endPage), surah: Number(plan.endSurah), ayah: Number(plan.endAyah) };
+  const direction = getQuranRangeDirection(planStart, planEnd);
+  const byStart = [...regular].sort((a, b) => compareQuranPositionInDirection(taskStartPosition(a), taskStartPosition(b), direction));
+  const context = await getPlanProgressContext(connection, plan, date, settings, taskStartPosition(byStart[0]));
+  const scheduledEnd = context?.scheduledEnd;
+  if (!scheduledEnd) return state;
+  const lastEnd = rows.map(quranTaskEnd)
+    .sort((a, b) => compareQuranPositionInDirection(a, b, direction)).at(-1);
+  const dailyFaces = Math.max(0.25, Number(plan.dailyPages || 1));
+  let cursor = await getAdjacentQuranAyahInDirection(connection, lastEnd, direction);
+  while (cursor && compareQuranPositionInDirection(cursor, scheduledEnd, direction) <= 0 && state.items.length < 60) {
+    const range = await buildQuranRangeByFaceTarget(connection, cursor, scheduledEnd, dailyFaces);
+    if (!range?.end) break;
+    state.items.push({
+      fromPage: cursor.page, fromSurah: cursor.surah, fromAyah: cursor.ayah,
+      toPage: range.end.page, toSurah: range.end.surah, toAyah: range.end.ayah,
+      targetPages: roundQuranFaces(await calculateQuranRangeFaces(connection, {
+        startPage: cursor.page, startSurah: cursor.surah, startAyah: cursor.ayah,
+        endPage: range.end.page, endSurah: range.end.surah, endAyah: range.end.ayah,
+      }) || dailyFaces),
+    });
+    cursor = await getAdjacentQuranAyahInDirection(connection, range.end, direction);
+  }
+  if (!regular.every((row) => Number(row.teacherCompleted) === 1)) {
+    state.blocked = 'سمّع حفظ اليوم أولاً، ثم يبدأ التعويض بعده.';
+  }
+  return state;
+}
+
+/** Link compensation: the day's link recited again once per missed link day. */
+async function getLinkCompensationState(connection, plan, date, settings) {
+  const rows = await loadCompensationDayRows(connection, plan, date, 'link');
+  const regular = rows.filter((row) => Number(row.compensationIndex) === 0);
+  const groups = summarizeCompensationGroups(rows);
+  const owed = await getOwedRevisionCompensationDays(connection, plan, date, settings, 'link');
+  const state = { owed, ranges: regular, done: groups.filter((group) => group.accepted).length, pending: groups.find((group) => !group.accepted) || null, blocked: null, nextIndex: Math.max(0, ...groups.map((group) => group.index)) + 1 };
+  if (!owed) return state;
+  if (!regular.length) return { ...state, blocked: 'لا يوجد ربط لهذا اليوم.' };
+  if (!regular.every((row) => Number(row.teacherCompleted) === 1)) {
+    state.blocked = 'سمّع ربط اليوم أولاً، ثم يكرره للتعويض.';
+  }
+  return state;
+}
+
+/** Review pages still free for a compensation today: memorized, not today's link, not already reviewed today. */
+async function getReviewCompensationPages(connection, plan, date, rows) {
+  const memorized = await getStudentMemorizedRanges(connection, plan.studentId, { beforeDate: addUtcDays(date, 1) });
+  const available = await getFullyMemorizedPages(connection, memorized, 1, 604);
+  const [links] = await connection.query(
+    "SELECT from_page AS fromPage, to_page AS toPage FROM student_quran_tasks WHERE plan_id = ? AND task_date = ? AND task_type IN ('link', 'review')",
+    [plan.id, date],
+  );
+  const taken = new Set(links.flatMap((row) => Array.from(
+    { length: Math.abs(Number(row.toPage) - Number(row.fromPage)) + 1 },
+    (_, index) => Math.min(Number(row.fromPage), Number(row.toPage)) + index,
+  )));
+  const free = new Set([...available].map(Number).filter((page) => !taken.has(page)));
+  // Continue the cycle right after the last review recited today, or from the review cursor.
+  const lastToday = rows.length ? Math.max(...rows.map((row) => Number(row.toPage))) + 1 : null;
+  const start = lastToday || await getReviewStartForDate(connection, plan, date);
+  const regular = rows.filter((row) => Number(row.compensationIndex) === 0);
+  const dailyPages = regular.length
+    ? new Set(regular.flatMap((row) => Array.from(
+      { length: Number(row.toPage) - Number(row.fromPage) + 1 }, (_, index) => Number(row.fromPage) + index,
+    ))).size
+    : Number(plan.reviewPages || 20);
+  return pickAvailablePages(free, start, Math.max(1, dailyPages)).pages;
+}
+
+/** Review compensation: one more day's review amount per missed review day, continuing the cycle. */
+async function getReviewCompensationState(connection, plan, date, settings) {
+  const rows = await loadCompensationDayRows(connection, plan, date, 'review');
+  const regular = rows.filter((row) => Number(row.compensationIndex) === 0);
+  const groups = summarizeCompensationGroups(rows);
+  const owed = await getOwedRevisionCompensationDays(connection, plan, date, settings, 'review');
+  const state = { owed, pages: [], done: groups.filter((group) => group.accepted).length, pending: groups.find((group) => !group.accepted) || null, blocked: null, nextIndex: Math.max(0, ...groups.map((group) => group.index)) + 1 };
+  if (!owed) return state;
+  if (regular.length && !regular.every((row) => Number(row.teacherCompleted) === 1)) {
+    state.blocked = 'سمّع مراجعة اليوم أولاً، ثم يكمل التعويض بعدها.';
+  }
+  if (!state.pending) state.pages = await getReviewCompensationPages(connection, plan, date, rows);
+  if (!state.pending && !state.pages.length) state.blocked = state.blocked || 'لا توجد صفحات محفوظة متاحة لتعويض المراجعة.';
+  return state;
 }
 
 /** Resume immediately after carried work while skipping only fully memorized pages. */
@@ -3810,7 +4004,7 @@ async function refreshPendingMemorizationProgress({ existingTypes, connection, p
     const [[currentMemorization]] = await connection.query(
       `SELECT from_page AS fromPage, from_surah AS fromSurah, from_ayah AS fromAyah
        FROM student_quran_tasks
-       WHERE plan_id = ? AND task_date = ? AND task_type = 'memorization'
+       WHERE plan_id = ? AND task_date = ? AND task_type = 'memorization' AND compensation_index = 0
        ORDER BY id ASC LIMIT 1`,
       [plan.id, date]
     );
@@ -3825,7 +4019,7 @@ async function refreshPendingMemorizationProgress({ existingTypes, connection, p
         `UPDATE student_quran_tasks
          SET normal_to_page = ?, normal_to_surah = ?, normal_to_ayah = ?,
              scheduled_to_page = ?, scheduled_to_surah = ?, scheduled_to_ayah = ?
-         WHERE plan_id = ? AND task_date = ? AND task_type = 'memorization'
+         WHERE plan_id = ? AND task_date = ? AND task_type = 'memorization' AND compensation_index = 0
            AND student_status <> 'done' AND teacher_completed IS NULL
            AND executed_at IS NULL AND evaluated_at IS NULL`,
         [
@@ -4678,6 +4872,8 @@ function normalizeTaskRow(row, referenceMode = 'ayah') {
     taskType: row.taskType,
     track: normalizeQuranPlanTrack(row.track),
     trackLabel: QURAN_PLAN_TRACK_LABELS[normalizeQuranPlanTrack(row.track)],
+    compensationIndex: Number(row.compensationIndex || 0),
+    compensationDays: Number(row.compensationDays || 0),
     fromPage: row.fromPage,
     toPage: row.toPage,
     fromSurah: row.fromSurah,
@@ -10009,6 +10205,7 @@ app.get('/api/students/:id/quran-today', async (req, res, next) => {
         DATE_FORMAT(t.task_date, '%Y-%m-%d') AS taskDate,
         t.task_type AS taskType,
         t.track AS track,
+        t.compensation_index AS compensationIndex,
         t.from_page AS fromPage,
         t.to_page AS toPage,
         t.from_surah AS fromSurah,
@@ -11670,6 +11867,7 @@ const executeStudentQuranTasks = async (req, res, next) => {
       WHERE t.id IN (${placeholders})
         AND t.student_id = ?
         AND t.teacher_completed IS NULL
+        AND t.compensation_index = 0
       FOR UPDATE
       `,
       [...taskIds, studentId]
@@ -12706,6 +12904,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
         DATE_FORMAT(t.task_date, '%Y-%m-%d') AS taskDate,
         t.task_type AS taskType,
         t.track AS track,
+        t.compensation_index AS compensationIndex,
         t.from_page AS fromPage,
         t.to_page AS toPage,
         t.from_surah AS fromSurah,
@@ -12849,6 +13048,20 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
         )
         AND ${nazemUnrecordedTaskFilter}
         AND ${nazemTeacherActionFilter}
+        AND (t.compensation_index = 0 OR t.task_date = '${date}')
+        ${settings.allowQuranCompensation ? `AND (
+          -- With compensation on, missed review days are added to the newest review.
+          t.task_type <> 'review'
+          OR ${buildNazemLateTaskExistsSql('t')}
+          OR NOT EXISTS (
+            SELECT 1 FROM student_quran_tasks newer_review
+            WHERE newer_review.plan_id = t.plan_id
+              AND newer_review.task_type = 'review'
+              AND newer_review.compensation_index = 0
+              AND newer_review.task_date > t.task_date
+              AND newer_review.task_date <= '${taskEndDate}'
+          )
+        )` : ''}
         AND NOT EXISTS (
           SELECT 1
           FROM student_quran_recitation_attempts same_day_attempt
@@ -12857,6 +13070,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
             AND attempted_task.task_type = t.task_type
             AND (t.task_type <> 'link' OR attempted_task.task_date = t.task_date)
             AND attempted_task.track = t.track
+            AND attempted_task.compensation_index = t.compensation_index
             AND attempted_task.from_page = t.from_page
             AND attempted_task.to_page = t.to_page
             AND COALESCE(attempted_task.from_surah, 0) = COALESCE(t.from_surah, 0)
@@ -12884,9 +13098,25 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
             AND COALESCE(newer.to_surah, 0) = COALESCE(t.to_surah, 0)
             AND COALESCE(newer.to_ayah, 0) = COALESCE(t.to_ayah, 0)
         )
+        AND (
+          -- A later day's link supersedes an unevaluated older one: the link always
+          -- ends at the latest memorization, so only the newest link is recited.
+          (t.task_type <> 'link' AND t.compensation_index = 0)
+          OR ${buildNazemLateTaskExistsSql('t')}
+          OR NOT EXISTS (
+            SELECT 1
+            FROM student_quran_tasks newer_link
+            WHERE newer_link.plan_id = t.plan_id
+              AND newer_link.task_type = 'link'
+              AND newer_link.compensation_index = 0
+              AND newer_link.track = t.track
+              AND newer_link.task_date > t.task_date
+              AND newer_link.task_date <= ?
+          )
+        )
       ORDER BY c.name ASC, s.name ASC, t.task_date ASC, t.from_page ASC
       `,
-      [supervisorId, date, taskEndDate, date, date, taskEndDate]
+      [supervisorId, date, taskEndDate, date, date, taskEndDate, taskEndDate]
     );
     const visibleStudentIds = new Set(students.map(student => Number(student.id)));
     const allRows = candidateRows.filter((row) => {
@@ -13019,7 +13249,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
             { page: Number(row.planStartPage), surah: Number(row.planStartSurah), ayah: Number(row.planStartAyah) },
             { page: Number(row.planEndPage), surah: Number(row.planEndSurah), ayah: Number(row.planEndAyah) },
           ),
-        ...(executionOptionsByGroup.get(`${row.planId}:${row.taskDate}:${row.taskType}:${row.track}`)),
+        ...(executionOptionsByGroup.get(`${row.planId}:${row.taskDate}:${row.taskType}:${row.track}:${Number(row.compensationIndex || 0)}`)),
         ayahMarkCount: new Set((marksByTask.get(Number(row.id)) || []).map(quranTaskMarkVerseKey)).size,
         ayahMarks: marksByTask.get(Number(row.id)) || [],
       });
@@ -13165,6 +13395,7 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
        JOIN students s ON s.id = t.student_id
        JOIN supervisor_committees sc ON sc.committee_id = s.committee_id AND sc.supervisor_id = ?
        WHERE t.id = ? AND t.task_type IN ('memorization','review') AND t.task_date <= ?
+         AND t.compensation_index = 0
          AND EXISTS (
            SELECT 1 FROM attendance_records attendance
            WHERE attendance.student_id = t.student_id
@@ -13188,6 +13419,7 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
         target_pages AS targetPages
        FROM student_quran_tasks
        WHERE plan_id = ? AND student_id = ? AND ${taskScopeSql} AND task_type = ? AND track = ?
+         AND compensation_index = 0
          AND NOT EXISTS (
            SELECT 1
            FROM student_quran_tasks newer
@@ -13432,6 +13664,7 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
         DATE_FORMAT(t.task_date, '%Y-%m-%d') AS taskDate,
         t.task_type AS taskType,
         t.track AS track,
+        t.compensation_index AS compensationIndex,
         t.from_page AS fromPage,
         t.to_page AS toPage,
         t.from_surah AS fromSurah,
@@ -13680,9 +13913,9 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
           to_page AS toPage, to_surah AS toSurah, to_ayah AS toAyah,
           actual_to_page AS actualToPage, actual_to_surah AS actualToSurah, actual_to_ayah AS actualToAyah
          FROM student_quran_tasks
-         WHERE plan_id = ? AND task_date = ? AND task_type = ? AND track = ?
+         WHERE plan_id = ? AND task_date = ? AND task_type = ? AND track = ? AND compensation_index = ?
          FOR UPDATE`,
-        [task.planId, task.taskDate, task.taskType, task.track],
+        [task.planId, task.taskDate, task.taskType, task.track, Number(task.compensationIndex || 0)],
       );
       const groupEvaluated = groupTasks.length > 0 && groupTasks.every((row) => row.evaluatedAt);
       const groupPassed = groupEvaluated && groupTasks.every((row) => Number(row.teacherCompleted) === 1);
@@ -13766,6 +13999,199 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
 };
 
 app.post('/api/supervisors/:id/quran-evaluation/:taskId', rateSupervisorQuranTaskHandler);
+
+async function loadSurahNames(connection) {
+  const [rows] = await connection.query('SELECT surah_number AS surah, name_arabic AS name FROM quran_surahs');
+  return new Map(rows.map((row) => [Number(row.surah), row.name]));
+}
+
+function reviewPagesLabel(pages) {
+  return pagesToRanges(pages).map((range) => (range.fromPage === range.toPage
+    ? `صفحة ${range.fromPage}`
+    : `الصفحات ${range.fromPage} إلى ${range.toPage}`)).join('، ثم ');
+}
+
+function compensationRangeLabel(range, names) {
+  return formatTaskPreview({
+    ...range,
+    fromSurahName: names.get(Number(range.fromSurah)) || '',
+    toSurahName: names.get(Number(range.toSurah)) || '',
+  }, 'ayah');
+}
+
+/** Resolve the session day and the supervisor's own student for a compensation request. */
+async function resolveCompensationRequest(req, connection) {
+  const supervisorId = Number(req.params.id || 0);
+  if (!isOwnRecitationAccount(req, supervisorId)) {
+    return { status: 403, message: 'جلسات التسميع متاحة لصاحب الحساب فقط.' };
+  }
+  const settings = await loadSettings();
+  if (!settings.allowQuranCompensation) return { status: 422, message: 'التعويض غير مفعل في الإعدادات.' };
+  const studentId = Number(req.body?.studentId || req.query?.studentId || 0);
+  const now = getSaudiDateTimeParts();
+  const requestedDate = resolveRecitationRequestDate(req.body?.date || req.query?.date, now.date);
+  if (!isRecitationSessionDay(requestedDate, settings)) {
+    return { status: 422, message: 'التعويض متاح في أيام جلسات التسميع فقط.' };
+  }
+  const { sessionDate: date } = getRecitationEvaluationWindow(requestedDate, settings, now.date);
+  const [[student]] = await connection.query(
+    `SELECT s.id FROM students s
+     JOIN supervisor_committees sc ON sc.committee_id = s.committee_id AND sc.supervisor_id = ?
+     WHERE s.id = ? LIMIT 1`,
+    [supervisorId, studentId],
+  );
+  if (!student) return { status: 404, message: 'الطالب غير موجود ضمن حلقاتك.' };
+  if (await isStudentPlanManagedByNazem(connection, studentId)) {
+    return { status: 422, message: 'التعويض غير متاح لخطط ناظم.' };
+  }
+  const plan = await getActivePlanForStudent(connection, studentId);
+  if (!plan) return { status: 404, message: 'لا توجد خطة نشطة لهذا الطالب.' };
+  return { supervisorId, settings, studentId, date, plan };
+}
+
+async function buildCompensationSummary(connection, { plan, date, settings }) {
+  const names = await loadSurahNames(connection);
+  const memorization = await getMemorizationCompensationState(connection, plan, date, settings);
+  const link = await getLinkCompensationState(connection, plan, date, settings);
+  const review = await getReviewCompensationState(connection, plan, date, settings);
+  const pendingIds = (group) => (group ? group.rows.map((row) => Number(row.id)) : []);
+  const linkLabel = link.ranges.map((range) => compensationRangeLabel(range, names)).join('، ثم ');
+  return {
+    date,
+    memorization: {
+      owed: memorization.items.length + (memorization.pending ? 1 : 0),
+      done: memorization.done,
+      blocked: memorization.blocked,
+      pendingTaskIds: pendingIds(memorization.pending),
+      pendingLabel: memorization.pending ? compensationRangeLabel({
+        ...memorization.pending.rows[0],
+        toPage: memorization.pending.rows.at(-1).toPage,
+        toSurah: memorization.pending.rows.at(-1).toSurah,
+        toAyah: memorization.pending.rows.at(-1).toAyah,
+      }, names) : '',
+      items: memorization.items.map((item) => ({ label: compensationRangeLabel(item, names), faces: item.targetPages })),
+    },
+    link: {
+      owed: link.owed,
+      done: link.done,
+      blocked: link.blocked,
+      pendingTaskIds: pendingIds(link.pending),
+      label: linkLabel,
+    },
+    review: {
+      owed: review.owed,
+      done: review.done,
+      blocked: review.blocked,
+      pendingTaskIds: pendingIds(review.pending),
+      label: reviewPagesLabel(review.pending
+        ? review.pending.rows.flatMap((row) => Array.from(
+          { length: Number(row.toPage) - Number(row.fromPage) + 1 }, (_, index) => Number(row.fromPage) + index,
+        ))
+        : review.pages),
+    },
+  };
+}
+
+app.get('/api/supervisors/:id/quran-compensations', async (req, res, next) => {
+  const connection = await db().getConnection();
+  try {
+    const request = await resolveCompensationRequest(req, connection);
+    if (request.status) return res.status(request.status).json({ message: request.message });
+    res.json(await buildCompensationSummary(connection, request));
+  } catch (error) {
+    next(error);
+  } finally {
+    connection.release();
+  }
+});
+
+/** Create the next compensation recitation as real tasks, so it is recited and evaluated like any amount. */
+app.post('/api/supervisors/:id/quran-compensations', async (req, res, next) => {
+  const connection = await db().getConnection();
+  try {
+    const request = await resolveCompensationRequest(req, connection);
+    if (request.status) return res.status(request.status).json({ message: request.message });
+    const { settings, studentId, date, plan } = request;
+    const taskType = String(req.body?.taskType || '');
+    if (!['memorization', 'link', 'review'].includes(taskType)) {
+      return res.status(422).json({ message: 'نوع التعويض غير صحيح.' });
+    }
+    const [[present]] = await connection.query(
+      "SELECT 1 AS ok FROM attendance_records WHERE student_id = ? AND record_date = ? AND status IN ('present', 'late') LIMIT 1",
+      [studentId, date],
+    );
+    if (!present) return res.status(422).json({ message: 'سجّل حضور الطالب أولاً.' });
+    await connection.beginTransaction();
+    await connection.query('SELECT id FROM student_quran_plans WHERE id = ? FOR UPDATE', [plan.id]);
+    const stateLoaders = {
+      memorization: getMemorizationCompensationState,
+      link: getLinkCompensationState,
+      review: getReviewCompensationState,
+    };
+    const state = await stateLoaders[taskType](connection, plan, date, settings);
+    if (state.pending) {
+      await connection.commit();
+      return res.json({ taskIds: state.pending.rows.map((row) => Number(row.id)), existing: true });
+    }
+    if (state.blocked) {
+      await connection.rollback();
+      return res.status(409).json({ message: state.blocked });
+    }
+    const index = state.nextIndex;
+    if (taskType === 'memorization') {
+      const item = state.items[0];
+      if (!item) {
+        await connection.rollback();
+        return res.status(422).json({ message: 'لا يوجد تعويض حفظ مستحق.' });
+      }
+      await insertPlanTask(connection, {
+        plan, date, type: 'memorization', fromPage: item.fromPage, toPage: item.toPage, targetPages: item.targetPages,
+        bounds: { fromSurah: item.fromSurah, fromAyah: item.fromAyah, toSurah: item.toSurah, toAyah: item.toAyah },
+        compensationIndex: index,
+      });
+    } else if (taskType === 'review') {
+      if (!state.owed || !state.pages.length) {
+        await connection.rollback();
+        return res.status(422).json({ message: 'لا يوجد تعويض مراجعة مستحق.' });
+      }
+      for (const range of pagesToRanges(state.pages)) {
+        await insertPlanTask(connection, {
+          plan, date, type: 'review', fromPage: range.fromPage, toPage: range.toPage,
+          targetPages: range.toPage - range.fromPage + 1, compensationIndex: index,
+        });
+      }
+    } else {
+      if (!state.owed) {
+        await connection.rollback();
+        return res.status(422).json({ message: 'لا يوجد تعويض ربط مستحق.' });
+      }
+      for (const range of state.ranges) {
+        await insertPlanTask(connection, {
+          plan: { ...plan, track: range.track }, date, type: 'link', fromPage: range.fromPage, toPage: range.toPage,
+          targetPages: range.targetPages,
+          bounds: { fromSurah: range.fromSurah, fromAyah: range.fromAyah, toSurah: range.toSurah, toAyah: range.toAyah },
+          compensationIndex: index,
+        });
+      }
+    }
+    const [created] = await connection.query(
+      `SELECT id FROM student_quran_tasks
+       WHERE plan_id = ? AND task_date = ? AND task_type = ? AND compensation_index = ? ORDER BY id`,
+      [plan.id, date, taskType, index],
+    );
+    if (!created.length) {
+      await connection.rollback();
+      return res.status(409).json({ message: 'تعذر تجهيز التعويض، أعد فتح الجلسة.' });
+    }
+    await connection.commit();
+    res.json({ taskIds: created.map((row) => Number(row.id)), existing: false });
+  } catch (error) {
+    await connection.rollback().catch(() => {});
+    next(error);
+  } finally {
+    connection.release();
+  }
+});
 
 const runRecitationTaskHandler = async (sourceRequest, params, body, sessionTaskIds = [], connection = null, transaction = null) => {
   let statusCode = 200;
@@ -14825,7 +15251,7 @@ async function buildTeacherExecutionChoices(allRows, executionOptionsByGroup, co
   for (const row of allRows.filter((item) => (
     item.taskType === 'memorization' || (item.taskType === 'review' && Number(item.nazemManaged))
   ))) {
-    const groupKey = `${row.planId}:${row.taskDate}:${row.taskType}:${row.track}`;
+    const groupKey = `${row.planId}:${row.taskDate}:${row.taskType}:${row.track}:${Number(row.compensationIndex || 0)}`;
     if (executionOptionsByGroup.has(groupKey)) continue;
     const plan = {
       id: row.planId,
@@ -14846,7 +15272,7 @@ async function buildTeacherExecutionChoices(allRows, executionOptionsByGroup, co
       scheduleAnchorSurah: row.planScheduleAnchorSurah,
       scheduleAnchorAyah: row.planScheduleAnchorAyah,
     };
-    const groupRows = allRows.filter((item) => `${item.planId}:${item.taskDate}:${item.taskType}:${item.track}` === groupKey);
+    const groupRows = allRows.filter((item) => `${item.planId}:${item.taskDate}:${item.taskType}:${item.track}:${Number(item.compensationIndex || 0)}` === groupKey);
     const direction = row.taskType === 'review' || row.track !== row.planTrack
       ? getQuranRangeDirection(taskStartPosition(row), taskEndPosition(row))
       : getQuranRangeDirection(
@@ -14855,6 +15281,19 @@ async function buildTeacherExecutionChoices(allRows, executionOptionsByGroup, co
       );
     const ordered = [...groupRows].sort((first, second) => compareQuranPositionInDirection(taskStartPosition(first), taskStartPosition(second), direction));
     const start = taskStartPosition(ordered[0]);
+    if (Number(row.compensationIndex || 0) > 0) {
+      // A compensation recitation is exactly one missed day's amount.
+      const end = taskEndPosition(ordered.at(-1) || row);
+      executionOptionsByGroup.set(groupKey, {
+        normalEnd: end,
+        scheduledEnd: end,
+        selectionStart: start,
+        selectionEnd: end,
+        selectionDirection: direction,
+        options: [toQuranExecutionOption(end)],
+      });
+      continue;
+    }
     if (Number(row.nazemManaged)) {
       const lastTask = ordered.at(-1) || row;
       const scheduledEnd = taskEndPosition(lastTask);
@@ -15192,10 +15631,12 @@ async function saveEvaluatedGroupRewards({ settings, connection, groupTasks, tas
       actorName: req.auth?.name || 'المعلم',
       supervisorId,
       sourceType: 'quran_evaluation',
-      reason: `تقييم ${taskLabel}`,
-      dedupeKey: `quran_evaluation:${task.planId}:${task.taskDate}:${task.taskType}${task.track === 'mastery' ? ':mastery' : ''}`,
+      reason: Number(task.compensationIndex || 0) > 0 ? `تعويض ${taskLabel}` : `تقييم ${taskLabel}`,
+      dedupeKey: `quran_evaluation:${task.planId}:${task.taskDate}:${task.taskType}${task.track === 'mastery' ? ':mastery' : ''}${Number(task.compensationIndex || 0) > 0 ? `:compensation:${Number(task.compensationIndex)}` : ''}`,
     });
-    await saveEvaluatedRepeatRewards({ task, connection, settings, groupPassed, req, supervisorId });
+    if (!Number(task.compensationIndex || 0)) {
+      await saveEvaluatedRepeatRewards({ task, connection, settings, groupPassed, req, supervisorId });
+    }
   }
 }
 
@@ -15245,6 +15686,9 @@ async function saveEvaluatedRepeatRewards({ task, connection, settings, groupPas
 
 /** Compute segment rewards and advance the plan only when the entire group passes. */
 async function applyEvaluatedGroupSegments({ groupEvaluated, task, groupTasks, settings, connection, date, reward, attemptResult }) {
+  if (Number(task.compensationIndex || 0) > 0) {
+    return applyEvaluatedCompensationGroup({ groupEvaluated, task, groupTasks, settings, connection, reward, attemptResult });
+  }
   if (groupEvaluated && task.taskType === 'memorization' && (!task.nazemManaged || task.track === task.planTrack)) {
     const plan = {
       id: task.planId,
@@ -15327,6 +15771,46 @@ async function applyEvaluatedGroupSegments({ groupEvaluated, task, groupTasks, s
   return reward;
 }
 
+/** Reward a compensation recitation on its own: it never changes the day's regular result. */
+async function applyEvaluatedCompensationGroup({ groupEvaluated, task, groupTasks, settings, connection, reward, attemptResult }) {
+  if (!groupEvaluated) return reward;
+  const percent = Math.min(100, Math.max(0, Number(settings.quranCompensationPointsPercent ?? 100)));
+  if (task.taskType !== 'memorization') return Math.round(reward * percent / 100);
+  const direction = getQuranRangeDirection(
+    { page: Number(task.startPage), surah: Number(task.startSurah), ayah: Number(task.startAyah) },
+    { page: Number(task.endPage), surah: Number(task.endSurah), ayah: Number(task.endAyah) },
+  );
+  const ordered = [...groupTasks].sort((first, second) => compareQuranPositionInDirection(taskStartPosition(first), taskStartPosition(second), direction));
+  const start = taskStartPosition(ordered[0]);
+  const end = taskEndPosition(ordered.at(-1));
+  const faces = await calculateQuranRangeFaces(connection, {
+    startPage: start.page, startSurah: start.surah, startAyah: start.ayah,
+    endPage: end.page, endSurah: end.surah, endAyah: end.ayah,
+  }) || groupTasks.reduce((sum, row) => sum + Number(row.targetPages || 0), 0);
+  const dailyFaces = Math.max(0.25, Number(task.dailyPages || 1));
+  const passed = groupTasks.every((row) => Number(row.teacherCompleted) === 1);
+  const points = passed ? Math.round(reward * percent / 100 * Math.min(1, faces / dailyFaces)) : 0;
+  await connection.query(
+    `UPDATE student_quran_execution_segments SET is_current = 0
+     WHERE plan_id = ? AND task_date = ? AND source_type = 'teacher' AND segment_type = 'compensation'
+       AND from_page = ? AND from_surah = ? AND from_ayah = ? AND is_current = 1`,
+    [task.planId, task.taskDate, start.page, start.surah, start.ayah],
+  );
+  if (passed) {
+    await connection.query(
+      `INSERT INTO student_quran_execution_segments
+        (plan_id, student_id, task_date, task_type, source_type, source_id, segment_type,
+         from_page, from_surah, from_ayah, to_page, to_surah, to_ayah,
+         amount_faces, points_percent, points_awarded, is_current)
+       VALUES (?, ?, ?, ?, 'teacher', ?, 'compensation', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      [task.planId, task.studentId, task.taskDate, task.track === 'mastery' ? 'mastery' : 'memorization',
+        attemptResult?.insertId || null, start.page, start.surah, start.ayah, end.page, end.surah, end.ayah,
+        roundQuranFaces(faces), percent, points],
+    );
+  }
+  return points;
+}
+
 /** Use authoritative Nazem bounds or the current local plan schedule for segment calculation. */
 async function resolveEvaluatedSegmentContext({ task, context, actualStart, nazemScheduledEnd, nazemLate, nazemPlanEnd, direction, connection, plan, date, executionSettings }) {
   if (task.nazemManaged) {
@@ -15350,7 +15834,7 @@ async function applyMemorizationEvaluationOutcome({ task, completed, connection,
   if (task.taskType === 'memorization') {
     if (completed && task.previousTeacherCompleted !== 1) {
       await advancePlanAfterCompletedMemorization(connection, task);
-    } else if (!completed && task.previousTeacherCompleted !== 0) {
+    } else if (!completed && task.previousTeacherCompleted !== 0 && !Number(task.compensationIndex || 0)) {
       await rewindPlanAfterFailedMemorization(connection, task, {
         sessionDate: date,
         sessionTaskIds: req.recitationSessionTaskIds,

@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import DashboardMobileHeaderActions from '@/components/dashboard/DashboardMobileHeaderActions';
 import DashboardLoader from '@/components/dashboard/DashboardLoader';
 import CountOnlyEvaluationDialog from '@/components/portal/CountOnlyEvaluationDialog';
+import CompensationDialog from '@/components/portal/CompensationDialog';
 import RecitationAmountsToggle from '@/components/portal/RecitationAmountsToggle';
 import TeacherRecitationTaskList from '@/components/portal/TeacherRecitationTaskList';
 import ErrorState from '@/components/ui/error-state';
@@ -65,6 +66,7 @@ import { subscribeRecitationResume } from '@/lib/recitationResume';
 const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inline = false }) => {
   const { toast } = useToast();
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [compensationStudent, setCompensationStudent] = useState(null);
   const [isSavingCount, setIsSavingCount] = useState(false);
   const [attendancePendingIds, setAttendancePendingIds] = useState([]);
   const [showAmounts, setShowAmounts] = useState(false);
@@ -211,6 +213,24 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
     prepareRecitation(student);
   };
 
+  // A compensation is created as real tasks, then recited like any amount of the day.
+  const reciteCompensation = async (student, taskIds) => {
+    const selectedIds = new Set(taskIds.map(Number));
+    const refreshed = await studentsApi.getSupervisorQuranEvaluation(supervisorId);
+    setData(await mergeLocalTeacherEvaluation(supervisorId, refreshed));
+    const tasks = sortRecitationTasks((refreshed.tasks || []).filter((task) => selectedIds.has(Number(task.id))));
+    if (!tasks.length) throw new Error('لم يظهر التعويض في الجلسة، أعد فتحها.');
+    setCompensationStudent(null);
+    setSelectedStudent({
+      ...student,
+      tasks: tasks.map((task) => ({ ...task })),
+      actualEnd: null,
+      repeatCount: undefined,
+      listeningCount: undefined,
+      evaluationMode: resolveTaskRecitationMode(tasks[0], data?.evaluationModes?.[evaluationTypeForTask(tasks[0])] || 'mushaf'),
+    });
+  };
+
   const selectedTask = selectedStudent?.tasks?.[0];
   const selectedEvaluationMode = selectedStudent?.evaluationMode || 'mushaf';
 
@@ -336,6 +356,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
         quranChapters={quranChapters}
         isLoading={isLoading}
         onRecite={openRecitation}
+        onOpenCompensation={data?.allowQuranCompensation && navigator.onLine !== false ? setCompensationStudent : undefined}
         onAttendanceChange={data?.recitationAttendanceSource === 'teacher' ? updateAttendance : undefined}
         recitationAttendanceSource={data?.recitationAttendanceSource || 'supervisor'}
         attendancePendingIds={attendancePendingIds}
@@ -364,7 +385,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
       secondaryAction={notCompletedAction}
       open={Boolean(selectedStudent)}
       onOpenChange={(nextOpen) => !nextOpen && setSelectedStudent(null)}
-      title={`تسميع ${selectedStudent?.studentName || ''}`}
+      title={`${Number(selectedTask?.compensationIndex || 0) > 0 ? 'تعويض' : 'تسميع'} ${selectedStudent?.studentName || ''}`}
       onSubmit={saveCountOnlyRecitation}
       isSaving={isSavingCount}
       supervisorId={supervisorId}
@@ -409,6 +430,17 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
     /></Suspense>;
     }
 
+  const compensationDialog = (
+    <CompensationDialog
+      open={Boolean(compensationStudent)}
+      onOpenChange={(nextOpen) => !nextOpen && setCompensationStudent(null)}
+      supervisorId={supervisorId}
+      student={compensationStudent}
+      date={data?.date}
+      onRecite={reciteCompensation}
+    />
+  );
+
   if (inline) {
     return (
       <>
@@ -421,6 +453,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
         </DashboardMobileHeaderActions>
         <div className="min-w-0 [font-family:var(--font-ui)]">{content}</div>
         {recitationDialog}
+        {compensationDialog}
       </>
     );
   }
@@ -440,6 +473,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
         </DialogContent>
       </Dialog>
       {recitationDialog}
+      {compensationDialog}
     </>
   );
 };

@@ -1,9 +1,8 @@
 ﻿import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { Pencil, Repeat, Trash2, Upload } from 'lucide-react';
+import { Pencil, Plus, Repeat, Trash2, Upload } from 'lucide-react';
 import { filterRosterByName } from '@/lib/rosterSearch';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/components/ui/use-toast';
 import DashboardLoader from '@/components/dashboard/DashboardLoader';
 import ManagementIconButton from '@/components/ui/management-icon-button';
+import {
+  FormField,
+  FormGrid,
+  ManagementEmpty,
+  ManagementList,
+  ManagementRow,
+  ManagementToolbar,
+} from '@/components/dashboard/layout/ManagementPanel';
 import { studentsApi } from '@/services/studentsApi';
 import useOnlineStatus from '@/hooks/useOnlineStatus';
 import { loadOfflineSnapshot } from '@/services/offlineOperationsService';
@@ -440,82 +447,65 @@ const StudentsSection = () => {
     }
   };
 
-  const _resolveStudentsSection = () => {
-    if (isLoading) {
-      return <DashboardLoader />;
-    }
+  const rowActionClass = 'h-11 w-11 border-transparent bg-transparent';
+
+  const renderStudents = () => {
+    if (isLoading) return <DashboardLoader />;
     if (visibleStudents.length === 0) {
-      return <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">
-              {search.trim() ? 'لا توجد نتائج مطابقة.' : 'لا يوجد طلاب حالياً.'}
-            </div>;
+      return <ManagementEmpty>{search.trim() ? 'لا توجد نتائج مطابقة.' : 'لا يوجد طلاب حالياً.'}</ManagementEmpty>;
     }
-    return <div className="space-y-3">
-              {visibleStudents.map((student) =>
-            <div
-              key={student.id}
-              className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-xl border border-primary/20 bg-background p-4">
-              
-                  <div className="min-w-0">
-                    <Button
-                  variant="link"
-                  onClick={() => isOnline && openEditDialog(student)}
-                  disabled={!isOnline}
-                  className="h-auto p-0 text-lg font-bold text-primary">
-                  
-                      {student.name}
-                    </Button>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      {student.committeeName || 'بدون حلقة'}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 gap-2">
-                    <ManagementIconButton disabled={!isOnline} onClick={() => openEditDialog(student)} title="تعديل الطالب" aria-label={`تعديل ${student.name}`} tone="primary">
-                      <Pencil className="h-4 w-4" />
-                    </ManagementIconButton>
-                    <Button variant="outline" size="icon" disabled={!isOnline} onClick={() => openMoveDialog(student)} title="نقل الطالب">
-                      <Repeat className="h-4 w-4" />
-                    </Button>
-                    <ManagementIconButton disabled={!isOnline} onClick={() => confirmDelete(student)} title="الحذف" aria-label={`حذف ${student.name}`} tone="destructive">
-                      <Trash2 className="h-4 w-4" />
-                    </ManagementIconButton>
-                  </div>
-                </div>
+    return (
+      <ManagementList label="الطلاب">
+        {visibleStudents.map((student) => (
+          <ManagementRow
+            key={student.id}
+            title={student.name}
+            subtitle={student.committeeName || 'بدون حلقة'}
+            onOpen={() => openEditDialog(student)}
+            disabled={!isOnline}
+            actions={(
+              <>
+                <ManagementIconButton className={rowActionClass} disabled={!isOnline} onClick={() => openEditDialog(student)} title="تعديل الطالب" aria-label={`تعديل ${student.name}`} tone="primary">
+                  <Pencil className="h-4 w-4" />
+                </ManagementIconButton>
+                <ManagementIconButton className={rowActionClass} disabled={!isOnline} onClick={() => openMoveDialog(student)} title="نقل الطالب" aria-label={`نقل ${student.name}`}>
+                  <Repeat className="h-4 w-4" />
+                </ManagementIconButton>
+                <ManagementIconButton className={rowActionClass} disabled={!isOnline} onClick={() => confirmDelete(student)} title="الحذف" aria-label={`حذف ${student.name}`} tone="destructive">
+                  <Trash2 className="h-4 w-4" />
+                </ManagementIconButton>
+              </>
             )}
-            </div>;
+          />
+        ))}
+      </ManagementList>
+    );
   };
+
   return (
-    <div className="space-y-6">
-      {!isOnline ? <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-center text-sm font-black text-amber-700">عرض محلي للقراءة فقط حتى عودة الاتصال.</div> : null}
-      <Card className="bg-card border-primary/30 neon-glow">
-        <CardHeader className="border-b border-primary/20 px-3 sm:px-6">
-          <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:gap-3">
-            <div className="min-w-0">
-              <Select value={committeeFilter} onValueChange={setCommitteeFilter}>
-                <SelectTrigger aria-label="اختر الحلقة" className="h-11 w-full min-w-0 bg-background border-primary/30 px-2 text-sm text-foreground">
-                  <SelectValue placeholder="اختر الحلقة" />
-                </SelectTrigger>
-                <SelectContent className="bg-card border-primary/30 text-foreground">
-                  <SelectItem value="all">كل الحلقات</SelectItem>
-                  {committees.map((committee) =>
-                  <SelectItem key={committee.id} value={String(committee.id)}>
-                      {committee.name}
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-              
-              <Button onClick={openAddDialog} disabled={!isOnline} className="h-11 min-w-24 px-4 sm:min-w-[150px]">
-                إضافة
-              </Button>
-          </div>
-          <Input type="search" aria-label="ابحث باسم الطالب" placeholder="ابحث باسم الطالب" value={search} onChange={event => setSearch(event.target.value)} className="mt-3 min-h-11 w-full [font-family:var(--font-ui)]" />
-        </CardHeader>
-        <CardContent className="pt-6">
-          {_resolveStudentsSection()
-          }
-        </CardContent>
-      </Card>
+    <>
+      {!isOnline ? <div className="border-b border-border bg-amber-500/10 px-4 py-3 text-center text-sm font-black text-amber-700 sm:px-6">عرض محلي للقراءة فقط حتى عودة الاتصال.</div> : null}
+      <ManagementToolbar>
+        <Input type="search" aria-label="ابحث باسم الطالب" placeholder="ابحث باسم الطالب" value={search} onChange={(event) => setSearch(event.target.value)} className="h-11 flex-1 basis-56" />
+        <Select value={committeeFilter} onValueChange={setCommitteeFilter}>
+          <SelectTrigger aria-label="اختر الحلقة" className="h-11 min-w-0 flex-1 basis-40 bg-background text-sm text-foreground sm:max-w-[220px]">
+            <SelectValue placeholder="اختر الحلقة" />
+          </SelectTrigger>
+          <SelectContent className="bg-card border-primary/30 text-foreground">
+            <SelectItem value="all">كل الحلقات</SelectItem>
+            {committees.map((committee) =>
+            <SelectItem key={committee.id} value={String(committee.id)}>
+                {committee.name}
+              </SelectItem>
+            )}
+          </SelectContent>
+        </Select>
+        <Button onClick={openAddDialog} disabled={!isOnline} className="h-11 gap-2 px-5">
+          <Plus className="h-4 w-4" />
+          إضافة
+        </Button>
+      </ManagementToolbar>
+      {renderStudents()}
 
       <Dialog open={dialog === 'add' || dialog === 'edit'} onOpenChange={(open) => !open && setDialog(null)}>
         <DialogContent className={`bg-card border-primary/30 text-foreground ${bulkStudents.length > 0 ? 'sm:max-w-5xl' : ''}`} dir="rtl">
@@ -584,31 +574,22 @@ const StudentsSection = () => {
               ))}
             </div>
           ) : (
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>اسم الطالب</Label>
-                  <Input aria-label="اسم الطالب" value={studentForm.name} onChange={(event) => setStudentForm({ ...studentForm, name: event.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>رقم الهوية</Label>
-                  <Input aria-label="رقم الهوية" value={studentForm.nationalId} onChange={(event) => setStudentForm({ ...studentForm, nationalId: event.target.value })} />
-                </div>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>رقم الدخول</Label>
-                  <Input aria-label="رقم الدخول" value={studentForm.loginNumber} onChange={(event) => setStudentForm({ ...studentForm, loginNumber: event.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>رقم الجوال</Label>
-                  <Input aria-label="رقم الجوال" value={studentForm.guardianPhone} onChange={(event) => setStudentForm({ ...studentForm, guardianPhone: event.target.value })} />
-                </div>
-              </div>
+            <FormGrid className="py-4">
+              <FormField label="اسم الطالب" htmlFor="student-name">
+                <Input id="student-name" value={studentForm.name} onChange={(event) => setStudentForm({ ...studentForm, name: event.target.value })} />
+              </FormField>
+              <FormField label="رقم الهوية" htmlFor="student-national-id">
+                <Input id="student-national-id" value={studentForm.nationalId} onChange={(event) => setStudentForm({ ...studentForm, nationalId: event.target.value })} />
+              </FormField>
+              <FormField label="رقم الدخول" htmlFor="student-login-number">
+                <Input id="student-login-number" value={studentForm.loginNumber} onChange={(event) => setStudentForm({ ...studentForm, loginNumber: event.target.value })} />
+              </FormField>
+              <FormField label="رقم الجوال" htmlFor="student-guardian-phone">
+                <Input id="student-guardian-phone" value={studentForm.guardianPhone} onChange={(event) => setStudentForm({ ...studentForm, guardianPhone: event.target.value })} />
+              </FormField>
               {dialog === 'edit' && (
                 <>
-                  <div className="space-y-2">
-                    <Label htmlFor="student-point-target">تعديل</Label>
+                  <FormField label="تعديل" htmlFor="student-point-target">
                     <Select value={studentForm.pointTarget} onValueChange={(pointTarget) => setStudentForm({
                       ...studentForm, pointTarget, points: Number(selectedStudent.points || 0),
                       storeBalance: Number(selectedStudent.storeBalance || 0), pointReason: '',
@@ -619,35 +600,32 @@ const StudentsSection = () => {
                         <SelectItem value="both">الرصيد والنقاط الأساسية</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{pointField.label}</Label>
+                  </FormField>
+                  <FormField label={pointField.label} htmlFor="student-point-value">
                     <Input
+                      id="student-point-value"
                       type="number"
-                      aria-label={pointField.label}
                       min="0"
                       value={studentForm[pointField.key]}
                       onChange={(event) => setStudentForm({ ...studentForm, [pointField.key]: Number(event.target.value || 0) })}
                     />
-                  </div>
+                  </FormField>
                   {(Number(studentForm.points) !== Number(selectedStudent?.points || 0)
                     || Number(studentForm.storeBalance) !== Number(selectedStudent?.storeBalance || 0)) && (
-                    <div className="space-y-2">
-                      <Label>{pointField.reasonLabel}</Label>
+                    <FormField wide label={pointField.reasonLabel} htmlFor="student-point-reason">
                       <Input
+                        id="student-point-reason"
                         value={studentForm.pointReason}
-                        aria-label={pointField.reasonLabel}
                         onChange={(event) => setStudentForm({ ...studentForm, pointReason: event.target.value })}
                         placeholder="اكتب سبب الزيادة أو الخصم"
                       />
-                    </div>
+                    </FormField>
                   )}
                 </>
               )}
-              <div className="space-y-2">
-                <Label>الحلقة</Label>
+              <FormField wide label="الحلقة" htmlFor="student-committee">
                 <Select value={studentForm.committeeId} onValueChange={(value) => setStudentForm({ ...studentForm, committeeId: value })}>
-                  <SelectTrigger aria-label="حلقة الطالب">
+                  <SelectTrigger id="student-committee" aria-label="حلقة الطالب">
                     <SelectValue placeholder="اختر الحلقة" />
                   </SelectTrigger>
                   <SelectContent>
@@ -658,8 +636,8 @@ const StudentsSection = () => {
                     )}
                   </SelectContent>
                 </Select>
-              </div>
-            </div>
+              </FormField>
+            </FormGrid>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialog(null)}>إغلاق</Button>
@@ -715,7 +693,7 @@ const StudentsSection = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>);
+    </>);
 
 };
 

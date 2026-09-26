@@ -1,13 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, Edit3, ShieldCheck, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, Edit3, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useToast } from '@/components/ui/use-toast';
 import DashboardLoader from '@/components/dashboard/DashboardLoader';
+import ManagementIconButton from '@/components/ui/management-icon-button';
+import {
+  FormField,
+  FormGrid,
+  ManagementEmpty,
+  ManagementList,
+  ManagementRow,
+  ManagementToolbar,
+} from '@/components/dashboard/layout/ManagementPanel';
 import { dashboardPermissionOptions } from '@/lib/dashboardPermissions';
 import useMediaQuery from '@/hooks/useMediaQuery';
 import { studentsApi } from '@/services/studentsApi';
@@ -262,77 +269,57 @@ const AdministratorsSection = () => {
     }
   };
 
-  const _resolveAdministratorsSection = () => {
-    if (isLoading) {
-      return <DashboardLoader />;
-    }
-    if (visibleAdministrators.length === 0) {
-      return <div className="rounded-xl border border-dashed border-primary/20 py-12 text-center text-muted-foreground">
-              لا يوجد إداريون حالياً.
-            </div>;
-    }
-    return <div className="space-y-3">
-              {visibleAdministrators.map((administrator) => {
-                return (
-                  <div
-                    key={administrator.id}
-                    className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-xl border border-primary/20 bg-background p-4"
-                  >
-                    <div className="min-w-0">
-                      <button
-                        type="button"
-                        disabled={administrator.role === 'manager'}
-                        onClick={() => openEditDialog(administrator)}
-                        className="inline-flex min-h-11 max-w-full items-center gap-2 text-right text-lg font-bold text-primary disabled:cursor-default disabled:opacity-100"
-                      >
-                        <ShieldCheck className="h-4 w-4 shrink-0" />
-                        <span className="truncate">{administrator.name}</span>
-                      </button>
-                    </div>
-                    <div className="flex shrink-0 gap-2">
-                      {administrator.role !== 'manager' && (
-                        <>
-                          <Button variant="outline" size="icon" onClick={() => openEditDialog(administrator)} title="تعديل">
-                            <Edit3 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => confirmDelete(administrator)}
-                            title="حذف"
-                            className="border-destructive/50 text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>;
-  };
-  return (
-    <div className="space-y-6">
-      <Card className="bg-card border-primary/30 neon-glow">
-        <CardHeader className="border-b border-primary/20">
-          <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-            <Input
-              aria-label="ابحث باسم الإداري"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="ابحث باسم الإداري"
-              className="bg-background border-primary/30 text-foreground"
+  const rowActionClass = 'h-11 w-11 border-transparent bg-transparent';
+
+  const renderAdministrators = () => {
+    if (isLoading) return <DashboardLoader />;
+    if (visibleAdministrators.length === 0) return <ManagementEmpty>لا يوجد إداريون حالياً.</ManagementEmpty>;
+    return (
+      <ManagementList label="الإداريون">
+        {visibleAdministrators.map((administrator) => {
+          const isManager = administrator.role === 'manager';
+          return (
+            <ManagementRow
+              key={administrator.id}
+              icon={<ShieldCheck className="h-4 w-4 shrink-0 text-primary" />}
+              title={administrator.name}
+              subtitle={administrator.jobTitle || 'إداري'}
+              onOpen={() => openEditDialog(administrator)}
+              disabled={isManager}
+              actions={isManager ? null : (
+                <>
+                  <ManagementIconButton className={rowActionClass} tone="primary" aria-label={`تعديل ${administrator.name}`} title="تعديل" onClick={() => openEditDialog(administrator)}>
+                    <Edit3 className="h-4 w-4" />
+                  </ManagementIconButton>
+                  <ManagementIconButton className={rowActionClass} tone="destructive" aria-label={`حذف ${administrator.name}`} title="حذف" onClick={() => confirmDelete(administrator)}>
+                    <Trash2 className="h-4 w-4" />
+                  </ManagementIconButton>
+                </>
+              )}
             />
-            <Button onClick={openAddDialog} className="min-w-20 px-4">
-              إضافة
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-6">
-          {_resolveAdministratorsSection()}
-        </CardContent>
-      </Card>
+          );
+        })}
+      </ManagementList>
+    );
+  };
+
+  return (
+    <>
+      <ManagementToolbar>
+        <Input
+          type="search"
+          aria-label="ابحث باسم الإداري"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="ابحث باسم الإداري"
+          className="h-11 flex-1 basis-48"
+        />
+        <Button onClick={openAddDialog} className="h-11 gap-2 px-5">
+          <Plus className="h-4 w-4" />
+          إضافة
+        </Button>
+      </ManagementToolbar>
+      {renderAdministrators()}
 
       <Dialog open={dialog === 'form'} onOpenChange={(open) => !open && setDialog(null)}>
         <DialogContent className="bg-card border-primary/30 text-foreground" dir="rtl">
@@ -341,38 +328,26 @@ const AdministratorsSection = () => {
               {selectedAdministrator ? 'تعديل الإداري' : 'إضافة إداري'}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="administrator-name">اسم الإداري</Label>
-                <Input id="administrator-name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="administrator-national-id">رقم الهوية</Label>
-                <Input id="administrator-national-id" value={form.nationalId} onChange={(event) => setForm({ ...form, nationalId: event.target.value })} />
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="administrator-login-number">رقم الدخول</Label>
-                <Input id="administrator-login-number" value={form.loginNumber} onChange={(event) => setForm({ ...form, loginNumber: event.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="administrator-phone">رقم الجوال</Label>
-                <Input id="administrator-phone" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="administrator-job-title">المسمى</Label>
-                <Input id="administrator-job-title" value={form.jobTitle} onChange={(event) => setForm({ ...form, jobTitle: event.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="administrator-permissions">الصلاحيات</Label>
-                <PermissionsSelect id="administrator-permissions" value={form.permissions} onToggle={togglePermission} />
-              </div>
-            </div>
-          </div>
+          <FormGrid className="py-4">
+            <FormField label="اسم الإداري" htmlFor="administrator-name">
+              <Input id="administrator-name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+            </FormField>
+            <FormField label="رقم الهوية" htmlFor="administrator-national-id">
+              <Input id="administrator-national-id" value={form.nationalId} onChange={(event) => setForm({ ...form, nationalId: event.target.value })} />
+            </FormField>
+            <FormField label="رقم الدخول" htmlFor="administrator-login-number">
+              <Input id="administrator-login-number" value={form.loginNumber} onChange={(event) => setForm({ ...form, loginNumber: event.target.value })} />
+            </FormField>
+            <FormField label="رقم الجوال" htmlFor="administrator-phone">
+              <Input id="administrator-phone" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
+            </FormField>
+            <FormField label="المسمى" htmlFor="administrator-job-title">
+              <Input id="administrator-job-title" value={form.jobTitle} onChange={(event) => setForm({ ...form, jobTitle: event.target.value })} />
+            </FormField>
+            <FormField label="الصلاحيات" htmlFor="administrator-permissions">
+              <PermissionsSelect id="administrator-permissions" value={form.permissions} onToggle={togglePermission} />
+            </FormField>
+          </FormGrid>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialog(null)}>إلغاء</Button>
             <Button onClick={saveAdministrator} loading={isSaving}>حفظ</Button>
@@ -394,7 +369,7 @@ const AdministratorsSection = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 };
 

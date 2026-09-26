@@ -576,6 +576,13 @@ export const studentsApi = {
       body: JSON.stringify(payload || {}),
     }),
   getSupervisorQuranTaskAyahs: loadTaskAyahs,
+  getQuranCompensations: (supervisorId, { studentId, date } = {}) =>
+    request(`/supervisors/${supervisorId}/quran-compensations?studentId=${encodeURIComponent(studentId || '')}${date ? `&date=${encodeURIComponent(date)}` : ''}`),
+  createQuranCompensation: (supervisorId, payload) =>
+    request(`/supervisors/${supervisorId}/quran-compensations`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    }),
   rateSupervisorQuranTask: (supervisorId, taskId, payload) =>
     request(`/supervisors/${supervisorId}/quran-evaluation/${taskId}`, {
       method: 'POST',
