@@ -24,8 +24,8 @@ try {
     const textBounds = await page.locator('[data-news-text]').boundingBox();
     assert.ok(pictureBounds.height > 0);
     assert.ok(textBounds.y >= pictureBounds.y && textBounds.y + textBounds.height <= pictureBounds.y + pictureBounds.height + 1, 'News text overlays the image');
-    assert.equal(await page.locator('[data-news-label]').textContent(), 'أخبار العائلة');
-    const labelColor = await page.locator('[data-news-label]').evaluate(node => globalThis.getComputedStyle(node).color);
+    assert.equal(await page.locator('[data-news-label]').count(), 0, 'News cards carry no automatic label');
+    assert.equal(await page.getByText('أخبار العائلة').count(), 0);
     const cardHeight = (await page.getByRole('region', { name: 'الأخبار', exact: true }).boundingBox()).height;
     assert.equal(await page.getByRole('heading', { name: 'خبر 1', exact: true }).isVisible(), true);
     if (width === 360) {
@@ -90,7 +90,6 @@ try {
     await page.goto(`${baseUrl}/tests/fixtures/student-news.html`);
     await page.getByRole('heading', { name: 'تكريم المتميزين', exact: true }).waitFor();
     assert.equal(await page.locator('[data-news-text] h3').evaluate(node => globalThis.getComputedStyle(node).color), 'rgb(255, 238, 170)');
-    assert.equal(await page.locator('[data-news-label]').evaluate(node => globalThis.getComputedStyle(node).color), labelColor, 'Family news label keeps the site color');
     if (width === 360) {
       stored.entries = [];
       await page.goto(`${baseUrl}/tests/fixtures/student-news.html`);

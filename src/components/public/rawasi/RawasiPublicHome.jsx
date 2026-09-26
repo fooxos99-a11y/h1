@@ -9,7 +9,6 @@ const QuranExecutionDialog = lazy(() => import('@/components/portal/QuranExecuti
 const RawasiPublicHome = ({
   site,
   hasSession,
-  accountName,
   showStudentExecution,
   studentId,
   showPath,
@@ -41,12 +40,7 @@ const RawasiPublicHome = ({
         />
         <DeferredPublicRankings />
       </main>
-      <PublicLegalFooter
-        onDeleteAccount={onDeleteAccount}
-        showContact
-        hasSession={hasSession}
-        accountName={accountName}
-      />
+      <PublicLegalFooter onDeleteAccount={onDeleteAccount} />
       {showStudentExecution && <Suspense fallback={null}>
         <QuranExecutionDialog studentId={studentId} open={executionOpen} onOpenChange={setExecutionOpen} />
       </Suspense>}

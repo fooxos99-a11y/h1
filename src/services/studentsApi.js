@@ -275,11 +275,6 @@ export const studentsApi = {
   getPublicSettings: () => request('/public-settings'),
   getMyDashboardPermissions: () => request('/dashboard-permissions/me'),
   getDashboardBootstrap: () => request('/dashboard-bootstrap'),
-  submitContactMessage: (payload) => request('/contact-messages', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  }),
-  getContactMessages: () => request('/contact-messages'),
   getMyAccountDeletionRequest: () => request('/account-deletion/me'),
   requestAccountDeletion: () => request('/account-deletion', {
     method: 'POST',
@@ -576,13 +571,6 @@ export const studentsApi = {
       body: JSON.stringify(payload || {}),
     }),
   getSupervisorQuranTaskAyahs: loadTaskAyahs,
-  getQuranCompensations: (supervisorId, { studentId, date } = {}) =>
-    request(`/supervisors/${supervisorId}/quran-compensations?studentId=${encodeURIComponent(studentId || '')}${date ? `&date=${encodeURIComponent(date)}` : ''}`),
-  createQuranCompensation: (supervisorId, payload) =>
-    request(`/supervisors/${supervisorId}/quran-compensations`, {
-      method: 'POST',
-      body: JSON.stringify(payload || {}),
-    }),
   rateSupervisorQuranTask: (supervisorId, taskId, payload) =>
     request(`/supervisors/${supervisorId}/quran-evaluation/${taskId}`, {
       method: 'POST',

@@ -22,7 +22,6 @@ import {
   History,
   ListChecks,
   LogOut,
-  MessageSquare,
   Mic2,
   PhoneCall,
   PlusCircle,
@@ -61,7 +60,6 @@ const UsersSection = lazy(() => import('@/components/dashboard/UsersSection'));
 const FamiliesSection = lazy(() => import('@/components/dashboard/FamiliesSection'));
 const ManualAttendanceSection = lazy(() => import('@/components/dashboard/ManualAttendanceSection'));
 const NarrationDaySection = lazy(() => import('@/components/dashboard/NarrationDaySection'));
-const ContactMessagesSection = lazy(() => import('@/components/dashboard/ContactMessagesSection'));
 const QuranTestsSection = lazy(() => import('@/components/dashboard/QuranTestsSection'));
 const RegistrationRequestsSection = lazy(() => import('@/components/dashboard/RegistrationRequestsSection'));
 const NotificationsSection = lazy(() => import('@/components/dashboard/NotificationsSection'));
@@ -87,7 +85,6 @@ const dashboardSectionPreloaders = {
   families: () => import('@/components/dashboard/FamiliesSection'),
   manualAttendance: () => import('@/components/dashboard/ManualAttendanceSection'),
   narrationDay: () => import('@/components/dashboard/NarrationDaySection'),
-  contactMessages: () => import('@/components/dashboard/ContactMessagesSection'),
   quranTests: () => import('@/components/dashboard/QuranTestsSection'),
   registrationRequests: () => import('@/components/dashboard/RegistrationRequestsSection'),
   notifications: () => import('@/components/dashboard/NotificationsSection'),
@@ -166,7 +163,6 @@ const baseSections = [
   { key: 'calls', label: 'المكالمات', icon: PhoneCall },
   { key: 'notifications', label: 'الإشعارات', icon: Bell },
   { key: 'whatsappSend', label: 'الإرسال عبر الواتس', icon: Send },
-  { key: 'contactMessages', label: 'التواصل', icon: MessageSquare },
   { key: 'registrationRequests', label: 'طلبات التسجيل', icon: UserPlus },
   { key: 'store', label: 'المتجر', icon: Store, managementOnly: true },
   { key: 'settingsNews', label: 'الأخبار', icon: Newspaper, permissionKey: 'settings', managementOnly: true },
@@ -386,7 +382,6 @@ const WajehDashboard = () => {
       case 'narrationDay': return <NarrationDaySection />;
       case 'notifications': return <NotificationsSection />;
       case 'whatsappSend': return <WhatsAppSendSection />;
-      case 'contactMessages': return <ContactMessagesSection />;
       case 'manualAttendance': return <ManualAttendanceSection teacherScoped={isSupervisor} />;
       case 'staffAttendance': return <StaffAttendanceSection attendanceState={staffAttendanceState} />;
       case 'mushaf': return <StudentMushafSection />;

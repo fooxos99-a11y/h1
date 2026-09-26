@@ -78,7 +78,7 @@ test('standalone homepage keeps Alhabib identity', async () => {
   assert.match(siteConfig, /الحبيب ماب/);
 });
 
-test('public legal and contact links share one plain footer outside the login dialog', async () => {
+test('public legal links share one plain footer outside the login dialog without a contact form', async () => {
   const [login, gateway, home, footer] = await Promise.all([
     readFile(new URL('../src/components/public/AccountLoginDialog.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/pages/LoginGateway.jsx', import.meta.url), 'utf8'),
@@ -94,6 +94,5 @@ test('public legal and contact links share one plain footer outside the login di
   assert.match(footer, /to="\/terms">شروط الاستخدام/);
   assert.match(footer, /to="\/privacy">سياسة الخصوصية/);
   assert.match(footer, /طلب حذف الحساب/);
-  assert.match(footer, /للتواصل مع المجمع اضغط هنا/);
-  assert.match(footer, /className=\{legalLinkClass\} onClick=\{\(\) => setContactOpen\(true\)\}/);
+  assert.doesNotMatch(footer, /للتواصل مع المجمع|PublicContactDialog/);
 });

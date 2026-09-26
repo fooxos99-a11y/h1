@@ -5,7 +5,6 @@ export const DASHBOARD_PERMISSION_KEYS = [
   'manualAttendance',
   'staffAttendance',
   'registrationRequests',
-  'contactMessages',
   'students',
   'studentPlans',
   'quranTests',

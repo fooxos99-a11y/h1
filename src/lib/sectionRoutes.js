@@ -32,7 +32,6 @@ export const dashboardSectionRoutes = createSectionRoutes([
   ['calls', 'calls'],
   ['whatsappSend', 'whatsapp'],
   ['registrationRequests', 'registration-requests'],
-  ['contactMessages', 'contact-messages'],
   ['settings', 'settings'],
   ['store', 'store'],
   ['settingsNews', 'news'],

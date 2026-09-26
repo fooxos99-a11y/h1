@@ -4,7 +4,6 @@ const allDashboardPermissionOptions = [
   { key: 'manualAttendance', label: 'تحضير الطلاب' },
   { key: 'staffAttendance', label: 'تحضير المعلمين والمقرئين والإدارة' },
   { key: 'registrationRequests', label: 'طلبات التسجيل' },
-  { key: 'contactMessages', label: 'رسائل التواصل' },
   { key: 'students', label: 'الطلاب' },
   { key: 'studentPlans', label: 'خطط الطلاب' },
   { key: 'quranTests', label: 'الاختبارات' },

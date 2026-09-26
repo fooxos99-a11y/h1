@@ -24,18 +24,12 @@ export const normalizeRecitationSessionType = (value) => {
   const raw = String(value || '');
   if (['memorization', 'mastery', 'review', 'link'].includes(raw)) return raw;
   if (/^review:\d{4}-\d{2}-\d{2}:[1-9]\d{0,14}$/.test(raw)) return raw;
-  if (/^(memorization|mastery|review|link):compensation:[1-9]\d{0,2}$/.test(raw)) return raw;
   return /^(memorization|mastery|review|link):\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : 'general';
 };
 
 export const recitationSessionTypeForTask = (task = {}) => {
   const baseType = normalizeRecitationSessionType(task.taskType === 'memorization' && task.track === 'mastery' ? 'mastery' : task.taskType);
   const taskDate = String(task.taskDate || '');
-  // Each compensation is its own recitation of the day, beside the regular one.
-  const compensationIndex = Math.trunc(Number(task.compensationIndex || 0));
-  if (compensationIndex > 0 && compensationIndex < 1000 && ['memorization', 'mastery', 'review', 'link'].includes(baseType)) {
-    return `${baseType}:compensation:${compensationIndex}`;
-  }
   // A refreshed Nazem review can have a different amount on the same date.
   if (task.nazemManaged && baseType === 'review' && /^\d{4}-\d{2}-\d{2}$/.test(taskDate)
     && /^[1-9]\d{0,14}$/.test(String(task.id || ''))) return `${baseType}:${taskDate}:${task.id}`;

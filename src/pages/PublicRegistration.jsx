@@ -15,7 +15,6 @@ import { resolveAssetUrl } from '@/lib/assetUrl';
 import { expandJuzRanges, formatJuzRange, mergeJuzRanges } from '@/lib/juzRanges';
 import { studentsApi } from '@/services/studentsApi';
 import { useSiteConfig } from '@/site/SiteProvider';
-import PublicContactDialog from '@/components/public/PublicContactDialog';
 
 const emptyDraft = {
   startJuz: '',
@@ -40,7 +39,6 @@ const PublicRegistration = () => {
   const registrationNumber = searchParams.get('registrationNumber')?.trim() || '';
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [contactOpen, setContactOpen] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [availableJuzs, setAvailableJuzs] = useState([]);
   const [submitSuccess, setSubmitSuccess] = useState('');
@@ -281,10 +279,6 @@ const PublicRegistration = () => {
           </CardContent>
         </Card>
       </div>
-      <div className="relative mt-4 flex justify-center">
-        <Button type="button" variant="link" onClick={() => setContactOpen(true)}>تواصل معنا</Button>
-      </div>
-      <PublicContactDialog open={contactOpen} onOpenChange={setContactOpen} registrationNumber={registrationNumber} />
       <Toaster />
     </main>
   );

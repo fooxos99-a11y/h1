@@ -39,7 +39,6 @@ const TeacherRecitationTaskList = ({
   quranChapters = [],
   isLoading = false,
   onRecite,
-  onOpenCompensation,
   onRefresh,
   onAttendanceChange,
   attendancePendingIds = [],
@@ -67,8 +66,6 @@ const TeacherRecitationTaskList = ({
       });
     }
     tasks.forEach((task) => {
-      // Compensation amounts are recited from the compensation window, not the day's actions.
-      if (onRecite && Number(task.compensationIndex || 0) > 0) return;
       const studentId = String(task.studentId);
       if (teacherAttendanceMode && !studentById.has(studentId)) return;
       if (!map.has(studentId)) {
@@ -218,16 +215,10 @@ const TeacherRecitationTaskList = ({
           }
           return 'لا يوجد مقدار للتسميع';
         };
-        const compensationAction = onOpenCompensation && canRecite && !student.nazemManaged ? (
-          <button type="button" className="recitation-compensation"
-            aria-label={`تعويض ${student.studentName}`} onClick={() => onOpenCompensation(student)}>
-            تعويض
-          </button>
-        ) : null;
         return (
           <div key={student.studentId} className="recitation-reference-card">
             <div className="min-w-0">
-              <RecitationIdentity name={student.studentName} nameAction={compensationAction}>
+              <RecitationIdentity name={student.studentName}>
                 {attendanceEditable && (
                   <Select
                     value={student.attendanceStatus || ''}
