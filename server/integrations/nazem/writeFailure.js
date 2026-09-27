@@ -1,7 +1,8 @@
 import { blockedNazemError, reviewNazemError, transientNazemError } from './errors.js';
 
 export function nazemWriteFailure(status, message, cause) {
-  if (/إنهاء.*الأيام السابقة|أول يوم معلّق/.test(message)) {
+  // Nazem words the same rule in several ways: previous days, the first pending day, or lates first.
+  if (/إنهاء.*الأيام السابقة|أول يوم معلّق|إكمال المتأخرات|المتأخرات أول/.test(message)) {
     return Object.assign(blockedNazemError(message, 'NAZEM_PREVIOUS_DAYS_BLOCKING'), { confirmedRejection: status === 422 });
   }
   if (/اليوم غير موجود/.test(message)) {

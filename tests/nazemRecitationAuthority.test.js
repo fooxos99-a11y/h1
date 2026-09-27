@@ -35,14 +35,29 @@ test('current late completion overrides historical failure and uses current atte
   assert.deepEqual(task.imported, []);
 });
 
-test('conflicting remote outcomes never replace a saved local evaluation', async () => {
+test('a different final outcome in Nazem replaces the local evaluation instead of a conflict', async () => {
   for (const status of ['completed', 'not_completed', 'partial', 'completed_early', 'partial_early', 'completed_late']) {
     const task = fixture(status);
     task.mapped.completed = status === 'not_completed';
-    await assert.rejects(submitWithNazemAuthority(task), { code: 'NAZEM_RECITATION_RESULT_CONFLICT' });
-    assert.deepEqual(task.imported, []);
+    assert.equal((await submitWithNazemAuthority(task)).authoritative, true);
+    assert.equal(task.imported[0].id, 31);
     assert.deepEqual(task.sent, []);
   }
+});
+
+test('a day the platform saved itself keeps a later local result as a conflict', async () => {
+  const task = fixture('not_completed');
+  task.mapped.completed = true;
+  task.platformWroteDay = async (dayId) => Number(dayId) === 31;
+  await assert.rejects(submitWithNazemAuthority(task), { code: 'NAZEM_RECITATION_RESULT_CONFLICT' });
+  assert.deepEqual(task.imported, []);
+  assert.deepEqual(task.sent, []);
+});
+
+test('a late completed in Nazem matches without comparing evaluation details Nazem does not keep', () => {
+  const task = fixture('completed_late');
+  Object.assign(task.mapped, { completed: true, repeatCount: 3, listeningCount: 1, remoteMistakeCount: 0 });
+  assert.equal(task.adapter.verifyRecitationResult(task.day, task.mapped).status, 'completed_late');
 });
 
 test('a matching final outcome is reconciled without resending or replacing its metrics', async () => {

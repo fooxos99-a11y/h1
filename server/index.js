@@ -178,6 +178,7 @@ import {
   enqueueNazemPlanDeletion,
   enqueueNazemPlanUpsert,
   enqueueNazemRecitation,
+  enqueueNazemSessionRefresh,
   prepareNazemPlanReplacement,
 } from './integrations/nazem/queue.js';
 import { mapNazemAmountToRuwasi } from './integrations/nazem/mapping.js';
@@ -12613,6 +12614,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
       settings,
       { nazemToDate: date },
     );
+    if (date === now.date) await enqueueNazemSessionRefresh(connection, supervisorId);
     const [[followUpRefresh]] = await connection.query(
       `SELECT status, payload_json AS payload, UNIX_TIMESTAMP(created_at) * 1000 AS createdEpochMs
        FROM nazem_sync_jobs WHERE teacher_id = ? AND operation_type = 'account.refresh_followups'
@@ -13844,7 +13846,7 @@ app.post('/api/offline-recitation/batch', async (req, res) => {
         if (!await validateNazemLateSession(connection, session, Number(req.auth?.id))) {
           transaction.failed = true;
           return [{ taskId: Number(session.tasks?.[0]?.taskId), result: 'invalid_sequence',
-            message: 'تغيّرت مقاطع المتأخرات أو ترتيبها. حدّث الجلسة واختر المقاطع الكاملة من الأقدم.' }];
+            message: 'يجب إكمال المتأخرات من الأقدم قبل ورد اليوم. حدّث الجلسة ليظهر المتأخر التالي.' }];
         }
         for (const item of (Array.isArray(session?.tasks) ? session.tasks : [])) {
           const body = {
@@ -19369,6 +19371,6 @@ async function rejectOutOfSequenceRecitation({ task, req, connection, date, task
     studentId: task.studentId, sessionDate: date, sessionId: req.body.sessionId, tasks: [{ taskId }],
   }, supervisorId)) return false;
   await connection.rollback();
-  res.status(409).json({ code: 'INVALID_SEQUENCE', message: 'يجب البدء بأقدم مقطع متأخر متاح.' });
+  res.status(409).json({ code: 'INVALID_SEQUENCE', message: 'يجب إكمال المتأخرات من الأقدم قبل ورد اليوم. حدّث الجلسة ليظهر المتأخر التالي.' });
   return true;
 }

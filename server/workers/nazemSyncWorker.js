@@ -88,6 +88,15 @@ async function dismissLegacyAutomaticRefreshJobs(connection) {
       lease_expires_at = NULL
      WHERE status = 'blocked' AND last_error_code = 'NAZEM_REVISION_RANGE_DISCONNECTED'`,
   );
+  // Nazem's "complete the lates first" rejection used to be filed for manual review. It only waits
+  // for the lates, so it joins the blocked queue that resumes after the next late is sent.
+  await connection.query(
+    `UPDATE nazem_sync_jobs SET status = 'blocked', lease_owner = NULL, lease_expires_at = NULL,
+      last_error_code = 'NAZEM_PREVIOUS_DAYS_BLOCKING'
+     WHERE operation_type = 'recitation.submit' AND status = 'requires_review'
+       AND last_error_code = 'NAZEM_FOLLOW_UP_SAVE_REJECTED'
+       AND (last_error LIKE '%إكمال المتأخرات%' OR last_error LIKE '%المتأخرات أول%')`,
+  );
 }
 
 async function recoverTenantRecitations(connection, databaseName) {

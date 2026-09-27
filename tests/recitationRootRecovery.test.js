@@ -209,6 +209,7 @@ test('mastery errors reduce the local grade without changing Nazem completion or
     const matches = vm.runInNewContext(source.slice(start, end) + '\nremoteFollowUpMatchesLocal', {
       remoteFollowUpCompleted: day => day.status === 'completed',
       nazemRemoteErrorCount: day => Number(day.mistake || 0), nazemFollowUpMetricsMatch: () => true,
+      isNazemLateCompletion: day => day.status === 'completed_late',
     });
     const day = { date: row.taskDate, status: 'completed', surah_from: 2, verse_from: 1, surah_to: 2, verse_to: 5,
       actual_surah_to: 2, actual_verse_to: 5, mistake: 0, tune: 0 };

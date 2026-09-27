@@ -64,6 +64,25 @@ export function validateRecitationTarget(target, recitations, studentLink, planL
 
 export const hasLocalRecitation = recitations => recitations.some(item => !String(item.requestId || '').startsWith('nazem:'));
 
+const dayWritePath = dayId => new RegExp(`^/educational-plans/item-days/${Number(dayId)}/(?:partial|not-completed)$`);
+
+/**
+ * Whether the platform itself saved this Nazem day: an accepted write in a recitation delivery
+ * journal. A different local result for such a day is a later change made here (a retry after a
+ * failed recitation), not an entry made in Nazem, so it must not be replaced by Nazem's copy.
+ */
+export async function platformWroteNazemDay(connection, { teacherId, studentId, dayId }) {
+  if (!Number(dayId)) return false;
+  const [jobs] = await connection.query(
+    `SELECT JSON_EXTRACT(payload_json, '$.deliveryWrites') AS writes FROM nazem_sync_jobs
+     WHERE teacher_id = ? AND student_id = ? AND operation_type = 'recitation.submit'
+       AND JSON_SEARCH(JSON_EXTRACT(payload_json, '$.deliveryWrites[*].path'), 'one', ?) IS NOT NULL`,
+    [teacherId, studentId, `%/item-days/${Number(dayId)}/%`],
+  );
+  const path = dayWritePath(dayId);
+  return jobs.some(row => (parse(row.writes) || []).some(write => write.acceptedAt && path.test(write.path)));
+}
+
 export function applyRecitationWriteIdentity(mapped, job, verificationOnly) {
   const sent = (job.payload?.deliveryWrites || []).filter(write => !write.rejectedAt);
   mapped.allowPendingTargetReplacement = !verificationOnly && sent.length === 0;
@@ -88,7 +107,7 @@ export async function recoverRejectedRecitationWrite(connection, job) {
   const metadata = parse(event?.metadata) || {};
   if (!event || Number(event.occurredAt) < startedAt || Number(metadata.diagnostics?.httpStatus) !== 422
     || !['NAZEM_FOLLOW_UP_SAVE_REJECTED', 'NAZEM_PREVIOUS_DAYS_BLOCKING'].includes(event.code)
-    || !/إنهاء.*الأيام السابقة|أول يوم معلّق|اليوم غير موجود/.test(event.message || '')) return false;
+    || !/إنهاء.*الأيام السابقة|أول يوم معلّق|إكمال المتأخرات|المتأخرات أول|اليوم غير موجود/.test(event.message || '')) return false;
   await recitationWriteJournal(connection, job).rejected(pending[0].path,
     /اليوم غير موجود/.test(event.message) ? 'NAZEM_SAVED_TARGET_CHANGED' : 'NAZEM_PREVIOUS_DAYS_BLOCKING');
   return true;

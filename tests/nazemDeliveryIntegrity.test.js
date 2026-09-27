@@ -94,27 +94,40 @@ test('captured targets are independent of future imported snapshots and reject r
   ]) assert.throws(() => validateRecitationTarget(target, attempts, remoteStudent, remotePlan), { code: 'NAZEM_SUBMISSION_IDENTITY_CHANGED' });
 });
 
-test('a conflicting imported outcome cannot delete teacher marks, replace attempts or dismiss their delivery', async () => {
+test('a result entered in Nazem replaces the local one, but a day the platform saved itself stays a conflict', async () => {
   const { latestNazemScheduleSql, preservesPendingNazemLate } = await import('../server/integrations/nazem/scheduleAuthority.js');
+  const { platformWroteNazemDay } = await import('../server/integrations/nazem/recitationSubmission.js');
   const source = readFileSync(new URL('../server/integrations/nazem/service.js', import.meta.url), 'utf8');
   const start = source.indexOf('async function saveRemoteFollowUp(');
   const end = source.indexOf('\nconst NAZEM_ATTENDANCE_TO_RUWASI', start);
   assert.ok(end > start);
   const run = new Function('latestNazemScheduleSql', 'preservesPendingNazemLate', 'nazemTaskTrack', 'safeJson', 'loadDailyFollowUp', 'mapRuwasiRecitationGroupToNazem',
-    'remoteFollowUpMatchesLocal', 'hasLocalRecitation', 'recitationIdentityFromReceipt', `${source.slice(start, end)}; return saveRemoteFollowUp;`)(
+    'remoteFollowUpMatchesLocal', 'hasLocalRecitation', 'recitationIdentityFromReceipt', 'platformWroteNazemDay', `${source.slice(start, end)}; return saveRemoteFollowUp;`)(
     latestNazemScheduleSql, preservesPendingNazemLate, () => 'memorization', value => value, async () => ({ recitations: [{ id: 7, requestId: 'teacher-local:7' }] }),
-    () => ({ completed: true }), () => false, hasLocalRecitation, recitationIdentityFromReceipt,
+    () => ({ completed: true }), () => false, hasLocalRecitation, recitationIdentityFromReceipt, platformWroteNazemDay,
   );
-  const writes = [];
-  const connection = { query: async (sql, values) => {
-    writes.push({ sql, values });
-    if (sql.includes('INSERT INTO nazem_daily')) return [{ insertId: 5 }];
-    if (sql.includes('SELECT id, sync_status')) return [[{ id: 5, hasPendingRecitation: 1 }]];
-    return [{ affectedRows: 1 }];
-  } };
-  const result = await run(connection, { planId: 1, studentId: 1, teacherId: 1 }, { id: 101, date: '2026-09-14', taskType: 'memorization', status: 'not_completed' });
-  assert.equal(result.conflicts, 1);
-  assert.equal(writes.some(({ sql }) => /DELETE|UPDATE student_quran|UPDATE nazem_sync_jobs/.test(sql)), false);
+  const importWith = async (deliveryWrites) => {
+    const writes = [];
+    const connection = { query: async (sql, values) => {
+      writes.push({ sql, values });
+      if (sql.includes('INSERT INTO nazem_daily')) return [{ insertId: 5 }];
+      if (sql.includes('SELECT id, sync_status')) return [[{ id: 5, hasPendingRecitation: 1 }]];
+      if (sql.includes('FROM nazem_sync_jobs')) return [deliveryWrites ? [{ writes: JSON.stringify(deliveryWrites) }] : []];
+      if (sql.includes('FROM student_quran_tasks task')) return [[]];
+      return [{ affectedRows: 1 }];
+    } };
+    const result = await run(connection, { planId: 1, studentId: 1, teacherId: 1 }, { id: 101, date: '2026-09-14', taskType: 'memorization', status: 'not_completed' });
+    return { result, writes };
+  };
+  const entered = await importWith(null);
+  assert.notEqual(entered.result.conflicts, 1);
+  assert.equal(entered.writes.some(({ sql }) => /sync_status = 'conflict'/.test(sql)), false);
+  assert.ok(entered.writes.some(({ sql }) => /FROM student_quran_tasks task/.test(sql)), 'Continues to import the Nazem result');
+  const own = await importWith([{ path: '/educational-plans/item-days/101/not-completed', startedAt: '2026-09-14T08:00:00Z', acceptedAt: '2026-09-14T08:00:01Z' }]);
+  assert.equal(own.result.conflicts, 1);
+  assert.equal(own.writes.some(({ sql }) => /DELETE|UPDATE student_quran|UPDATE nazem_sync_jobs/.test(sql)), false, 'The later local pass is not erased');
+  const rejected = await importWith([{ path: '/educational-plans/item-days/101/partial', startedAt: '2026-09-14T08:00:00Z', rejectedAt: '2026-09-14T08:00:01Z' }]);
+  assert.notEqual(rejected.result.conflicts, 1, 'A rejected write never counts as the platform saving the day');
 });
 
 test('unverified per-student results never trip the shared adapter circuit', async () => {

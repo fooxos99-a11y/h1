@@ -2,6 +2,20 @@ import { nazemLateOptions } from '../../shared/nazem-late-selection.js';
 import { isNazemFollowUpCompleted } from '../../shared/nazem-integration.js';
 import { isCurrentNazemSession } from '../integrations/nazem/scheduleAuthority.js';
 
+/**
+ * A newer Nazem memorization cannot be saved while an older late of the same plan and track is
+ * still open and not part of this batch: Nazem takes lates first, so the save goes to the oldest late.
+ */
+export function skipsOpenNazemLate(owned, lateRows, selected, sessionDate) {
+  const selectedIds = new Set(selected.map(row => Number(row.id)));
+  const openLates = lateRows.filter(row => !Number(row.completed) && !selectedIds.has(Number(row.id))
+    && row.availableOn === sessionDate && !isNazemFollowUpCompleted(row.remoteStatus));
+  return owned.some(task => Number(task.nazemManaged) && !Number(task.sameSession)
+    && task.taskType === 'memorization' && !selectedIds.has(Number(task.id))
+    && openLates.some(late => Number(late.planId) === Number(task.planId) && late.track === task.track
+      && String(late.taskDate) < String(task.taskDate)));
+}
+
 // Validate the whole batch before any evaluation is written in its transaction.
 export async function validateNazemLateSession(connection, session, teacherId) {
   const ids = (session.tasks || []).map(item => Number(item.taskId));
@@ -70,6 +84,7 @@ export async function validateNazemLateSession(connection, session, teacherId) {
     }
     if (!isCurrentNazemSession(owned, authorities, selected.map(row => row.id))) return false;
   }
+  if (skipsOpenNazemLate(owned, rows, selected, session.sessionDate)) return false;
   if (!selected.length) return true;
   if (selected.length !== ids.length) return false;
   if (selected.every(row => Number(row.sameSession))) return true;

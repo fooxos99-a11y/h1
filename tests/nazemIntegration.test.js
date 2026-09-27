@@ -996,7 +996,7 @@ test('Nazem late completion keeps its original range in Rawasi', () => {
   assert.match(serverSource, /Number\(task\.nazemManaged\) && Number\(task\.nazemLate\)[\s\S]*actual_to_page = to_page/);
   assert.match(taskListSource, /const nazemLate = action\.tasks\.some\(\(task\) => Boolean\(task\.nazemLate\)\)/);
   assert.match(taskListSource, /\['saved', 'review', 'mastery'\]\.includes\(action\.key\)[\s\S]*&& !nazemLate/);
-  assert.match(taskListSource, /label=\{action\.label\}/);
+  assert.match(taskListSource, /label=\{nazemLate && \['saved', 'mastery'\]\.includes\(action\.key\) \? 'إكمال متأخر' : action\.label\}/);
   assert.doesNotMatch(taskListSource, /إكمال المتأخر/);
   assert.match(taskListSource, /actualEnd: hasNazemFixedRange\(action\.tasks\[0\]\) \|\| nazemLate[\s\S]*\? action\.tasks\[0\]\?\.normalEnd/);
   const lateScope = readFileSync(new URL('../server/integrations/nazem/lateTaskScope.js', import.meta.url), 'utf8');

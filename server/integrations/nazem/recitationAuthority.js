@@ -1,15 +1,21 @@
 import { blockedNazemError, reviewNazemError } from './errors.js';
 
 // Read the remote day before deciding whether a local attempt still needs sending.
-export async function submitWithNazemAuthority({ adapter, studentLink, planLink, mapped, applyAttendance, importDay }) {
+export async function submitWithNazemAuthority({ adapter, studentLink, planLink, mapped, applyAttendance, importDay, platformWroteDay = async () => false }) {
   const adopt = async (state) => {
     if (state.attendanceStatus != null) {
       mapped.attendanceStatus = state.attendanceStatus;
       await applyAttendance({ date: state.attendanceDate || mapped.date, attendanceStatus: state.attendanceStatus });
     }
     if (!state.final) return null;
-    // A final remote result may predate this local attempt. Compare before importing.
-    adapter.verifyRecitationResult(state.day, mapped);
+    // A final result entered in Nazem is the record for a linked plan, so a different local result
+    // is replaced by it. When the platform saved that day itself, the difference is a later local
+    // change (such as a pass after a failed attempt) and stays a conflict instead of being erased.
+    try {
+      adapter.verifyRecitationResult(state.day, mapped);
+    } catch (error) {
+      if (error?.syncStatus !== 'conflict' || await platformWroteDay(state.day.id)) throw error;
+    }
     const result = await importDay(state.day);
     if (!result.synced) {
       throw reviewNazemError('تعذر مطابقة متابعة ناظم بورد الطالب؛ لم تُرسل النتيجة المحلية.', 'NAZEM_REMOTE_DAILY_RANGE_UNMATCHED');

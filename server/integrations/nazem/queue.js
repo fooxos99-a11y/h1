@@ -92,6 +92,33 @@ export async function enqueueNazemFollowUpRefresh(connection, teacherId, now = D
   });
 }
 
+// Opening today's recitation session reads Nazem again when its data is older than this,
+// so lates added in Nazem since the scheduled refresh are known before the teacher saves.
+export const NAZEM_SESSION_REFRESH_MS = 10 * 60 * 1000;
+
+/** Queue a follow-up refresh for an opened session unless one is running or ran recently. */
+export async function enqueueNazemSessionRefresh(connection, teacherId, now = Date.now()) {
+  if (!await isNazemIntegrationEnabled(connection)) return null;
+  const [[account]] = await connection.query(
+    `SELECT teacher_id FROM nazem_accounts account WHERE teacher_id = ? AND status = 'connected'
+      AND EXISTS (SELECT 1 FROM nazem_plan_links link WHERE link.teacher_id = account.teacher_id
+        AND link.sync_status NOT IN ('deleted','detached'))`, [teacherId],
+  );
+  if (!account) return null;
+  const [[recent]] = await connection.query(
+    `SELECT id FROM nazem_sync_jobs WHERE teacher_id = ? AND operation_type = 'account.refresh_followups'
+      AND (status IN ('pending','retrying','syncing') OR created_at >= FROM_UNIXTIME(? / 1000))
+      ORDER BY id DESC LIMIT 1`, [teacherId, now - NAZEM_SESSION_REFRESH_MS],
+  );
+  if (recent) return Number(recent.id);
+  const bucket = Math.floor(now / NAZEM_SESSION_REFRESH_MS);
+  return enqueueNazemSyncJob(connection, {
+    teacherId, operationType: 'account.refresh_followups', entityType: 'account', entityId: teacherId,
+    payload: { requestedFrom: 'recitation-session' },
+    idempotencyKey: `nazem:followups:${teacherId}:session:${bucket}`,
+  });
+}
+
 export async function resolveNazemTeacherForStudent(
   connection,
   studentId,

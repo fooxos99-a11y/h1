@@ -65,7 +65,7 @@ test('a split local review or a follow-up read never holds up the import refresh
   const roster = await readFile(new URL('../server/integrations/nazem/rosterState.js', import.meta.url), 'utf8');
   assert.match(service, /if \(error\?\.code === 'NAZEM_REVISION_RANGE_DISCONNECTED'\) return null;/);
   assert.match(service, /const mappedLocal = await mapLocalPlanForDiscovery\(connection, localPlan\);[\s\S]*if \(!mappedLocal \|\| !nazemPlanBundleMatches/);
-  assert.match(service, /if \(!importRequested\) \{\s+const remoteHistory = await adapter\.readStudentFollowUpHistory/);
+  assert.match(service, /nazemStudentName: link\.nazemStudentName,\s+\}, importRequested \? 1 : 7\);/);
   assert.match(roster, /adapter\.verifiedStudentProfiles \|\| await adapter\.getStudentProfiles\(\)/);
 });
 

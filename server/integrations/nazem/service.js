@@ -1,7 +1,7 @@
 import { importNazemLinkResult } from './linkResultImport.js';
 import { refreshNazemRoster } from './rosterState.js';
 import { loadConfirmedNazemRecordIds, recitationIdentityFromReceipt } from './followUpCycles.js';
-import { applyRecitationWriteIdentity, hasLocalRecitation, recitationWriteJournal, recoverRejectedRecitationWrite, resolveLegacyRecitationTarget, validateRecitationTarget } from './recitationSubmission.js';
+import { applyRecitationWriteIdentity, hasLocalRecitation, platformWroteNazemDay, recitationWriteJournal, recoverRejectedRecitationWrite, resolveLegacyRecitationTarget, validateRecitationTarget } from './recitationSubmission.js';
 import { recoverNazemAuthenticationJobs } from './authenticationRecovery.js';
 import { reconcileConfirmedRecitationJobs } from './confirmedRecitationJobs.js';
 import { nazemFollowUpMetricsMatch } from './followUpMetrics.js';
@@ -23,7 +23,7 @@ import {
 import { partitionQuranRevisionPages } from '../../../shared/quran-revision-priority.js';
 import { normalizeNazemLinkCount } from '../../../shared/nazem-link-count.js';
 import { decryptNazemJson, decryptNazemSecret, encryptNazemJson } from './crypto.js';
-import { NazemAdapter, nazemPlanBundleMatches } from './adapter.js';
+import { isNazemLateCompletion, NazemAdapter, nazemPlanBundleMatches } from './adapter.js';
 import {
   mapRuwasiAttendanceStatusToNazem,
   mapRuwasiPlanBundleToNazem,
@@ -1038,6 +1038,7 @@ async function syncRecitation(connection, job) {
     const remote = await submitWithNazemAuthority({
       adapter, studentLink, planLink, mapped,
       applyAttendance: (attendance) => applyRemoteAttendanceToRuwasi(connection, recitation.studentId, attendance),
+      platformWroteDay: (dayId) => platformWroteNazemDay(connection, { teacherId: job.teacherId, studentId: recitation.studentId, dayId }),
       importDay: async (day) => {
         const link = { teacherId: job.teacherId, studentId: recitation.studentId, planId: recitation.planId };
         await connection.beginTransaction();
@@ -1388,18 +1389,6 @@ const remoteFollowUpMatchesLocal = (day, local = {}) => {
   const expectedId = local.nazemLateId || local.nazemSourceDayId;
   if (expectedId && String(day.id) !== String(expectedId)) return false;
   if (local.date && String(day.date || '').slice(0, 10) !== local.date) return false;
-  const _resolveRequiredMetrics = () => {
-    if (local.remoteType === 'conserve') {
-      return ['mistake', 'hearing', 'repetition'];
-    }
-    if (local.remoteType === 'revision') {
-      return ['mistake', 'tune'];
-    }
-    return [];
-  };
-  const requiredMetrics = _resolveRequiredMetrics();
-  if (requiredMetrics.some(key => !Object.hasOwn(day, key))) return false;
-  if (local.linkCount != null && local.remoteType === 'conserve' && !Object.hasOwn(day, 'link')) return false;
   if (remoteFollowUpCompleted(day) !== Boolean(local.completed)) return false;
   if (
     Number(day.surah_from) !== Number(local.fromSurahId)
@@ -1411,12 +1400,20 @@ const remoteFollowUpMatchesLocal = (day, local = {}) => {
     Number(day.actual_surah_to) !== Number(local.toSurahId)
     || Number(day.actual_verse_to) !== Number(local.toAyah)
   )) return false;
-  const hasRemoteErrors = Object.hasOwn(day || {}, 'mistake') || Object.hasOwn(day || {}, 'tune');
-  if (local.remoteType !== 'master' && hasRemoteErrors && nazemRemoteErrorCount(day) !== Number(local.mistakeCount || 0)) return false;
-  if (!nazemFollowUpMetricsMatch(day, local)) return false;
-  return local.attendanceStatus == null
+  const attendanceMatches = local.attendanceStatus == null
     || day.attendanceStatus == null
     || Number(day.attendanceStatus) === Number(local.attendanceStatus);
+  // A late completed in Nazem keeps no evaluation details; its completion and range decide the match.
+  if (isNazemLateCompletion(day)) return attendanceMatches;
+  const requiredMetrics = {
+    conserve: ['mistake', 'hearing', 'repetition'],
+    revision: ['mistake', 'tune'],
+  }[local.remoteType] || [];
+  if (requiredMetrics.some(key => !Object.hasOwn(day, key))) return false;
+  if (local.linkCount != null && local.remoteType === 'conserve' && !Object.hasOwn(day, 'link')) return false;
+  const hasRemoteErrors = Object.hasOwn(day || {}, 'mistake') || Object.hasOwn(day || {}, 'tune');
+  if (local.remoteType !== 'master' && hasRemoteErrors && nazemRemoteErrorCount(day) !== Number(local.mistakeCount || 0)) return false;
+  return nazemFollowUpMetricsMatch(day, local) && attendanceMatches;
 };
 
 async function saveRemoteFollowUp(connection, link, day) {
@@ -1758,7 +1755,10 @@ if (existingGrouped?.recitations?.length) {
       await reconcileConfirmedRecitationJobs(connection, link.teacherId);
       return { synced: 1, conflicts: 0, imported: 0 };
     }
-    if (hasLocalRecitation(existingGrouped.recitations)) {
+    // A different final result entered in Nazem replaces the local one: for a linked plan Nazem is
+    // the record. A day the platform saved itself keeps the later local result as a conflict.
+    if (hasLocalRecitation(existingGrouped.recitations)
+      && await platformWroteNazemDay(connection, { teacherId: link.teacherId, studentId: link.studentId, dayId: day.id })) {
       await connection.query(
         `UPDATE nazem_daily_follow_up_links SET sync_status = 'conflict',
           last_error_code = 'NAZEM_LOCAL_RESULT_CONFLICT',
@@ -2180,20 +2180,18 @@ async function reconcileTeacher(connection, job) {
           continue;
         }
       }
-      // The import screen waits for this job and needs students and plans only. Reading each linked
-      // student's week of follow-ups is left to the periodic follow-up refresh, which keeps it in sync.
-      if (!importRequested) {
-        const remoteHistory = await adapter.readStudentFollowUpHistory(link.nazemPlanId, {
-          nazemStudentId: link.nazemStudentId,
-          nazemStudentName: link.nazemStudentName,
-        });
-        const imported = await importTeacherFollowUps(connection, { ...link, teacherId: job.teacherId }, remoteHistory);
-        dailyImported += imported.imported;
-        dailySynced += imported.synced;
-        dailyConflicts += imported.conflicts;
-        dailyReview += imported.review;
-        await enqueueMissingNazemAttendance(connection, { teacherId: job.teacherId, studentId: link.studentId });
-      }
+      // The import screen waits for this job, so it reads today only: that keeps each linked
+      // student's lates current without paging a week of history per student.
+      const remoteHistory = await adapter.readStudentFollowUpHistory(link.nazemPlanId, {
+        nazemStudentId: link.nazemStudentId,
+        nazemStudentName: link.nazemStudentName,
+      }, importRequested ? 1 : 7);
+      const imported = await importTeacherFollowUps(connection, { ...link, teacherId: job.teacherId }, remoteHistory);
+      dailyImported += imported.imported;
+      dailySynced += imported.synced;
+      dailyConflicts += imported.conflicts;
+      dailyReview += imported.review;
+      await enqueueMissingNazemAttendance(connection, { teacherId: job.teacherId, studentId: link.studentId });
       await connection.query(
         `UPDATE nazem_plan_links SET last_remote_checked_at = NOW(3), remote_snapshot = ?
          WHERE ruwasi_plan_id = ? AND teacher_id = ?`,

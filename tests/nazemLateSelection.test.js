@@ -113,3 +113,72 @@ test('old pending day precedes later late entries and remains sendable when both
   await adapter.submitRecitation({ nazemStudentId: '10559' }, { nazemPlanId: '393' }, mapped);
   assert.equal(writes, 1);
 });
+
+test('today cannot be saved or listed while an older late of the same plan is still open', async () => {
+  const { skipsOpenNazemLate } = await import('../server/services/nazemLateSelection.js');
+  const today = { id: 50, planId: 87, taskType: 'memorization', track: 'memorization', taskDate: '2026-09-22', nazemManaged: 1 };
+  const late = { id: 1, planId: 87, track: 'memorization', taskDate: '2026-09-13', availableOn: '2026-09-22', remoteStatus: 'pending', completed: 0 };
+  assert.equal(skipsOpenNazemLate([today], [late], [], '2026-09-22'), true);
+  assert.equal(skipsOpenNazemLate([today], [{ ...late, completed: 1 }], [], '2026-09-22'), false);
+  assert.equal(skipsOpenNazemLate([today], [{ ...late, remoteStatus: 'completed_late' }], [], '2026-09-22'), false);
+  assert.equal(skipsOpenNazemLate([today], [{ ...late, track: 'mastery' }], [], '2026-09-22'), false);
+  assert.equal(skipsOpenNazemLate([{ ...today, sameSession: 1 }], [late], [], '2026-09-22'), false);
+  assert.equal(skipsOpenNazemLate([{ ...late, taskType: 'memorization', nazemManaged: 1 }, today], [late], [late], '2026-09-22'), false);
+  const listed = selectNazemFirstActionableTasks([{ ...today, studentId: 99 }, { ...late, taskType: 'memorization', studentId: 99, nazemManaged: 1, nazemLate: 1 }],
+    [{ studentId: 99, planId: 87, taskType: 'memorization', track: 'memorization', taskDate: '2026-09-22' }]);
+  assert.deepEqual(listed.map(row => row.id), [1], 'The oldest known late is listed before the saved authority date');
+});
+
+test('Nazem backlog blocks today even without its blocking flags, and its lates message waits for them', async () => {
+  const { hasOpenNazemBacklog } = await import('../server/integrations/nazem/adapter.js');
+  const { nazemWriteFailure } = await import('../server/integrations/nazem/writeFailure.js');
+  assert.equal(hasOpenNazemBacklog({ late_items: [{ id: 1, status: 'pending' }] }), true);
+  assert.equal(hasOpenNazemBacklog({ late_items: [{ id: 1, status: 'completed_late' }] }), false);
+  assert.equal(hasOpenNazemBacklog({ pending_day: { id: 4, status: 'pending' } }), true);
+  assert.equal(hasOpenNazemBacklog({}), false);
+  const failure = nazemWriteFailure(422, 'يجب إكمال المتأخرات أولا قبل متابعة ورد اليوم');
+  assert.equal(failure.code, 'NAZEM_PREVIOUS_DAYS_BLOCKING');
+  assert.equal(failure.confirmedRejection, true);
+  const adapter = new NazemAdapter();
+  const day = { id: 9, date: '2026-09-22', status: 'pending', surah_from: 62, verse_from: 3, surah_to: 62, verse_to: 6 };
+  adapter.resolveRecitationFollowUp = async () => ({ item: { late_items: [{ id: 2, status: 'pending' }] }, day, late: null });
+  adapter.verifyResolvedRecitation = async () => null;
+  adapter.postRecitationApi = async () => assert.fail('today must wait for the late');
+  await assert.rejects(adapter.submitRecitation({}, {}, { taskType: 'memorization', remoteType: 'conserve', completed: true,
+    fromSurahId: 62, fromAyah: 3, scheduledToSurahId: 62, scheduledToAyah: 6 }), { code: 'NAZEM_PREVIOUS_DAYS_BLOCKING' });
+});
+
+test('opening today\'s session refreshes Nazem, and a late save is labelled as completing a late', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const server = await readFile(new URL('../server/index.js', import.meta.url), 'utf8');
+  const worker = await readFile(new URL('../server/workers/nazemSyncWorker.js', import.meta.url), 'utf8');
+  const list = await readFile(new URL('../src/components/portal/TeacherRecitationTaskList.jsx', import.meta.url), 'utf8');
+  assert.match(server, /if \(date === now\.date\) await enqueueNazemSessionRefresh\(connection, supervisorId\);/);
+  assert.match(worker, /last_error_code = 'NAZEM_FOLLOW_UP_SAVE_REJECTED'\s+AND \(last_error LIKE '%إكمال المتأخرات%'/);
+  assert.match(list, /label=\{nazemLate && \['saved', 'mastery'\]\.includes\(action\.key\) \? 'إكمال متأخر' : action\.label\}/);
+});
+
+test('an opened session queues one Nazem refresh at most every ten minutes', async () => {
+  const { enqueueNazemSessionRefresh } = await import('../server/integrations/nazem/queue.js');
+  const run = async (recent) => {
+    const inserts = [];
+    const connection = { query: async (sql, params) => {
+      if (sql.includes('app_settings')) return [[{ value: 'true' }]];
+      if (sql.includes('FROM nazem_accounts')) return [[{ teacher_id: 7 }]];
+      if (sql.includes("operation_type = 'account.refresh_followups'")) {
+        assert.equal(params[1], 1_000_000_000 - 600_000);
+        return [recent ? [{ id: 3 }] : []];
+      }
+      if (sql.includes('INSERT INTO nazem_sync_jobs')) { inserts.push(params); return [{ insertId: 9 }]; }
+      return [[]];
+    } };
+    return { id: await enqueueNazemSessionRefresh(connection, 7, 1_000_000_000), inserts };
+  };
+  const fresh = await run(false);
+  assert.equal(fresh.id, 9);
+  assert.equal(fresh.inserts[0][2], 'account.refresh_followups');
+  assert.match(fresh.inserts[0][1], /^nazem:followups:7:session:\d+$/);
+  const recent = await run(true);
+  assert.equal(recent.id, 3);
+  assert.equal(recent.inserts.length, 0);
+});

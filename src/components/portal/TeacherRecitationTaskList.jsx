@@ -258,7 +258,7 @@ const TeacherRecitationTaskList = ({
                     return (
                       <TeacherRecitationAction
                         key={action.key}
-                        label={action.label}
+                        label={nazemLate && ['saved', 'mastery'].includes(action.key) ? 'إكمال متأخر' : action.label}
                         slot={action.key === 'mastery' && !memorizationView ? 'saved' : action.key}
                         amount={actionAmount}
                         amountControl={amountControl}

@@ -151,6 +151,8 @@ function expectedFollowUpMetrics(mapped) {
   return {};
 }
 
+export const isNazemLateCompletion = (day) => String(day?.status || '').toLowerCase() === 'completed_late';
+
 export function nazemFollowUpMetricsMatch(day, mapped) {
   return Object.entries(expectedFollowUpMetrics(mapped)).every(([field, expected]) => (
     Object.hasOwn(day || {}, field) && Number(day[field]) === expected
@@ -205,7 +207,8 @@ function verifyFinalFollowUp(day, mapped) {
       );
     }
   }
-  const metrics = verifyFollowUpMetrics(day, mapped);
+  // A late completed in Nazem keeps no evaluation details, so only its completion and range are compared.
+  const metrics = isNazemLateCompletion(day) ? expectedFollowUpMetrics(mapped) : verifyFollowUpMetrics(day, mapped);
   return {
     externalId: String(day.id),
     status: day.status,
@@ -1829,7 +1832,7 @@ export class NazemAdapter {
         if (!force || error?.syncStatus !== 'conflict') throw error;
       }
       if (existing) return { ...existing, alreadyRecorded: true };
-      if (!initial.pendingDay && (initial.item.is_blocked_by_late || initial.item.is_blocked_by_previous_days)) {
+      if (waitsForNazemBacklog(initial, mapped)) {
         throw blockedNazemError('يجب إنهاء الأيام السابقة أو المتأخرات في ناظم أولًا.', 'NAZEM_PREVIOUS_DAYS_BLOCKING');
       }
       const _resolveMetrics = () => {
@@ -2296,6 +2299,19 @@ async function cacheFollowUpApiSession({ adapter, response, externalPlanId, norm
   }
   adapter.followUpPayloadCache.set(cacheKey, payload);
 
+}
+
+/** A day other than the oldest pending day waits while Nazem flags or lists older work. */
+function waitsForNazemBacklog(initial, mapped) {
+  if (initial.pendingDay) return false;
+  return Boolean(initial.item.is_blocked_by_late || initial.item.is_blocked_by_previous_days
+    || (mapped.remoteType !== 'revision' && hasOpenNazemBacklog(initial.item)));
+}
+
+/** Today's amount waits while Nazem still lists an unfinished late or an earlier pending day. */
+export function hasOpenNazemBacklog(item) {
+  const openLate = normalizeNazemFollowUpItems(item?.late_items).some((late) => !isNazemFollowUpCompleted(late.status));
+  return openLate || Boolean(item?.pending_day?.id && !isNazemFollowUpCompleted(item.pending_day.status));
 }
 
 async function submitOldestLateRecitation(adapter, initial, studentLink, planLink, mapped) {
