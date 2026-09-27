@@ -89,12 +89,11 @@ test('reverse Quran ranges preserve surah order while ayahs stay ascending', asy
 });
 
 test('retry source stays available across dates while completed local actions leave the active list', async () => {
-  const [server, taskList, evaluation, mushaf, report] = await Promise.all([
+  const [server, taskList, evaluation, mushaf] = await Promise.all([
     read('../server/index.js'),
     read('../src/components/portal/TeacherRecitationTaskList.jsx'),
     read('../src/components/portal/TeacherEvaluationDialog.jsx'),
     read('../src/components/portal/MushafRecitationDialog.jsx'),
-    read('../src/components/dashboard/ReportsRecitationSessions.jsx'),
   ]);
 
   assert.match(server, /previous_attempt\.task_id = t\.id/);
@@ -119,7 +118,6 @@ test('retry source stays available across dates while completed local actions le
   // Amount refresh is automatic; full plan discovery remains a manual operation.
   assert.doesNotMatch(evaluation, /refreshNazem/);
   assert.match(evaluation, /data\?\.nazemRefreshPending/);
-  assert.match(report, /!row\.nazemSource[\s\S]*المحاولة \{formatNumber\(row\.attemptNumber \|\| 1\)\}/);
 });
 
 test('a combined memorization session evaluates each face independently and defers failures', async () => {

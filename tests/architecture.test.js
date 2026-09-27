@@ -115,7 +115,7 @@ test('shared mobile actions keep accessible touch targets and the UI font token'
   assert.match(settingsContent, /NotificationSettings/);
   assert.match(datePickerText, /grid grid-cols-7 gap-0\.5/);
   assert.match(datePickerText, /'flex h-11 min-w-0/);
-  assert.equal((reportsText.match(/flex min-h-11 w-full items-center/g) || []).length, 3);
+  assert.match(reportsText, /className="h-11 gap-2 text-destructive/);
   assert.match(whatsappText, /className="h-11 w-11 shrink-0/);
   assert.match(whatsappText, /inline-flex h-11 cursor-pointer/);
   assert.match(whatsappText, /failedWhatsAppStatuses/);

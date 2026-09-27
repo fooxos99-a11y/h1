@@ -24,7 +24,7 @@ test('teacher dashboard exposes student plans while keeping other student admini
   assert.match(accountPortal, /case 'studentPlans':[\s\S]*<StudentPlansSection hideCommitteeFilter/);
   assert.match(accountPortal, /key: 'previousRecitationSessions'[\s\S]*key: 'teacherPoints'[\s\S]*key: 'teacherReports'[\s\S]*key: 'calls'[\s\S]*key: 'studentPlans'/);
   assert.match(accountPortal, /const ReportsSection = lazy\(\(\) => import\('@\/components\/dashboard\/ReportsSection'\)\);/);
-  assert.match(accountPortal, /case 'teacherReports':[\s\S]*?<ReportsSection[\s\S]*?teacherScoped[\s\S]*?canViewStandardReports[\s\S]*?canViewExecutionFollowup=\{settings\.hasStudentQuranExecution !== false\}/);
+  assert.match(accountPortal, /case 'teacherReports':[\s\S]*?<ReportsSection[\s\S]*?teacherScoped[\s\S]*?canViewStandardReports[\s\S]*?canViewTeacherPoints=\{settings\.teacherManualPointsEnabled\}/);
   assert.doesNotMatch(accountPortal, /TeacherReportsSection/);
   assert.match(evaluationSection, /<TeacherEvaluationDialog supervisorId=\{supervisorId\} inline \/>/);
   assert.doesNotMatch(evaluationSection, /فتح التقييم|useState/);
@@ -34,11 +34,11 @@ test('teacher dashboard exposes student plans while keeping other student admini
 });
 
 test('teacher attendance and reports are constrained to linked committees on the server', async () => {
-  const [server, attendance, reports, teacherOverview] = await Promise.all([
+  const [server, attendance, reports, metrics] = await Promise.all([
     readFile(new URL('../server/index.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/dashboard/ManualAttendanceSection.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/dashboard/ReportsSection.jsx', import.meta.url), 'utf8'),
-    readFile(new URL('../src/components/dashboard/ReportsOverview.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/dashboard/reports/reportMetrics.js', import.meta.url), 'utf8'),
   ]);
 
   assert.match(server, /يمكنك تحضير طلاب حلقاتك فقط/);
@@ -47,24 +47,23 @@ test('teacher attendance and reports are constrained to linked committees on the
   assert.doesNotMatch(attendance, /طلاب حلقاتي|getMyCommittees/);
   assert.match(attendance, /teacherScoped \? \([\s\S]*headerLabel/);
   assert.doesNotMatch(reports, /getMyCommittees/);
-  assert.match(reports, /teacherScoped \? Promise\.resolve\(\[\]\)/);
-  assert.match(reports, /<DashboardHeaderFilters aboveTitle>[\s\S]*<DashboardDateRange/);
-  assert.ok(reports.indexOf('<DashboardMobileHeaderActions>') < reports.indexOf('<Card className='));
-  assert.match(reports, /!isExecutionFollowup && !isArchiveReport && \(teacherScoped \|\| isRangeReport\)[\s\S]*DashboardDateRange/);
-  assert.match(reports, /teacherScoped[\s\S]*studentsApi\.getProgressReport/);
-  assert.match(reports, /<ReportsOverview data=\{overview\} \/>/);
-  assert.match(teacherOverview, /CommitteeIndicatorsPanel/);
-  assert.match(teacherOverview, /QuranAchievementDropdown/);
-  assert.match(teacherOverview, /إجمالي أوجه الحفظ/);
-  assert.match(teacherOverview, /إجمالي أوجه المراجعة/);
-  assert.match(teacherOverview, /إجمالي أوجه الربط/);
+  // Teachers get no circle selector and no archive; the server scopes every report to their circles.
+  assert.match(reports, /canViewStandardReports && !teacherScoped \? cachedReport\('scoped-committees'/);
+  assert.match(reports, /<SelectTrigger aria-label="الفترة"/);
+  assert.match(reports, /studentsApi\.getOverviewReport\(\{ from, to, committeeId: scopeCommittee \}\)/);
+  for (const label of ['الإنجاز القرآني', 'حضور الطلاب', 'عدد الطلاب', 'عدد الحلقات']) {
+    assert.match(metrics, new RegExp(`label: '${label}'`));
+  }
+  for (const label of ['الحفظ', 'الإتقان', 'المراجعة', 'الربط']) {
+    assert.match(metrics, new RegExp(`\\['\\w+', '${label}'\\]`));
+  }
 });
 
-test('teacher reports expose execution only for student execution mode and keep scoped report controls', async () => {
-  const [dashboard, accountPortal, execution, reports, server] = await Promise.all([
+test('statistics drop the report tabs and trace student points by source while staying teacher scoped', async () => {
+  const [dashboard, accountPortal, metrics, reports, server] = await Promise.all([
     readFile(new URL('../src/pages/WajehDashboard.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/pages/AccountPortal.jsx', import.meta.url), 'utf8'),
-    readFile(new URL('../src/components/dashboard/ExecutionFollowupSection.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/dashboard/reports/reportMetrics.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/dashboard/ReportsSection.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../server/index.js', import.meta.url), 'utf8'),
   ]);
@@ -72,16 +71,14 @@ test('teacher reports expose execution only for student execution mode and keep 
   assert.doesNotMatch(dashboard, /key: 'executionFollowup'.*label: 'متابعة التنفيذ'/);
   assert.match(dashboard, /isSupervisor && \['teacherPoints', 'culturalCompetition', 'calls', 'reports'\]\.includes\(section\.key\)\) return true/);
   assert.match(dashboard, /canViewStandardReports=\{isSupervisor \|\|/);
-  assert.match(dashboard, /canViewExecutionFollowup=\{[\s\S]*settings\.hasStudentQuranExecution !== false[\s\S]*isSupervisor \|\| isManager/);
-  assert.match(accountPortal, /teacherScoped[\s\S]*canViewStandardReports[\s\S]*canViewExecutionFollowup=\{settings\.hasStudentQuranExecution !== false\}/);
-  assert.match(reports, /value="executionFollowup">متابعة تنفيذ/);
-  assert.match(reports, /value="students">طلاب/);
-  assert.match(reports, /value="overview">إحصائيات/);
-  assert.match(reports, /!isExecutionFollowup && \(isOverviewReport[\s\S]*aria-label="الحلقة"/);
-  assert.doesNotMatch(reports, /aria-label="الطالب"/);
-  assert.match(reports, /<ExecutionFollowupSection teacherScoped=\{teacherScoped\} \/>/);
-  assert.match(execution, /teacherScoped \? 'all' : filters\.committeeId/);
-  assert.match(execution, /\{!teacherScoped && \(/);
+  assert.doesNotMatch(dashboard + accountPortal + reports, /ExecutionFollowup|canViewExecutionFollowup/);
+  assert.doesNotMatch(reports, /aria-label="الطالب"|aria-label="نوع التقرير"|تصدير|sendReportWhatsApp/);
+  // Student points are loaded for the page scope and grouped by source, per student and per movement.
+  assert.match(reports, /studentsApi\.getStudentPointTransactionsReport\(\{ from, to, committeeId: scopeCommittee \}\)/);
+  assert.match(metrics, /title: 'المصادر'/);
+  assert.match(metrics, /stats: \[\.\.\.bySource\.entries\(\)\]/);
+  assert.match(metrics, /title: 'الحركات'/);
+  assert.match(server, /app\.get\('\/api\/reports\/student-point-transactions', requireReportsOrOwnCommittee/);
   assert.match(server, /function requireExecutionFollowupOrOwnCommittee/);
   assert.match(server, /const supervisorExecutionFollowup = req\.auth\.role === 'supervisor'[\s\S]*path === '\/execution-followup'/);
   assert.match(server, /supervisorOwnReports \|\| supervisorExecutionFollowup \|\| supervisorTeacherPointsAccess \|\| supervisorTeacherPointsReport \|\| accountCallsAccess/);
@@ -104,35 +101,19 @@ test('attendance source does not override the independent Quran execution source
 });
 
 test('teacher reports use a date range and call rooms lock to the linked committee', async () => {
-  const [reports, reportsProgress, server, calls, callRoutes] = await Promise.all([
+  const [reports, periods, server, calls, callRoutes] = await Promise.all([
     readFile(new URL('../src/components/dashboard/ReportsSection.jsx', import.meta.url), 'utf8'),
-    readFile(new URL('../src/components/dashboard/ReportsProgress.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/lib/reportPeriods.js', import.meta.url), 'utf8'),
     readFile(new URL('../server/index.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/calls/CallsSection.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../server/routes/callRoutes.js', import.meta.url), 'utf8'),
   ]);
 
-  assert.match(reports, /const reportFromDate = progressFromDate/);
-  assert.match(reportsProgress, /<HeaderCell>الحضور<\/HeaderCell>/);
-  assert.match(reportsProgress, /<HeaderCell>المراجعة<\/HeaderCell>/);
-  assert.match(reportsProgress, /<HeaderCell>الربط<\/HeaderCell>/);
-  assert.match(reportsProgress, /<HeaderCell>نسبة الإنجاز<\/HeaderCell>/);
-  assert.match(reportsProgress, /label="مقدار الحفظ"/);
-  assert.match(reportsProgress, /formatReportFaces/);
-  assert.doesNotMatch(reportsProgress, /formatContinuousRecitationRange/);
-  assert.doesNotMatch(reportsProgress, /بيانات ناظم|مقدار الفترة/);
+  // A named period (week, month, quarter, year) or a custom range chosen in a dialog.
+  assert.match(periods, /week: 'هذا الأسبوع',\s*month: 'هذا الشهر',\s*quarter: 'هذا الربع',\s*year: 'هذه السنة',\s*custom: 'مخصص'/);
+  assert.match(reports, /const range = useMemo\(\(\) => \(archiveId \? null : reportRange\(period, custom\)\)/);
+  assert.match(reports, /<DialogTitle>فترة مخصصة<\/DialogTitle>/);
   assert.match(server, /quranReferenceMode: settings\.quranReferenceMode === 'page' \? 'page' : 'ayah'/);
-  assert.doesNotMatch(reportsProgress, /<HeaderCell>التحضير<\/HeaderCell>|محفوظ اليوم|مراجعة اليوم|<HeaderCell>النسبة<\/HeaderCell>/);
-  assert.match(reportsProgress, /التكرار:/);
-  assert.match(reportsProgress, /السماع:/);
-  assert.match(server, /const progressScoredTaskTypes = \['memorization', 'review', 'link'\]/);
-  assert.match(server, /progressScoredTaskTypes\.map\(\(type\) => tasks\[type\]\.percentage\)/);
-  assert.match(reports, /const reportToDate = toDate/);
-  const dateRange = await readFile(new URL('../src/components/dashboard/DashboardDateRange.jsx', import.meta.url), 'utf8');
-  assert.match(reports, /onFromChange=\{updateFromDate\} onToChange=\{updateToDate\}/);
-  assert.match(dateRange, /ariaLabel="التاريخ من"/);
-  assert.match(dateRange, /ariaLabel="التاريخ إلى"/);
-  assert.doesNotMatch(reports, /teacherScoped \? date : progressFromDate/);
   assert.match(calls, /committeeSelectionLocked \? \{ name: form\.name \} : form/);
   assert.match(calls, /\{!committeeSelectionLocked && committees\.length > 0 && <div/);
   assert.match(calls, /committeeSelectionLocked && committees\.length === 0/);

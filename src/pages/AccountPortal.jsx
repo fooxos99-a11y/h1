@@ -249,7 +249,6 @@ const AccountPortal = () => {
           <ReportsSection
             teacherScoped
             canViewStandardReports
-            canViewExecutionFollowup={settings.hasStudentQuranExecution !== false}
             canViewTeacherPoints={settings.teacherManualPointsEnabled}
           />
       );
@@ -371,7 +370,7 @@ function supervisorPortalSections({ settings, alreadyPresentToday }) {
       list.push({ key: 'quranEvaluation', label: 'جلسات التسميع', icon: ClipboardCheck },
         { key: 'previousRecitationSessions', label: 'جلسات التسميع السابقة', icon: History });
       if (settings.teacherManualPointsEnabled) list.push({ key: 'teacherPoints', label: 'الإضافة والخصم', icon: PlusCircle });
-      list.push({ key: 'teacherReports', label: 'تقارير الحلقة', icon: BarChart3 });
+      list.push({ key: 'teacherReports', label: 'إحصائيات الحلقة', icon: BarChart3 });
       if (settings.culturalCompetitionSectionEnabled !== false) {
         list.push({ key: 'culturalCompetition', label: 'المسابقات الثقافية', icon: Trophy });
       }

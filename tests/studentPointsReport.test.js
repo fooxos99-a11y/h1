@@ -13,9 +13,8 @@ test('student points report is shown only for enabled teacher adjustments', asyn
     readFile(new URL('../src/components/ui/popover.jsx', import.meta.url), 'utf8'),
   ]);
 
-  assert.match(reports, /canViewTeacherPoints && <SelectItem value="teacherPoints">عمليات الإضافة والخصم<\/SelectItem>/);
-  assert.match(reports, /target === 'teacherPoints'/);
-  assert.match(reports, /<TeacherPointsReport rows=\{rows\} showTeacher=\{!teacherScoped\} \/>/);
+  assert.match(reports, /if \(canViewTeacherPoints\) loadList\('teacherPoints', listLoaders\.teacherPoints\)/);
+  assert.match(reports, /showTeacherPoints: canViewTeacherPoints && !archiveId/);
   assert.match(dashboard, /canViewTeacherPoints=\{settings\.teacherManualPointsEnabled\}/);
   assert.match(api, /\/reports\/student-points/);
   assert.match(server, /app\.get\('\/api\/reports\/student-points'/);

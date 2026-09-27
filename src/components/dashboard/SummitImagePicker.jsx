@@ -23,7 +23,7 @@ export default function SummitImagePicker({ imageId, onChange, label, fallback, 
     finally { if (mounted.current) setBusy(false); }
   };
   return <div className="space-y-2 [font-family:var(--font-ui)]">
-    <SummitSceneImage imageId={imageId} fallback={fallback} alt={label} className={portrait ? 'h-64 w-full rounded-xl bg-muted/30 object-contain' : 'h-36 w-full rounded-xl object-cover'} />
+    <SummitSceneImage imageId={imageId} fallback={fallback} alt={label} className={portrait ? 'mx-auto aspect-[9/16] h-72 w-auto rounded-xl bg-muted/30 object-cover' : 'h-36 w-full rounded-xl object-cover'} />
     <input ref={input} type="file" className="sr-only" tabIndex={-1} accept="image/jpeg,image/png,image/webp" aria-label={label} onChange={(event) => { select(event.target.files?.[0]); event.target.value = ''; }} />
     <Button type="button" variant="outline" className="min-h-11 w-full" disabled={busy} onClick={() => input.current?.click()}><ImagePlus className="h-4 w-4" />{busy ? 'تحميل الصورة…' : label}</Button>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

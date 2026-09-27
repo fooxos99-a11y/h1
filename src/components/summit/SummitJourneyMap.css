@@ -42,12 +42,19 @@
 }
 
 .qassim-road-scene.is-station .qassim-road-backdrop.qassim-station-backdrop {
-  object-fit: contain;
+  object-fit: cover;
   object-position: center;
-  padding: calc(env(safe-area-inset-top) + 7rem) 0 calc(env(safe-area-inset-bottom) + 6rem);
   transform: none;
   animation: none;
   filter: none;
+}
+
+/* Station photos are portrait; wide screens show the same phone-shaped frame. */
+@media (min-aspect-ratio: 3/4) {
+  .qassim-road-scene.is-station .qassim-road-backdrop.qassim-station-backdrop {
+    width: min(100%, calc(100dvh * 9 / 16));
+    margin-inline: auto;
+  }
 }
 
 .qassim-road-scene.is-moving .qassim-road-backdrop {

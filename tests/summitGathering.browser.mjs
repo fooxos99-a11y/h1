@@ -15,7 +15,9 @@ try {
     const photo = page.getByAltText('محطة ملتقى الطلاب', { exact: true });
     await photo.waitFor();
     await page.waitForFunction(() => globalThis.document.querySelector('.qassim-station-backdrop')?.naturalHeight === 900);
-    assert.equal(await photo.evaluate(node => globalThis.getComputedStyle(node).objectFit), 'contain');
+    assert.equal(await photo.evaluate(node => globalThis.getComputedStyle(node).objectFit), 'cover');
+    const frame = await photo.boundingBox();
+    assert.ok(frame.height >= 799 && frame.width <= Math.ceil(800 * 9 / 16) + 1, 'Station photo fills the screen height in a portrait frame');
     assert.equal(await photo.evaluate(node => globalThis.getComputedStyle(node).transform), 'none');
     assert.equal(await page.locator('.qassim-road-dashboard').count(), 1);
     assert.equal(await page.getByText('متوقف في محطة ملتقى الطلاب', { exact: true }).isVisible(), true);

@@ -23,7 +23,7 @@ test('teacher manual points use manager-defined types and stay term limited and 
     readFile(new URL('../src/components/dashboard/SettingsSection.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/dashboard/TeacherPointTypesSetting.jsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/portal/TeacherPointsAdjustmentSection.jsx', import.meta.url), 'utf8'),
-    readFile(new URL('../src/components/dashboard/TeacherPointsReport.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/dashboard/reports/reportMetrics.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/services/studentsApi.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/lib/sectionRoutes.js', import.meta.url), 'utf8'),
     readFile(new URL('../shared/platform-settings-catalog.js', import.meta.url), 'utf8'),
@@ -65,6 +65,7 @@ test('teacher manual points use manager-defined types and stay term limited and 
   assert.match(page, /adjustmentTypeId: selectedType\.id/);
   assert.match(page, />\s*حفظ\s*<\/Button>/);
   assert.match(report, /row\.reason/);
-  assert.match(report, /isIncrease \? 'إضافة \+' : 'خصم -'/);
+  assert.match(report, /label: 'الإضافة والخصم'/);
+  assert.match(report, /row\.type === 'increase' \? '\+' : '-'/);
   assert.match(routes, /\['teacherPoints', 'points-adjustment'\]/);
 });

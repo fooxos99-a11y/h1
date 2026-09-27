@@ -62,6 +62,7 @@ import { publicErrorMessage } from './services/publicErrors.js';
 import { createSharedPreparation } from './services/sharedPreparation.js';
 import { loadStudentRecitationHistory } from './services/studentRecitationHistory.js';
 import { createOverviewReportScope } from './services/overviewReportScope.js';
+import { buildOverviewRankings } from './services/overviewRankings.js';
 import { getStudentNextDayPreview, nameStudentPreviewTasks } from './services/studentNextDayPreview.js';
 import { filterPlanMarksByLatestAttempt } from './services/studentPlanMarks.js';
 import { notificationRouter, notificationManagementRouter } from './routes/notificationRoutes.js';
@@ -15971,6 +15972,7 @@ async function buildOverviewReport({ from, startDate: requestedStartDate, date, 
         committees: topCommitteesByAchievement,
       },
       committeeIndicators,
+      ...await buildOverviewRankings(reportDb, { from: startDate, to: endDate, attendanceDates, attendanceWeekDays, committeeIndicators }),
   };
 }
 

@@ -16,6 +16,7 @@ import {
   BookMarked,
   BookOpen,
   ClipboardCheck,
+  BarChart3,
   ClipboardList,
   GraduationCap,
   FileCheck2,
@@ -141,7 +142,7 @@ const baseSections = [
   { key: 'manualAttendance', label: 'التحضير', icon: ClipboardCheck },
   { key: 'staffAttendance', label: 'التحضير', icon: ClipboardCheck },
   { key: 'mushaf', label: 'المصحف', icon: BookOpen },
-  { key: 'reports', label: 'التقارير', icon: ClipboardList, permissionKeys: ['reports', 'executionFollowup'] },
+  { key: 'reports', label: 'الإحصائيات', icon: BarChart3 },
   { key: 'students', label: 'الطلاب', icon: GraduationCap },
   { key: 'families', label: 'الحلقات', icon: Building2 },
   { key: 'studentPlans', label: 'خطط الطلاب', icon: ListChecks },
@@ -369,10 +370,6 @@ const WajehDashboard = () => {
       <ReportsSection
         teacherScoped={isSupervisor}
         canViewStandardReports={isSupervisor || isManager || dashboardPermissions.includes('reports')}
-        canViewExecutionFollowup={
-          settings.hasStudentQuranExecution !== false
-          && (isSupervisor || isManager || dashboardPermissions.includes('executionFollowup'))
-        }
         canViewTeacherPoints={settings.teacherManualPointsEnabled}
       />
     );

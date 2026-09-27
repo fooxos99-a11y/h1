@@ -103,4 +103,16 @@ const SelectItem = React.forwardRef(({ className, children, showIndicator = true
 ))
 SelectItem.displayName = SelectPrimitive.Item.displayName
 
-export { Select, SelectContent, SelectItem, SelectTrigger, SelectValue }
+const SelectGroup = SelectPrimitive.Group
+
+const SelectLabel = React.forwardRef(({ className, ...props }, ref) => (
+  <SelectPrimitive.Label ref={ref} className={cn("px-3 py-1.5 text-right text-xs font-bold text-muted-foreground", className)} {...props} />
+))
+SelectLabel.displayName = SelectPrimitive.Label.displayName
+
+const SelectSeparator = React.forwardRef(({ className, ...props }, ref) => (
+  <SelectPrimitive.Separator ref={ref} className={cn("-mx-1 my-1 h-px bg-border", className)} {...props} />
+))
+SelectSeparator.displayName = SelectPrimitive.Separator.displayName
+
+export { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue }

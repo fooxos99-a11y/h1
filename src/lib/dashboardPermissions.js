@@ -16,7 +16,7 @@ const allDashboardPermissionOptions = [
   { key: 'reciters', label: 'المقرئون' },
   { key: 'administrators', label: 'الإداريين' },
   { key: 'notifications', label: 'الإشعارات' },
-  { key: 'reports', label: 'التقارير' },
+  { key: 'reports', label: 'الإحصائيات' },
   { key: 'programs', label: 'البرامج' },
   { key: 'whatsappSend', label: 'الإرسال عبر الواتس' },
   { key: 'settings', label: 'الإعدادات' },

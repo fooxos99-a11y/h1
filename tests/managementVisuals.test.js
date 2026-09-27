@@ -22,9 +22,11 @@ test('management actions share subtle borders and family preview shows contact d
   assert.match(iconButton, /variant="outline"/);
   assert.match(iconButton, /border-border\/70 shadow-none/);
   assert.doesNotMatch(iconButton, /border-destructive\/50/);
-  assert.match(reports, /const controlGridClass = isRecitationSessionsReport \? 'grid-cols-3 gap-1.5 sm:gap-3' : 'grid-cols-2'/);
-  assert.match(reports, /id="execution-followup-report-controls"[\s\S]*className="contents"/);
-  assert.match(reports, /sm:w-\[220px\]/);
+  // Reports are one overview: the period sits on the right of the page, next to the circle filter, not in the header.
+  assert.doesNotMatch(reports, /DashboardHeaderFilters/);
+  assert.match(reports, /aria-label="الفترة"[\s\S]*aria-label="الحلقة"/);
+  assert.match(reports, /aria-label="الحلقة"[\s\S]*<section aria-label="مؤشرات الأداء" className=\{`grid grid-cols-2 gap-4 md:grid-cols-3/);
+  assert.match(reports, /const controlClassName = 'h-11 min-w-0 flex-1 basis-36 text-sm sm:w-56 sm:flex-none \[&_span\]:truncate'/);
   for (const source of [students, plans, families, staff]) {
     assert.match(source, /ManagementIconButton/);
   }
