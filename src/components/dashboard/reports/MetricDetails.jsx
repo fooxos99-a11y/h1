@@ -108,11 +108,9 @@ export default function MetricDetails({ metric, periodLabel, committees = [], co
                   </SelectContent>
                 </Select>
               )}
-              {metric.error ? (
-                <ErrorState message={metric.error} onRetry={onRetry} />
-              ) : metric.loading ? (
-                <DashboardLoader className="py-10" />
-              ) : (
+              {metric.error && <ErrorState message={metric.error} onRetry={onRetry} />}
+              {!metric.error && metric.loading && <DashboardLoader className="py-10" />}
+              {!metric.error && !metric.loading && (
                 <>
                   {tiles.length > 0 && (
                     <div className={`grid gap-3 ${TILE_GRID[tiles.length] || 'grid-cols-2 sm:grid-cols-4'}`}>

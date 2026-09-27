@@ -110,7 +110,7 @@ test('student login is tracked and execution tasks carry repeat counts', async (
   assert.match(server, /studentsWithActivePlans/);
   assert.match(server, /ensureStudentPlanTasks\(connection, plan, today, settings\)/);
   assert.match(server, /t\.actual_repeat_count AS actualRepeatCount/);
-  assert.match(server, /actualRepeatCount: row\.actualRepeatCount/);
+  assert.match(server, /actualRepeatCount: countOrZero\(row\.actualRepeatCount\)/);
   assert.match(execution, /showIndicator=\{false\}/);
   assert.match(execution, /actualRepeatCounts\.memorization \?\? Math\.max/);
   assert.match(execution, /const taskOrder = \['memorization', 'review', 'link'\]/);

@@ -135,9 +135,10 @@ const ReportsSection = ({
   const detailCommittees = useMemo(() => detailCommitteesOf(overview), [overview]);
   const selected = metrics.find((metric) => metric.id === selectedId) || null;
 
-  const periodLabel = archive
-    ? archive.title
-    : period === 'custom' ? `من ${from} إلى ${to}` : REPORT_PERIOD_LABELS[period];
+  const rangeLabel = period === 'custom' ? `من ${from} إلى ${to}` : REPORT_PERIOD_LABELS[period];
+  const periodLabel = archive ? archive.title : rangeLabel;
+  const showLoadError = Boolean(loadError && !overview);
+  const showInitialLoader = !showLoadError && isLoading && !overview && canViewStandardReports;
 
   const openCustom = () => {
     setDraft(custom);
@@ -237,11 +238,9 @@ const ReportsSection = ({
           )}
         </div>
 
-        {loadError && !overview ? (
-          <ErrorState message={loadError} onRetry={() => setRetry((value) => value + 1)} />
-        ) : isLoading && !overview && canViewStandardReports ? (
-          <DashboardLoader className="py-16" />
-        ) : (
+        {showLoadError && <ErrorState message={loadError} onRetry={() => setRetry((value) => value + 1)} />}
+        {showInitialLoader && <DashboardLoader className="py-16" />}
+        {!showLoadError && !showInitialLoader && (
           <>
             {loadError && <ErrorState message={loadError} onRetry={() => setRetry((value) => value + 1)} />}
             <section aria-label="مؤشرات الأداء" className={`grid grid-cols-2 gap-4 md:grid-cols-3 ${isLoading ? 'opacity-60' : ''}`}>

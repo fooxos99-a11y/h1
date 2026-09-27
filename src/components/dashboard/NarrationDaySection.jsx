@@ -32,6 +32,30 @@ const summarizeStudents = (students = []) => ({
   excused: students.filter((student) => student.status === 'excused').length,
 });
 
+const countMarksOfType = (marks, markType) => marks.filter((mark) => mark.markType === markType).length;
+
+// Mushaf marks belong to their segment; manual counts belong to the juz, so they are kept once on its first segment.
+function partEvaluationCounts({ evaluationMode, partMarks, isFirst, warningCount, mistakeCount }) {
+  if (evaluationMode === 'mushaf') {
+    return { warningCount: countMarksOfType(partMarks, 'warning'), mistakeCount: countMarksOfType(partMarks, 'mistake') };
+  }
+  return isFirst ? { warningCount, mistakeCount } : { warningCount: 0, mistakeCount: 0 };
+}
+
+/** The student with the juz evaluated locally, pending confirmation from the server. */
+function applyLocalJuzEvaluation(student, { juzNumber, marksByPart, evaluationMode, localScore, warningCount, mistakeCount }) {
+  const inJuz = (part) => Number(part.juzNumber) === Number(juzNumber);
+  const firstPartId = String(student.parts.find(inJuz)?.id);
+  const parts = student.parts.map((part) => {
+    if (!inJuz(part)) return part;
+    const partMarks = marksByPart.get(String(part.id)) || [];
+    const counts = partEvaluationCounts({ evaluationMode, partMarks, isFirst: String(part.id) === firstPartId, warningCount, mistakeCount });
+    return { ...part, score: localScore, ...counts, wordMarks: partMarks, pendingSync: true };
+  });
+  const evaluated = parts.every((part) => part.score !== null && part.score !== undefined);
+  return { ...student, parts, status: evaluated ? 'completed' : 'in_progress' };
+}
+
 const NarrationDaySection = () => {
   const { toast } = useToast();
   const [events, setEvents] = useState([]);
@@ -149,10 +173,10 @@ const NarrationDaySection = () => {
       const marksByPart = new Map((payload.parts || []).map((item) => [String(item.partId), Array.isArray(item.wordMarks) ? item.wordMarks : []]));
       const allMarks = [...marksByPart.values()].flat();
       const warningCount = payload.evaluationMode === 'mushaf'
-        ? allMarks.filter((mark) => mark.markType === 'warning').length
+        ? countMarksOfType(allMarks, 'warning')
         : Number(payload.warningCount || 0);
       const mistakeCount = payload.evaluationMode === 'mushaf'
-        ? allMarks.filter((mark) => mark.markType === 'mistake').length
+        ? countMarksOfType(allMarks, 'mistake')
         : Number(payload.mistakeCount || 0);
       const policy = event.evaluationPolicy || {};
       const localScore = Math.max(0, Number(policy.maxScore || 100)
@@ -160,25 +184,9 @@ const NarrationDaySection = () => {
         - mistakeCount * Number(policy.mistakeDeduction || 0));
       setEvent((current) => ({
         ...current,
-        students: current.students.map((student) => {
-          if (String(student.id) !== String(entryId)) return student;
-          const juzParts = student.parts.filter((part) => Number(part.juzNumber) === Number(juzNumber));
-          const firstPartId = String(juzParts[0]?.id);
-          const parts = student.parts.map((part) => {
-            if (Number(part.juzNumber) !== Number(juzNumber)) return part;
-            const partMarks = marksByPart.get(String(part.id)) || [];
-            const isFirst = String(part.id) === firstPartId;
-            return {
-              ...part,
-              score: localScore,
-              warningCount: payload.evaluationMode === 'mushaf' ? partMarks.filter((mark) => mark.markType === 'warning').length : (isFirst ? warningCount : 0),
-              mistakeCount: payload.evaluationMode === 'mushaf' ? partMarks.filter((mark) => mark.markType === 'mistake').length : (isFirst ? mistakeCount : 0),
-              wordMarks: partMarks,
-              pendingSync: true,
-            };
-          });
-          return { ...student, parts, status: parts.every((part) => part.score !== null && part.score !== undefined) ? 'completed' : 'in_progress' };
-        }),
+        students: current.students.map((student) => (String(student.id) === String(entryId)
+          ? applyLocalJuzEvaluation(student, { juzNumber, marksByPart, evaluationMode: payload.evaluationMode, localScore, warningCount, mistakeCount })
+          : student)),
       }));
       const synced = navigator.onLine === false
         ? null

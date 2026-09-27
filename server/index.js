@@ -4635,9 +4635,26 @@ const rejectNazemManagedPlanChange = (res) => res.status(409).json({
   message: `هذه الخطة مُدارة بواسطة ناظم. عدّلها من ناظم لتتحدث في ${siteConfig.name}.`,
 });
 
+const nullableNumber = (value) => (value === null || value === undefined ? null : Number(value));
+const countOrZero = (value) => Math.max(0, nullableNumber(value) ?? 0);
+const completeQuranEnd = (page, surah, ayah) => (page && surah && ayah
+  ? { page: Number(page), surah: Number(surah), ayah: Number(ayah) }
+  : null);
+
+// A grouped review reports its own faces; otherwise recorded faces fall back to the target.
+function resolveTaskActualFaces(row, reviewExecution, targetPages) {
+  if (row.reviewExecution) return Number(reviewExecution?.faces || 0);
+  return nullableNumber(row.actualFaces) ?? targetPages;
+}
+
+function buildActualTaskPreview(row, referenceMode) {
+  if (!row.actualToPage || !row.actualToSurah || !row.actualToAyah) return '';
+  return buildTaskRangePreview(row, referenceMode, 'actualTo');
+}
+
 function normalizeTaskRow(row, referenceMode = 'ayah') {
   const reviewExecution = parseReviewExecution(row.reviewExecution);
-  const targetPages = row.targetPages === null || row.targetPages === undefined ? null : Number(row.targetPages);
+  const targetPages = nullableNumber(row.targetPages);
   const taskPreview = {
     fromPage: row.fromPage,
     toPage: row.toPage,
@@ -4648,24 +4665,10 @@ function normalizeTaskRow(row, referenceMode = 'ayah') {
     fromSurahName: row.fromSurahName,
     toSurahName: row.toSurahName,
     targetPages,
-    normalEnd: row.normalToPage && row.normalToSurah && row.normalToAyah ? {
-      page: Number(row.normalToPage), surah: Number(row.normalToSurah), ayah: Number(row.normalToAyah),
-    } : null,
-    scheduledEnd: row.scheduledToPage && row.scheduledToSurah && row.scheduledToAyah ? {
-      page: Number(row.scheduledToPage), surah: Number(row.scheduledToSurah), ayah: Number(row.scheduledToAyah),
-    } : null,
+    normalEnd: completeQuranEnd(row.normalToPage, row.normalToSurah, row.normalToAyah),
+    scheduledEnd: completeQuranEnd(row.scheduledToPage, row.scheduledToSurah, row.scheduledToAyah),
   };
-  const actualToPage = row.actualToPage || row.toPage;
-  const actualToSurah = row.actualToSurah || row.toSurah;
-  const actualToAyah = row.actualToAyah || row.toAyah;
-  const actualPreview = row.actualToPage && row.actualToSurah && row.actualToAyah
-    ? buildTaskRangePreview({
-      ...row,
-      actualToPage,
-      actualToSurah,
-      actualToAyah,
-    }, referenceMode, 'actualTo')
-    : '';
+  const actualPreview = buildActualTaskPreview(row, referenceMode);
   return {
     id: row.id,
     planId: row.planId,
@@ -4691,7 +4694,7 @@ function normalizeTaskRow(row, referenceMode = 'ayah') {
     toSurahName: row.toSurahName,
     toSurahAyahCount: row.toSurahAyahCount,
     targetPages,
-    actualFaces: row.reviewExecution ? Number(reviewExecution?.faces || 0) : row.actualFaces === null || row.actualFaces === undefined ? targetPages : Number(row.actualFaces),
+    actualFaces: resolveTaskActualFaces(row, reviewExecution, targetPages),
     normalEnd: taskPreview.normalEnd,
     scheduledEnd: taskPreview.scheduledEnd,
     executionState: row.executionState || null,
@@ -4707,15 +4710,11 @@ function normalizeTaskRow(row, referenceMode = 'ayah') {
     teacherRatingLabel: row.teacherRatingLabel,
     warningCount: Number(row.warningCount || 0),
     mistakeCount: Number(row.mistakeCount || 0),
-    evaluationScore: row.evaluationScore === null || row.evaluationScore === undefined ? null : Number(row.evaluationScore),
-    evaluationMaxScore: row.evaluationMaxScore === null || row.evaluationMaxScore === undefined ? null : Number(row.evaluationMaxScore),
+    evaluationScore: nullableNumber(row.evaluationScore),
+    evaluationMaxScore: nullableNumber(row.evaluationMaxScore),
     points: Number(row.points || 0),
-    actualRepeatCount: row.actualRepeatCount === null || row.actualRepeatCount === undefined
-      ? 0
-      : Math.max(0, Number(row.actualRepeatCount)),
-    actualListeningCount: row.actualListeningCount === null || row.actualListeningCount === undefined
-      ? 0
-      : Math.max(0, Number(row.actualListeningCount)),
+    actualRepeatCount: countOrZero(row.actualRepeatCount),
+    actualListeningCount: countOrZero(row.actualListeningCount),
     executionActorRole: row.executionActorRole || null,
     repeatExecutionActorRole: row.repeatExecutionActorRole || null,
     nazemManaged: Boolean(row.nazemManaged),
@@ -7069,6 +7068,40 @@ async function refreshNarrationStudentResult(connection, eventStudentId) {
   return { complete, finalScore };
 }
 
+const countMarksOfType = (marks, markType) => marks.filter((mark) => mark.markType === markType).length;
+
+/**
+ * Validates a narration juz result: mushaf marks per segment, or manual counts without marks.
+ * Returns { error } with the message to send, or { marksByPart }.
+ */
+async function readNarrationJuzMarks(connection, parts, body, evaluationMode) {
+  const marksByPart = new Map();
+  if (evaluationMode !== 'mushaf') {
+    return Array.isArray(body.parts) || Array.isArray(body.wordMarks)
+      ? { error: 'لا ترسل علامات كلمات مع النتيجة اليدوية.' }
+      : { marksByPart };
+  }
+  const submitted = new Map((Array.isArray(body.parts) ? body.parts : [])
+    .map((item) => [String(item?.partId), item?.wordMarks]));
+  if ([...submitted.keys()].some((partId) => !parts.some((part) => String(part.id) === partId))) {
+    return { error: 'مقاطع الجزء غير صحيحة.' };
+  }
+  for (const part of parts) {
+    const normalized = await normalizeQuranRangeWordMarks(connection, part, submitted.get(String(part.id)) || []);
+    if (normalized === null) return { error: 'تحديد أخطاء المصحف غير صحيح.' };
+    marksByPart.set(String(part.id), normalized);
+  }
+  return { marksByPart };
+}
+
+// Mushaf marks belong to their segment; manual counts belong to the juz as a whole, so they are kept once on its first segment.
+function narrationPartCounts({ evaluationMode, partMarks, index, warnings, mistakes }) {
+  if (evaluationMode === 'mushaf') {
+    return { warnings: countMarksOfType(partMarks, 'warning'), mistakes: countMarksOfType(partMarks, 'mistake') };
+  }
+  return index === 0 ? { warnings, mistakes } : { warnings: 0, mistakes: 0 };
+}
+
 app.put('/api/narration-events/:eventId/students/:studentEntryId/juz/:juzNumber', requireNarrationAccess, async (req, res, next) => {
   const connection = await db().getConnection();
   try {
@@ -7088,39 +7121,21 @@ app.put('/api/narration-events/:eventId/students/:studentEntryId/juz/:juzNumber'
     if (!await canAccessNarrationCommittee(req.auth, parts[0].committeeId)) return res.status(403).json({ message: 'لا يمكنك تقييم هذا الطالب.' });
     const evaluationMode = ['mushaf', 'count'].includes(req.body.evaluationMode) ? req.body.evaluationMode : null;
     if (!evaluationMode) return res.status(422).json({ message: 'اختر طريقة تسجيل نتيجة السرد.' });
-    const marksByPart = new Map();
-    if (evaluationMode === 'mushaf') {
-      const submitted = new Map((Array.isArray(req.body.parts) ? req.body.parts : [])
-        .map((item) => [String(item?.partId), item?.wordMarks]));
-      if ([...submitted.keys()].some((partId) => !parts.some((part) => String(part.id) === partId))) {
-        return res.status(422).json({ message: 'مقاطع الجزء غير صحيحة.' });
-      }
-      for (const part of parts) {
-        const normalized = await normalizeQuranRangeWordMarks(connection, part, submitted.get(String(part.id)) || []);
-        if (normalized === null) return res.status(422).json({ message: 'تحديد أخطاء المصحف غير صحيح.' });
-        marksByPart.set(String(part.id), normalized);
-      }
-    } else if (Array.isArray(req.body.parts) || Array.isArray(req.body.wordMarks)) {
-      return res.status(422).json({ message: 'لا ترسل علامات كلمات مع النتيجة اليدوية.' });
-    }
+    const { error: marksError, marksByPart } = await readNarrationJuzMarks(connection, parts, req.body, evaluationMode);
+    if (marksError) return res.status(422).json({ message: marksError });
     const allMarks = [...marksByPart.values()].flat();
-    const warnings = evaluationMode === 'mushaf'
-      ? allMarks.filter((mark) => mark.markType === 'warning').length
-      : Math.max(0, Number(req.body.warningCount || 0));
-    const mistakes = evaluationMode === 'mushaf'
-      ? allMarks.filter((mark) => mark.markType === 'mistake').length
-      : Math.max(0, Number(req.body.mistakeCount || 0));
+    const isMushaf = evaluationMode === 'mushaf';
+    const warnings = isMushaf ? countMarksOfType(allMarks, 'warning') : Math.max(0, Number(req.body.warningCount || 0));
+    const mistakes = isMushaf ? countMarksOfType(allMarks, 'mistake') : Math.max(0, Number(req.body.mistakeCount || 0));
     const settings = await loadSettings();
     const score = Math.max(0, Number(settings.narrationMaxScore) - warnings * Number(settings.narrationWarningDeduction) - mistakes * Number(settings.narrationMistakeDeduction));
     await connection.beginTransaction();
     for (const [index, part] of parts.entries()) {
       const partMarks = marksByPart.get(String(part.id)) || [];
-      // Manual counts belong to the juz as a whole, so they are kept once on its first segment.
-      const partWarnings = evaluationMode === 'mushaf' ? partMarks.filter((mark) => mark.markType === 'warning').length : (index === 0 ? warnings : 0);
-      const partMistakes = evaluationMode === 'mushaf' ? partMarks.filter((mark) => mark.markType === 'mistake').length : (index === 0 ? mistakes : 0);
+      const counts = narrationPartCounts({ evaluationMode, partMarks, index, warnings, mistakes });
       await connection.query(
         'UPDATE narration_event_parts SET warning_count = ?, mistake_count = ?, score = ?, notes = NULL, evaluated_by = ?, evaluated_at = NOW(), evaluation_mode = ?, word_marks_json = ? WHERE id = ?',
-        [partWarnings, partMistakes, score, Number(req.auth.id || 0) || null, evaluationMode, evaluationMode === 'mushaf' ? JSON.stringify(partMarks) : null, part.id]
+        [counts.warnings, counts.mistakes, score, Number(req.auth.id || 0) || null, evaluationMode, isMushaf ? JSON.stringify(partMarks) : null, part.id]
       );
     }
     const { complete, finalScore } = await refreshNarrationStudentResult(connection, entryId);
@@ -7604,40 +7619,63 @@ app.post('/api/settings/end-term', requirePermission('settings'), async (req, re
   }
 });
 
+// Omitted fields keep the stored choice; any other value falls back to the default option.
+const staffAttendanceSourceResolver = (req, previousSettings) => () => {
+  if (req.body.staffAttendanceSource === undefined) return previousSettings.staffAttendanceSource;
+  return req.body.staffAttendanceSource === 'teacher' ? 'teacher' : 'supervisor';
+};
+const quranReferenceModeResolver = (req, previousSettings) => () => {
+  const requested = req.body.quranReferenceMode === undefined ? previousSettings.quranReferenceMode : req.body.quranReferenceMode;
+  return requested === 'page' ? 'page' : 'ayah';
+};
+
+const optionalSettingNumber = (value) => (value === null ? '' : String(value));
+
+// Students hear about summit stations added while the summit is enabled.
+async function notifyNewSummitStations(connection, { previousSettings, settings, eventNotifications }) {
+  if (!settings.summitEnabled) return;
+  const previousStations = new Set((previousSettings.summitMapConfig?.stations || []).map((station) => station.id));
+  for (const station of settings.summitMapConfig?.stations || []) {
+    if (!previousStations.has(station.id)) await notifyStudentsOfEvent(connection, { type: 'station', key: station.id, values: { station: station.name }, config: eventNotifications });
+  }
+}
+
+// Tasks are executed by the teacher only when every task type is.
+const resolveQuranTaskExecutionSource = (settings) => ([
+  settings.memorizationExecutionSource,
+  settings.reviewExecutionSource,
+  settings.linkExecutionSource,
+  settings.repeatExecutionSource,
+].every((source) => source === 'teacher') ? 'teacher' : 'student');
+
+// Each check returns the response it sent when the settings are rejected; they run in this order.
+const SETTINGS_UPDATE_VALIDATORS = Object.freeze([
+  resolveAttendanceLocationSettings,
+  rejectInvalidAttendanceSettings,
+  rejectMissingMessageTemplates,
+  rejectEmptyActivitySchedules,
+  rejectInvalidEvaluationSettings,
+]);
+
+async function rejectInactiveStoreOrderAdministrators(connection, administrators) {
+  if (!administrators.length) return false;
+  const [valid] = await connection.query("SELECT id FROM supervisors WHERE is_active = 1 AND role IN ('manager', 'admin') AND id IN (?)", [administrators]);
+  return valid.length !== administrators.length;
+}
+
 app.put('/api/settings', requirePermission('settings'), async (req, res, next) => {
   const connection = await db().getConnection();
   let transactionStarted = false;
   try {
     const previousSettings = await loadSettings();
     const eventNotifications = normalizeEventNotifications(req.body.eventNotifications ?? previousSettings.eventNotifications);
-    const selectedAdministrators = eventNotifications.storeOrder.administrators;
-    if (selectedAdministrators.length) {
-      const [valid] = await connection.query("SELECT id FROM supervisors WHERE is_active = 1 AND role IN ('manager', 'admin') AND id IN (?)", [selectedAdministrators]);
-      if (valid.length !== selectedAdministrators.length) return res.status(422).json({ message: 'اختر إداريين نشطين لاستقبال طلبات المتجر.' });
+    if (await rejectInactiveStoreOrderAdministrators(connection, eventNotifications.storeOrder.administrators)) {
+      return res.status(422).json({ message: 'اختر إداريين نشطين لاستقبال طلبات المتجر.' });
     }
     const { studentRankingsVisible, familyRankingsVisible } = requestedRankingVisibility(req);
     const { teacherMemorizationRecitationMode, teacherReviewRecitationMode, teacherLinkRecitationMode, reciterMemorizationRecitationMode, reciterReviewRecitationMode, reciterLinkRecitationMode } = retainedRecitationModes(previousSettings);
-    const _resolveStaffAttendanceSource = () => {
-      if (req.body.staffAttendanceSource === undefined) {
-        return previousSettings.staffAttendanceSource;
-      }
-      if (req.body.staffAttendanceSource === 'teacher') {
-        return 'teacher';
-      }
-      return 'supervisor';
-    };
-    const _resolveQuranReferenceMode = () => {
-      if (req.body.quranReferenceMode === undefined) {
-        if (previousSettings.quranReferenceMode === 'page') {
-          return 'page';
-        }
-        return 'ayah';
-      }
-      if (req.body.quranReferenceMode === 'page') {
-        return 'page';
-      }
-      return 'ayah';
-    };
+    const _resolveStaffAttendanceSource = staffAttendanceSourceResolver(req, previousSettings);
+    const _resolveQuranReferenceMode = quranReferenceModeResolver(req, previousSettings);
     const buildRewardSettingsUpdateValues = buildRewardSettingsUpdate(req, studentRankingsVisible, familyRankingsVisible, previousSettings);
     const buildAttendanceSettingsUpdateValues = buildAttendanceSettingsUpdate(req, _resolveStaffAttendanceSource, previousSettings);
     const buildNotificationSettingsUpdateValues = buildNotificationSettingsUpdate(req, previousSettings, _resolveQuranReferenceMode);
@@ -7664,22 +7702,11 @@ app.put('/api/settings', requirePermission('settings'), async (req, res, next) =
     Object.assign(settings, applyPlatformPolicies(settings, previousSettings.platformPolicies || {}));
     Object.assign(settings, enforcePointsFeatureDependencies(settings));
 
-    settings.quranTaskExecutionSource = [
-      settings.memorizationExecutionSource,
-      settings.reviewExecutionSource,
-      settings.linkExecutionSource,
-      settings.repeatExecutionSource,
-    ].every((source) => source === 'teacher') ? 'teacher' : 'student';
-    const resolveAttendanceLocationSettingsResult = await resolveAttendanceLocationSettings({ settings, res });
-    if (resolveAttendanceLocationSettingsResult) { return resolveAttendanceLocationSettingsResult; }
-    const rejectInvalidAttendanceSettingsResult = await rejectInvalidAttendanceSettings({ settings, res });
-    if (rejectInvalidAttendanceSettingsResult) { return rejectInvalidAttendanceSettingsResult; }
-    const rejectMissingMessageTemplatesResult = await rejectMissingMessageTemplates({ settings, res });
-    if (rejectMissingMessageTemplatesResult) { return rejectMissingMessageTemplatesResult; }
-    const rejectEmptyActivitySchedulesResult = await rejectEmptyActivitySchedules({ settings, res });
-    if (rejectEmptyActivitySchedulesResult) { return rejectEmptyActivitySchedulesResult; }
-    const rejectInvalidEvaluationSettingsResult = await rejectInvalidEvaluationSettings({ settings, res });
-    if (rejectInvalidEvaluationSettingsResult) { return rejectInvalidEvaluationSettingsResult; }
+    settings.quranTaskExecutionSource = resolveQuranTaskExecutionSource(settings);
+    for (const validate of SETTINGS_UPDATE_VALIDATORS) {
+      const rejected = await validate({ settings, res });
+      if (rejected) return rejected;
+    }
     await connection.beginTransaction();
     transactionStarted = true;
 
@@ -7847,8 +7874,8 @@ app.put('/api/settings', requirePermission('settings'), async (req, res, next) =
         String(settings.lateEveryMinutes),
         String(settings.lateDeductionPoints),
         settings.attendanceLocationUrl,
-        settings.attendanceLocationLat === null ? '' : String(settings.attendanceLocationLat),
-        settings.attendanceLocationLng === null ? '' : String(settings.attendanceLocationLng),
+        optionalSettingNumber(settings.attendanceLocationLat),
+        optionalSettingNumber(settings.attendanceLocationLng),
         settings.attendanceAbsentTemplate,
         String(settings.automaticAbsenceMessageEnabled),
         String(settings.automaticExecutionMessageEnabled),
@@ -8056,10 +8083,7 @@ app.put('/api/settings', requirePermission('settings'), async (req, res, next) =
     );
 
     await connection.query("INSERT INTO app_settings (setting_key, setting_value) VALUES ('eventNotifications', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)", [JSON.stringify(eventNotifications)]);
-    const previousStations = new Set((previousSettings.summitMapConfig?.stations || []).map(station => station.id));
-    if (settings.summitEnabled) for (const station of settings.summitMapConfig?.stations || []) {
-      if (!previousStations.has(station.id)) await notifyStudentsOfEvent(connection, { type: 'station', key: station.id, values: { station: station.name }, config: eventNotifications });
-    }
+    await notifyNewSummitStations(connection, { previousSettings, settings, eventNotifications });
     await syncStudentPointFamilyContributionSetting(connection, previousSettings, settings);
     await syncFamilyPointStudentContributionSetting(connection, settings);
     await syncInactiveSourcePointAdjustments(connection, settings);
@@ -10359,14 +10383,19 @@ async function getStudentReviewEnd(connection, plan, date, start, expectedEnd) {
   return extendReviewEnd({ ayahs, expectedEnd, direction, isAvailable: ayah => quranPositionInRanges(ayah, saved) && !quranPositionInRanges(ayah, links) });
 }
 
+// Reviews may extend over later memorized ayahs; memorization may reach the permitted plan limit.
+async function resolveTodayExecutionEnd({ row, memorizationContext, plan, connection, date, start, expectedEnd }) {
+  if (row.taskType === 'review') return getStudentReviewEnd(connection, plan, date, start, expectedEnd);
+  if (row.taskType === 'memorization' && memorizationContext?.allowedEnd) return memorizationContext.allowedEnd;
+  return expectedEnd;
+}
+
 async function buildTodayExecutionAyahs({ rows, memorizationContext, plan, connection, executionAyahMap, executionAyahsByType, date }) {
   for (const row of rows) {
     const start = { page: Number(row.fromPage), surah: Number(row.fromSurah), ayah: Number(row.fromAyah) };
     const expectedEnd = { page: Number(row.toPage), surah: Number(row.toSurah), ayah: Number(row.toAyah) };
     if (!isValidQuranPosition(start) || !isValidQuranPosition(expectedEnd)) continue;
-    const allowedEnd = row.taskType === 'review'
-      ? await getStudentReviewEnd(connection, plan, date, start, expectedEnd)
-      : row.taskType === 'memorization' && memorizationContext?.allowedEnd ? memorizationContext.allowedEnd : expectedEnd;
+    const allowedEnd = await resolveTodayExecutionEnd({ row, memorizationContext, plan, connection, date, start, expectedEnd });
     const taskDirection = ['memorization', 'repeat'].includes(row.taskType)
       ? getQuranRangeDirection(
         { page: Number(plan.startPage), surah: Number(plan.startSurah), ayah: Number(plan.startAyah) },
@@ -11605,6 +11634,89 @@ app.get('/api/quran-execution-corrections', requirePermission('studentPlans'), a
   }
 });
 
+// The plan fields selected with an execution task, in the shape the plan helpers expect.
+const buildPlanFromExecutionRow = (row) => ({
+  id: row.planId,
+  studentId: row.studentId,
+  track: row.track,
+  startSurah: row.startSurah,
+  startAyah: row.startAyah,
+  startPage: row.startPage,
+  endSurah: row.endSurah,
+  endAyah: row.endAyah,
+  endPage: row.endPage,
+  dailyPages: row.dailyPages,
+  startDate: row.startDate,
+  effectiveFrom: row.effectiveFrom,
+  scheduleDays: row.scheduleDays,
+  scheduleAnchorPage: row.scheduleAnchorPage,
+  scheduleAnchorSurah: row.scheduleAnchorSurah,
+  scheduleAnchorAyah: row.scheduleAnchorAyah,
+});
+
+// A review is executed as one cycle when faces are sent, or when a student continues a grouped review.
+const shouldExecuteReviewCycle = ({ first, body, administrativeCorrection, taskRows }) => first.taskType === 'review'
+  && (body.reviewFaces !== undefined || (!administrativeCorrection && taskRows.some((row) => row.reviewExecution)));
+
+async function executeReviewCycleGroup({ connection, plan, first, taskRows, status, req, res, settings, administrativeCorrection, studentId, nazemManaged, nazemTeacherId }) {
+  const [[group]] = await connection.query("SELECT COUNT(*) AS count FROM student_quran_tasks WHERE plan_id = ? AND task_date = ? AND task_type = 'review'", [first.planId, first.taskDate]);
+  if (Number(group.count) !== taskRows.length) {
+    await connection.rollback();
+    return res.status(409).json({ message: 'أعد فتح المراجعة لتنفيذ مقدار اليوم كاملًا.' });
+  }
+  const cycle = await getStudentReviewCycle(connection, plan, first.taskDate, taskRows);
+  let selection = null;
+  try {
+    if (status === 'done') selection = selectAuthorizedReview(cycle, req.body.reviewFaces ?? cycle.expectedFaces,
+      administrativeCorrection || settings.studentReviewAmountEditable);
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+    await connection.rollback();
+    return res.status(422).json({ message: error.message });
+  }
+  await saveReviewCycle({ connection, tasks: taskRows, studentId, status, selection, expectedFaces: cycle.expectedFaces });
+  const reward = calculateStudentExecutionPoints({ taskType: 'review', track: first.track,
+    completedAmount: selection?.faces || 0, expectedAmount: cycle.expectedFaces, settings });
+  await persistExecutionGroupReward({ settings, administrativeCorrection, connection, tasks: taskRows,
+    studentId, executionRewardTotal: reward.total, first, req, reward });
+  await saveStudentRemoteExecution({ nazemManaged, first, connection, tasks: taskRows, settings, status, nazemTeacherId });
+  await connection.commit();
+  return res.json({ ok: true });
+}
+
+// Recorded practice counts: the expected counts unless editing is allowed, and none when not done.
+function practiceCountFor({ done, expected, editable, requested }) {
+  if (!done || expected <= 0) return 0;
+  return editable ? practiceCompletionCount(requested, expected) : expected;
+}
+
+function resolveExecutionPracticeCounts({ first, settings, status, body }) {
+  const isMemorization = first.taskType === 'memorization';
+  const repeatSetting = first.track === 'mastery' ? settings.masteryRepeatCount : settings.memorizationRepeatCount;
+  const expectedRepeatCount = isMemorization ? Math.max(1, Number(repeatSetting)) : 0;
+  const expectedListeningCount = getExpectedMemorizationListeningCount(first, settings);
+  const done = status === 'done';
+  return {
+    expectedRepeatCount,
+    expectedListeningCount,
+    actualRepeatCount: practiceCountFor({ done: done && isMemorization, expected: expectedRepeatCount, editable: settings.allowRepeatCountEditing, requested: body.repeatCount }),
+    actualListeningCount: practiceCountFor({ done, expected: expectedListeningCount, editable: settings.allowListeningCountEditing, requested: body.listeningCount }),
+  };
+}
+
+/** Validates the recorded end of a done execution and adds tasks for amounts beyond the plan. */
+async function limitStudentExecutionEnd({ administrativeCorrection, settings, first, connection, res, plan, studentId, tasks, actualEnd, expectedEnd, expectedStart, executionDirection }) {
+  const endComparison = compareQuranPositionInDirection(actualEnd, expectedEnd, executionDirection);
+  const rejectedEndChange = await rejectDisabledExecutionEndChange({ administrativeCorrection, settings, first, endComparison, connection, res });
+  if (rejectedEndChange) return { rejected: rejectedEndChange };
+  const memorizationContext = await loadExecutionMemorizationContext({ first, connection, plan, settings, expectedStart });
+  const { isExpectedCompletion, allowedEnd } = await resolveStudentExecutionLimit({ first, expectedEnd, administrativeCorrection, connection, plan, memorizationContext, actualEnd });
+  const rejectedRange = await rejectOutOfRangeExecution({ actualEnd, expectedStart, expectedEnd, executionDirection, isExpectedCompletion, allowedEnd, connection, res });
+  if (rejectedRange) return { rejected: rejectedRange };
+  const extendedTasks = await createExtraExecutionTasks({ actualEnd, expectedEnd, executionDirection, connection, plan, first, studentId, tasks });
+  return { memorizationContext, tasks: extendedTasks };
+}
+
 const executeStudentQuranTasks = async (req, res, next) => {
   const connection = await db().getConnection();
   try {
@@ -11682,64 +11794,19 @@ const executeStudentQuranTasks = async (req, res, next) => {
     const nazemManaged = Boolean(nazemTeacherId);
     const rejectInvalidExecutionGroupResult = await rejectInvalidExecutionGroup({ taskRows, first, nazemManaged, connection, settings, res });
     if (rejectInvalidExecutionGroupResult) { return rejectInvalidExecutionGroupResult; }
-    const plan = {
-      id: first.planId,
-      studentId: first.studentId,
-      track: first.track,
-      startSurah: first.startSurah,
-      startAyah: first.startAyah,
-      startPage: first.startPage,
-      endSurah: first.endSurah,
-      endAyah: first.endAyah,
-      endPage: first.endPage,
-      dailyPages: first.dailyPages,
-      startDate: first.startDate,
-      effectiveFrom: first.effectiveFrom,
-      scheduleDays: first.scheduleDays,
-      scheduleAnchorPage: first.scheduleAnchorPage,
-      scheduleAnchorSurah: first.scheduleAnchorSurah,
-      scheduleAnchorAyah: first.scheduleAnchorAyah,
-    };
+    const plan = buildPlanFromExecutionRow(first);
     if (first.taskType === 'repeat') {
       return await executeRepeatTaskGroup({ first, settings, status, nazemManaged, req, connection, placeholders, studentId, taskIds, administrativeCorrection, res });
     }
-    if (first.taskType === 'review' && (req.body.reviewFaces !== undefined || (!administrativeCorrection && taskRows.some(row => row.reviewExecution)))) {
-      const [[group]] = await connection.query("SELECT COUNT(*) AS count FROM student_quran_tasks WHERE plan_id = ? AND task_date = ? AND task_type = 'review'", [first.planId, first.taskDate]);
-      if (Number(group.count) !== taskRows.length) {
-        await connection.rollback();
-        return res.status(409).json({ message: 'أعد فتح المراجعة لتنفيذ مقدار اليوم كاملًا.' });
-      }
-      const cycle = await getStudentReviewCycle(connection, plan, first.taskDate, taskRows);
-      let selection = null;
-      try {
-        if (status === 'done') selection = selectAuthorizedReview(cycle, req.body.reviewFaces ?? cycle.expectedFaces,
-          administrativeCorrection || settings.studentReviewAmountEditable);
-      } catch (error) {
-        if (!(error instanceof RangeError)) throw error;
-        await connection.rollback();
-        return res.status(422).json({ message: error.message });
-      }
-      await saveReviewCycle({ connection, tasks: taskRows, studentId, status, selection, expectedFaces: cycle.expectedFaces });
-      const reward = calculateStudentExecutionPoints({ taskType: 'review', track: first.track,
-        completedAmount: selection?.faces || 0, expectedAmount: cycle.expectedFaces, settings });
-      await persistExecutionGroupReward({ settings, administrativeCorrection, connection, tasks: taskRows,
-        studentId, executionRewardTotal: reward.total, first, req, reward });
-      await saveStudentRemoteExecution({ nazemManaged, first, connection, tasks: taskRows, settings, status, nazemTeacherId });
-      await connection.commit();
-      return res.json({ ok: true });
+    if (shouldExecuteReviewCycle({ first, body: req.body, administrativeCorrection, taskRows })) {
+      return await executeReviewCycleGroup({ connection, plan, first, taskRows, status, req, res, settings, administrativeCorrection, studentId, nazemManaged, nazemTeacherId });
     }
     let { actualEnd, expectedEnd, executionDirection, expectedStart, tasks, expectedPages } = await prepareStudentExecutionRange({ plan, first, taskRows, status, connection, req });
     let memorizationContext = null;
     if (status === 'done') {
-      const endComparison = compareQuranPositionInDirection(actualEnd, expectedEnd, executionDirection);
-      const rejectDisabledExecutionEndChangeResult = await rejectDisabledExecutionEndChange({ administrativeCorrection, settings, first, endComparison, connection, res });
-      if (rejectDisabledExecutionEndChangeResult) { return rejectDisabledExecutionEndChangeResult; }
-
-      memorizationContext = await loadExecutionMemorizationContext({ first, connection, plan, settings, expectedStart });
-      let { isExpectedCompletion, allowedEnd } = await resolveStudentExecutionLimit({ first, expectedEnd, administrativeCorrection, connection, plan, memorizationContext, actualEnd });
-      const rejectOutOfRangeExecutionResult = await rejectOutOfRangeExecution({ actualEnd, expectedStart, expectedEnd, executionDirection, isExpectedCompletion, allowedEnd, connection, res });
-      if (rejectOutOfRangeExecutionResult) { return rejectOutOfRangeExecutionResult; }
-      tasks = await createExtraExecutionTasks({ actualEnd, expectedEnd, executionDirection, connection, plan, first, studentId, tasks });
+      const limited = await limitStudentExecutionEnd({ administrativeCorrection, settings, first, connection, res, plan, studentId, tasks, actualEnd, expectedEnd, expectedStart, executionDirection });
+      if (limited.rejected) return limited.rejected;
+      ({ memorizationContext, tasks } = limited);
     }
 
     tasks = await loadExecutionRepeatTasks({ first, connection, plan, studentId, tasks, executionDirection });
@@ -11752,34 +11819,7 @@ const executeStudentQuranTasks = async (req, res, next) => {
       await connection.query(`UPDATE student_quran_tasks SET review_execution_json = NULL WHERE student_id = ? AND id IN (${tasks.map(() => '?').join(',')})`, [studentId, ...tasks.map(task => task.id)]);
     }
 
-    const _resolveExpectedRepeatCount4 = () => {
-      if (first.taskType === 'memorization') {
-        return Math.max(1, Number(first.track === 'mastery' ? settings.masteryRepeatCount : settings.memorizationRepeatCount));
-      }
-      return 0;
-    };
-    const expectedRepeatCount = _resolveExpectedRepeatCount4();
-    const _resolveActualRepeatCount2 = () => {
-      if (status === 'done' && first.taskType === 'memorization') {
-        if (settings.allowRepeatCountEditing) {
-          return practiceCompletionCount(req.body.repeatCount, expectedRepeatCount);
-        }
-        return expectedRepeatCount;
-      }
-      return 0;
-    };
-    const actualRepeatCount = _resolveActualRepeatCount2();
-    const expectedListeningCount = getExpectedMemorizationListeningCount(first, settings);
-    const _resolveActualListeningCount2 = () => {
-      if (status === 'done' && expectedListeningCount > 0) {
-        if (settings.allowListeningCountEditing) {
-          return practiceCompletionCount(req.body.listeningCount, expectedListeningCount);
-        }
-        return expectedListeningCount;
-      }
-      return 0;
-    };
-    const actualListeningCount = _resolveActualListeningCount2();
+    const { expectedRepeatCount, actualRepeatCount, expectedListeningCount, actualListeningCount } = resolveExecutionPracticeCounts({ first, settings, status, body: req.body });
     await saveExecutionRepeatCounts({ first, tasks, connection, actualRepeatCount, actualListeningCount, expectedRepeatCount, expectedListeningCount });
 
     let executionSegments = [];
@@ -13356,6 +13396,39 @@ app.get('/api/supervisors/:id/quran-evaluation/:taskId/ayahs', async (req, res, 
   }
 });
 
+function recitationTaskLabel(task) {
+  if (task.taskType === 'memorization') return task.track === 'mastery' ? 'الإتقان' : 'الحفظ';
+  return task.taskType === 'review' ? 'المراجعة' : 'الربط';
+}
+
+function recitationSyncStatus(task, nazemJobId) {
+  if (!task.nazemManaged) return 'synced';
+  return nazemJobId ? 'pending' : 'awaiting_related_tasks';
+}
+
+/** Rewards of a day's passages of one task type, settled once they are all evaluated or one fails. */
+async function settleEvaluatedTaskGroup({ task, settings, connection, date, attemptResult, req, supervisorId }) {
+  const [groupTasks] = await connection.query(
+    `SELECT id, evaluated_at AS evaluatedAt, evaluation_score AS evaluationScore,
+      teacher_completed AS teacherCompleted,
+      from_page AS fromPage, from_surah AS fromSurah, from_ayah AS fromAyah,
+      to_page AS toPage, to_surah AS toSurah, to_ayah AS toAyah,
+      actual_to_page AS actualToPage, actual_to_surah AS actualToSurah, actual_to_ayah AS actualToAyah
+     FROM student_quran_tasks
+     WHERE plan_id = ? AND task_date = ? AND task_type = ? AND track = ?
+     FOR UPDATE`,
+    [task.planId, task.taskDate, task.taskType, task.track],
+  );
+  const groupEvaluated = groupTasks.length > 0 && groupTasks.every((row) => row.evaluatedAt);
+  const groupPassed = groupEvaluated && groupTasks.every((row) => Number(row.teacherCompleted) === 1);
+  let reward = calculateEvaluatedGroupReward(groupTasks);
+  reward = await applyEvaluatedGroupSegments({ groupEvaluated, task, groupTasks, settings, connection, date, reward, attemptResult });
+  // Keep the provisional award until all passages pass, or revoke it on a confirmed failure.
+  if (groupEvaluated || groupTasks.some((row) => row.evaluatedAt && Number(row.teacherCompleted) === 0)) {
+    await saveEvaluatedGroupRewards({ settings, connection, groupTasks, task, reward, req, supervisorId, taskLabel: recitationTaskLabel(task), groupPassed });
+  }
+}
+
 const rateSupervisorQuranTaskHandler = async (req, res, next) => {
   const connection = req.recitationConnection || await db().getConnection();
   try {
@@ -13669,40 +13742,7 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
       ]
     );
     await applyMemorizationEvaluationOutcome({ task, completed, connection, date, req, settings });
-    {
-      const [groupTasks] = await connection.query(
-        `SELECT id, evaluated_at AS evaluatedAt, evaluation_score AS evaluationScore,
-          teacher_completed AS teacherCompleted,
-          from_page AS fromPage, from_surah AS fromSurah, from_ayah AS fromAyah,
-          to_page AS toPage, to_surah AS toSurah, to_ayah AS toAyah,
-          actual_to_page AS actualToPage, actual_to_surah AS actualToSurah, actual_to_ayah AS actualToAyah
-         FROM student_quran_tasks
-         WHERE plan_id = ? AND task_date = ? AND task_type = ? AND track = ?
-         FOR UPDATE`,
-        [task.planId, task.taskDate, task.taskType, task.track],
-      );
-      const groupEvaluated = groupTasks.length > 0 && groupTasks.every((row) => row.evaluatedAt);
-      const groupPassed = groupEvaluated && groupTasks.every((row) => Number(row.teacherCompleted) === 1);
-      let reward = calculateEvaluatedGroupReward(groupTasks);
-      reward = await applyEvaluatedGroupSegments({ groupEvaluated, task, groupTasks, settings, connection, date, reward, attemptResult });
-      const _resolveTaskLabel = () => {
-        if (task.taskType === 'memorization') {
-          if (task.track === 'mastery') {
-            return 'الإتقان';
-          }
-          return 'الحفظ';
-        }
-        if (task.taskType === 'review') {
-          return 'المراجعة';
-        }
-        return 'الربط';
-      };
-      const taskLabel = _resolveTaskLabel();
-      // Keep the provisional award until all passages pass, or revoke it on a confirmed failure.
-      if (groupEvaluated || groupTasks.some(row => row.evaluatedAt && Number(row.teacherCompleted) === 0)) {
-        await saveEvaluatedGroupRewards({ settings, connection, groupTasks, task, reward, req, supervisorId, taskLabel, groupPassed });
-      }
-    }
+    await settleEvaluatedTaskGroup({ task, settings, connection, date, attemptResult, req, supervisorId });
     const recitationResult = {
       warningCount,
       mistakeCount,
@@ -13728,15 +13768,6 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
     const savedMarksByTask = await getQuranTaskAyahMarks(connection, [taskId]);
     const savedAyahMarks = savedMarksByTask.get(taskId) || [];
     const savedWordMarksByTask = await getQuranTaskWordMarks(connection, [taskId]);
-    const _resolveSyncStatus = () => {
-      if (task.nazemManaged) {
-        if (nazemJobId) {
-          return 'pending';
-        }
-        return 'awaiting_related_tasks';
-      }
-      return 'synced';
-    };
     res.json({
       ok: true,
       warningCount,
@@ -13751,7 +13782,7 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
       ayahMarks: savedAyahMarks,
       wordMarks: savedWordMarksByTask.get(taskId) || [],
       sessionId: sessionClaim.sessionId,
-      syncStatus: _resolveSyncStatus(),
+      syncStatus: recitationSyncStatus(task, nazemJobId),
       syncError: '',
     });
   } catch (error) {
@@ -15240,88 +15271,78 @@ async function saveEvaluatedRepeatRewards({ task, connection, settings, groupPas
   }
 }
 
+const taskActualEndPosition = (row) => ({
+  page: Number(row.actualToPage || row.toPage),
+  surah: Number(row.actualToSurah || row.toSurah),
+  ayah: Number(row.actualToAyah || row.toAyah),
+});
+
+/** Points for the recorded segments (normal, compensation, extra) of an evaluated memorization group. */
+async function rewardEvaluatedSegments({ task, plan, context, actualEnd, direction, settings, executionSettings, connection, date, reward, attemptResult }) {
+  const segments = await buildExecutionSegmentDetails(
+    connection,
+    context,
+    actualEnd,
+    executionSettings,
+    { treatScheduledAsNormal: Boolean(task.nazemManaged) }
+  );
+  if (!segments.length) return reward;
+  const segmented = calculateSegmentedPlanPoints({
+    basePoints: settings.pointsSystemEnabled ? reward : 0,
+    normalCompleted: compareQuranPositionInDirection(actualEnd, task.nazemManaged ? context.scheduledEnd : context.normalEnd, direction) >= 0,
+    dailyAmount: Number(plan.dailyPages || 1),
+    segments,
+    compensationPercent: settings.quranCompensationPointsPercent,
+    extraPercent: settings.quranExtraPointsPercent,
+  });
+  await saveQuranExecutionSegments(connection, {
+    plan,
+    date,
+    sourceType: 'teacher',
+    sourceId: attemptResult.insertId,
+    segments,
+    pointDetails: segmented.segments,
+    settings,
+  });
+  return segmented.total;
+}
+
+async function advancePlanAfterPassedGroup({ task, plan, groupTasks, actualEnd, connection }) {
+  if (!groupTasks.every((row) => Number(row.teacherCompleted) === 1)) return;
+  if (task.nazemManaged) {
+    await updatePlanCursorAfterExecution(connection, plan, 'memorization', actualEnd, { nazemManaged: true });
+    return;
+  }
+  // Passing a later recitation does not erase or block an earlier failed range.
+  await recomputePlanMemorizationCursor(connection, plan);
+}
+
 /** Compute segment rewards and advance the plan only when the entire group passes. */
 async function applyEvaluatedGroupSegments({ groupEvaluated, task, groupTasks, settings, connection, date, reward, attemptResult }) {
-  if (groupEvaluated && task.taskType === 'memorization' && (!task.nazemManaged || task.track === task.planTrack)) {
-    const plan = {
-      id: task.planId,
-      studentId: task.studentId,
-      track: task.track,
-      startPage: task.startPage,
-      startSurah: task.startSurah,
-      startAyah: task.startAyah,
-      endPage: task.endPage,
-      endSurah: task.endSurah,
-      endAyah: task.endAyah,
-      dailyPages: task.dailyPages,
-      startDate: task.startDate,
-      effectiveFrom: task.effectiveFrom,
-      scheduleDays: task.scheduleDays,
-      scheduleAnchorPage: task.scheduleAnchorPage,
-      scheduleAnchorSurah: task.scheduleAnchorSurah,
-      scheduleAnchorAyah: task.scheduleAnchorAyah,
-    };
-    const direction = getQuranRangeDirection(
-      { page: Number(plan.startPage), surah: Number(plan.startSurah), ayah: Number(plan.startAyah) },
-      { page: Number(plan.endPage), surah: Number(plan.endSurah), ayah: Number(plan.endAyah) }
-    );
-    const ordered = [...groupTasks].sort((first, second) => compareQuranPositionInDirection(taskStartPosition(first), taskStartPosition(second), direction));
-    const actualStart = taskStartPosition(ordered[0]);
-    const last = ordered.at(-1);
-    const actualEnd = {
-      page: Number(last.actualToPage || last.toPage),
-      surah: Number(last.actualToSurah || last.toSurah),
-      ayah: Number(last.actualToAyah || last.toAyah),
-    };
-    const nazemLate = Boolean(Number(task.nazemLate));
-    const nazemScheduledEnd = taskEndPosition(ordered.at(-1));
-    const nazemPlanEnd = {
-      page: Number(plan.endPage),
-      surah: Number(plan.endSurah),
-      ayah: Number(plan.endAyah),
-    };
-    const executionSettings = task.nazemManaged
-      ? { ...settings, allowQuranCompensation: false, allowQuranExtra: !nazemLate }
-      : settings;
-    let context;
-    context = await resolveEvaluatedSegmentContext({ task, context, actualStart, nazemScheduledEnd, nazemLate, nazemPlanEnd, direction, connection, plan, date, executionSettings });
-    const segments = await buildExecutionSegmentDetails(
-      connection,
-      context,
-      actualEnd,
-      executionSettings,
-      { treatScheduledAsNormal: Boolean(task.nazemManaged) }
-    );
-    if (segments.length) {
-      const segmented = calculateSegmentedPlanPoints({
-        basePoints: settings.pointsSystemEnabled ? reward : 0,
-        normalCompleted: compareQuranPositionInDirection(actualEnd, task.nazemManaged ? context.scheduledEnd : context.normalEnd, direction) >= 0,
-        dailyAmount: Number(plan.dailyPages || 1),
-        segments,
-        compensationPercent: settings.quranCompensationPointsPercent,
-        extraPercent: settings.quranExtraPointsPercent,
-      });
-      reward = segmented.total;
-      await saveQuranExecutionSegments(connection, {
-        plan,
-        date,
-        sourceType: 'teacher',
-        sourceId: attemptResult.insertId,
-        segments,
-        pointDetails: segmented.segments,
-        settings,
-      });
-    }
-    if (groupTasks.every((row) => Number(row.teacherCompleted) === 1)) {
-      if (task.nazemManaged) {
-        await updatePlanCursorAfterExecution(connection, plan, 'memorization', actualEnd, { nazemManaged: true });
-      } else {
-        // Passing a later recitation does not erase or block an earlier failed range.
-        await recomputePlanMemorizationCursor(connection, plan);
-      }
-    }
-  }
-  return reward;
+  const appliesToPlan = task.taskType === 'memorization' && (!task.nazemManaged || task.track === task.planTrack);
+  if (!groupEvaluated || !appliesToPlan) return reward;
+  const plan = buildPlanFromExecutionRow(task);
+  const direction = getQuranRangeDirection(
+    { page: Number(plan.startPage), surah: Number(plan.startSurah), ayah: Number(plan.startAyah) },
+    { page: Number(plan.endPage), surah: Number(plan.endSurah), ayah: Number(plan.endAyah) }
+  );
+  const ordered = [...groupTasks].sort((first, second) => compareQuranPositionInDirection(taskStartPosition(first), taskStartPosition(second), direction));
+  const actualStart = taskStartPosition(ordered[0]);
+  const actualEnd = taskActualEndPosition(ordered.at(-1));
+  const nazemLate = Boolean(Number(task.nazemLate));
+  const nazemScheduledEnd = taskEndPosition(ordered.at(-1));
+  const nazemPlanEnd = {
+    page: Number(plan.endPage),
+    surah: Number(plan.endSurah),
+    ayah: Number(plan.endAyah),
+  };
+  const executionSettings = task.nazemManaged
+    ? { ...settings, allowQuranCompensation: false, allowQuranExtra: !nazemLate }
+    : settings;
+  const context = await resolveEvaluatedSegmentContext({ task, actualStart, nazemScheduledEnd, nazemLate, nazemPlanEnd, direction, connection, plan, date, executionSettings });
+  const segmentReward = await rewardEvaluatedSegments({ task, plan, context, actualEnd, direction, settings, executionSettings, connection, date, reward, attemptResult });
+  await advancePlanAfterPassedGroup({ task, plan, groupTasks, actualEnd, connection });
+  return segmentReward;
 }
 
 /** Use authoritative Nazem bounds or the current local plan schedule for segment calculation. */

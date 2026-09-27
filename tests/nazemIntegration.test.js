@@ -1255,8 +1255,8 @@ test('Nazem browser access remains server-side and isolated in one adapter', () 
   assert.match(dailyEvaluationRoute, /is_official,[\s\S]*enqueueNazemRecitation/);
   assert.doesNotMatch(dailyEvaluationRoute, /waitForNazemRecitationDelivery|setTimeout/);
   assert.doesNotMatch(serverIndex, /NAZEM_RECITATION_IMMEDIATE_WAIT_MS/);
-  assert.match(dailyEvaluationRoute, /syncStatus: _resolveSyncStatus\(\)/);
-  assert.match(dailyEvaluationRoute, /if \(task\.nazemManaged\) \{\s*if \(nazemJobId\) \{\s*return 'pending';\s*\}\s*return 'awaiting_related_tasks';\s*\}\s*return 'synced';/);
+  assert.match(dailyEvaluationRoute, /syncStatus: recitationSyncStatus\(task, nazemJobId\)/);
+  assert.match(serverIndex, /function recitationSyncStatus\(task, nazemJobId\) \{\s*if \(!task\.nazemManaged\) return 'synced';\s*return nazemJobId \? 'pending' : 'awaiting_related_tasks';/);
   assert.match(dailyEvaluationRoute, /calculateTaskEvaluationOutcome/);
   assert.match(serverIndex, /if \(notMemorized\) \{\s*return nazemNotCompletedLabel\(task\);/);
   assert.doesNotMatch(dailyEvaluationRoute, /nazemSyncStatus/);

@@ -208,6 +208,20 @@ const offlineDashboardSections = new Set([
   'previousRecitationSessions',
 ]);
 
+// Account flags come from the stored role and apply only while the session is valid.
+function dashboardAccountFlags(role, dashboardPermissions) {
+  const hasSession = hasAuthSession(role);
+  const flags = {
+    hasSession,
+    isManager: hasSession && role === 'manager',
+    isSupervisor: hasSession && role === 'supervisor',
+    isReciter: hasSession && role === 'reciter',
+    isAdmin: hasSession && role === 'admin',
+  };
+  const supervisorAccess = flags.isSupervisor && dashboardPermissions.length > 0;
+  return { ...flags, hasDashboardAccess: flags.isManager || flags.isAdmin || flags.isReciter || supervisorAccess };
+}
+
 const WajehDashboard = () => {
   const undoRevision = useDashboardUndoRefresh();
   const site = useSiteConfig();
@@ -221,12 +235,7 @@ const WajehDashboard = () => {
   const [activeCallRoom, setActiveCallRoom] = useState(null);
   const role = localStorage.getItem('wajeh_role') || '';
   const supervisorId = Number(localStorage.getItem('wajeh_supervisor_id') || 0);
-  const hasSession = hasAuthSession(role);
-  const isManager = role === 'manager' && hasSession;
-  const isSupervisor = role === 'supervisor' && hasSession;
-  const isReciter = role === 'reciter' && hasSession;
-  const isAdmin = role === 'admin' && hasSession;
-  const hasDashboardAccess = isManager || isAdmin || isReciter || (isSupervisor && dashboardPermissions.length > 0);
+  const { hasSession, isManager, isSupervisor, isReciter, isAdmin, hasDashboardAccess } = dashboardAccountFlags(role, dashboardPermissions);
 
   useEffect(() => {
     const routeKey = dashboardSectionRoutes.getKey(sectionSlug);

@@ -27,7 +27,10 @@ const percentMetric = (value) => ({ value: rounded(value), display: `${formatNum
 const countMetric = (count) => ({ value: Number(count || 0) > 0 ? 100 : 0, countValue: Number(count || 0), display: formatNumber(count) });
 const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ar');
 const outOf = (part, total, format = formatNumber) => `${format(part)} من ${format(total)}`;
-const gradeTone = (percentage) => (percentage >= 80 ? TONES.good : percentage >= 50 ? TONES.warn : TONES.bad);
+const gradeTone = (percentage) => {
+  if (percentage >= 80) return TONES.good;
+  return percentage >= 50 ? TONES.warn : TONES.bad;
+};
 // Signs and dates stay left-to-right inside Arabic text (LRI … PDI), so +30 is not shown as 30+.
 const ltr = (text) => `\u2066${text}\u2069`;
 const signed = (value) => ltr(`${Number(value) < 0 ? '-' : '+'}${faces(Math.abs(Number(value || 0)))}`);
