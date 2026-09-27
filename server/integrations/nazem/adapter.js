@@ -438,6 +438,7 @@ export class NazemAdapter {
     this.planApiHeaders = {};
     this.planApiFirstPage = null;
     this.planDetailsCache = new Map();
+    this.verifiedStudentProfiles = null;
   }
 
   async open() {
@@ -840,6 +841,7 @@ export class NazemAdapter {
           if (profiles.some(profile => !isNazemExternalStudentId(profile.id) || !profile.name)) {
             throw new Error('قائمة طلاب ناظم تحتوي بيانات هوية ناقصة.');
           }
+          this.verifiedStudentProfiles = profiles;
           return profiles;
         }
         if (!page.next_page_url) throw new Error('تعذر الوصول إلى بقية صفحات طلاب ناظم.');

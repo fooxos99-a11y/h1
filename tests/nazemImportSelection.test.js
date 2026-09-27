@@ -58,3 +58,25 @@ test('student discovery reads every roster page and rejects duplicated or incomp
     await assert.rejects(rosterAdapter(pages).getStudentProfiles(), { code: 'NAZEM_STUDENT_PROFILES_FAILED' });
   }
 });
+
+test('a split local review or a follow-up read never holds up the import refresh', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const service = await readFile(new URL('../server/integrations/nazem/service.js', import.meta.url), 'utf8');
+  const roster = await readFile(new URL('../server/integrations/nazem/rosterState.js', import.meta.url), 'utf8');
+  assert.match(service, /if \(error\?\.code === 'NAZEM_REVISION_RANGE_DISCONNECTED'\) return null;/);
+  assert.match(service, /const mappedLocal = await mapLocalPlanForDiscovery\(connection, localPlan\);[\s\S]*if \(!mappedLocal \|\| !nazemPlanBundleMatches/);
+  assert.match(service, /if \(!importRequested\) \{\s+const remoteHistory = await adapter\.readStudentFollowUpHistory/);
+  assert.match(roster, /adapter\.verifiedStudentProfiles \|\| await adapter\.getStudentProfiles\(\)/);
+});
+
+test('imported Nazem students without a plan can be planned, with one continuous review for Nazem', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const server = await readFile(new URL('../server/index.js', import.meta.url), 'utf8');
+  const plans = await readFile(new URL('../src/components/dashboard/StudentPlansSection.jsx', import.meta.url), 'utf8');
+  const dialog = await readFile(new URL('../src/components/dashboard/NazemStudentPlanImportDialog.jsx', import.meta.url), 'utf8');
+  assert.match(server, /isStudentPlanManagedByNazem\(connection, studentId\) && await hasActiveStudentPlan\(connection, studentId\)/);
+  assert.match(server, /rejectSplitNazemReview\(\{ priorMemorization, connection, res, studentId \}\)/);
+  assert.match(plans, /if \(row\.nazemManaged && row\.plan\) \{/);
+  assert.match(dialog, /disabled=\{saving \|\| !candidatesToImport\.length\}/);
+  assert.match(dialog, /showBlockingCandidate\(blockingCandidate\)/);
+});

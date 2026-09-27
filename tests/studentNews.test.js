@@ -16,6 +16,16 @@ test('news text colors survive saving and student responses, with safe legacy de
     await assert.rejects(normalizeStudentNews({ revision: 0, entries: [{ ...entry, image: '', textColor }] }), error => error.statusCode === 422);
   }
 });
+test('news background colors survive saving and default to the dark background for older news', async () => {
+  for (const backgroundColor of [undefined, '#12AB34']) {
+    const content = await normalizeStudentNews({ revision: 0, entries: [{ ...entry, image: '', backgroundColor }] });
+    assert.equal(content.entries[0].backgroundColor, backgroundColor ?? '#0f172a');
+    assert.equal(visibleStudentNews(content, { id: 244, committeeId: 4 }, '2026-09-23T12:00').entries[0].backgroundColor, backgroundColor ?? '#0f172a');
+  }
+  for (const backgroundColor of ['blue', '#000', 'url(example)', {}, 7]) {
+    await assert.rejects(normalizeStudentNews({ revision: 0, entries: [{ ...entry, image: '', backgroundColor }] }), error => error.statusCode === 422);
+  }
+});
 test('text news saves without an image and exposes its body to eligible students', async () => {
   for (const image of ['', undefined, null]) {
     const content = await normalizeStudentNews({ revision: 0, entries: [{ ...entry, image, body: ' تفاصيل الخبر ' }] });

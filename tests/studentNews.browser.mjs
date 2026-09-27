@@ -55,6 +55,13 @@ try {
     await page.getByLabel('الخبر', { exact: true }).fill('تكريم المتميزين');
     await page.getByLabel('نص الخبر', { exact: true }).fill('نص محفوظ بدون صورة');
     await page.getByLabel('لون نص الخبر', { exact: true }).fill('#ffeeaa');
+    await page.getByLabel('لون خلفية الخبر', { exact: true }).fill('#1d4ed8');
+    const preview = page.getByRole('region', { name: 'معاينة الخبر', exact: true });
+    await preview.getByRole('heading', { name: 'تكريم المتميزين', exact: true }).waitFor();
+    assert.equal(await preview.getByText('نص محفوظ بدون صورة').isVisible(), true, 'Preview follows the draft');
+    assert.equal(await preview.locator('[data-news-text] h3').evaluate(node => globalThis.getComputedStyle(node).color), 'rgb(255, 238, 170)');
+    assert.equal(await preview.locator('[data-news-text]').evaluate(node => globalThis.getComputedStyle(node.parentElement).backgroundColor), 'rgb(29, 78, 216)');
+    assert.equal(Math.round((await preview.getByRole('region', { name: 'الأخبار', exact: true }).boundingBox()).height), 182, 'Preview uses the phone card height');
     await page.getByRole('button', { name: 'بداية العرض', exact: true }).click();
     await page.getByRole('button', { name: '2026-09-24', exact: true }).click();
     await page.getByLabel('وقت بداية العرض', { exact: true }).fill('09:00');
@@ -82,6 +89,7 @@ try {
     assert.equal(stored.entries[0].image, '');
     assert.equal(stored.entries[0].body, 'نص محفوظ بدون صورة');
     assert.equal(stored.entries[0].textColor, '#ffeeaa');
+    assert.equal(stored.entries[0].backgroundColor, '#1d4ed8');
     assert.deepEqual(stored.entries[0].committeeIds, [4, 5]);
     assert.equal(stored.entries[0].endsAt, '2026-10-01T18:30');
     assert.equal(stored.entries[1].endsAt, '', 'Second news item retains its independent schedule');
@@ -90,6 +98,7 @@ try {
     await page.goto(`${baseUrl}/tests/fixtures/student-news.html`);
     await page.getByRole('heading', { name: 'تكريم المتميزين', exact: true }).waitFor();
     assert.equal(await page.locator('[data-news-text] h3').evaluate(node => globalThis.getComputedStyle(node).color), 'rgb(255, 238, 170)');
+    assert.equal(await page.locator('[data-news-text]').evaluate(node => globalThis.getComputedStyle(node.parentElement).backgroundColor), 'rgb(29, 78, 216)');
     if (width === 360) {
       stored.entries = [];
       await page.goto(`${baseUrl}/tests/fixtures/student-news.html`);

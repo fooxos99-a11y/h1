@@ -76,7 +76,8 @@ test('statistics drop the report tabs and trace student points by source while s
   // Student points are loaded for the page scope and grouped by source, per student and per movement.
   assert.match(reports, /studentsApi\.getStudentPointTransactionsReport\(\{ from, to, committeeId: scopeCommittee \}\)/);
   assert.match(metrics, /title: 'المصادر'/);
-  assert.match(metrics, /stats: \[\.\.\.bySource\.entries\(\)\]/);
+  assert.match(metrics, /stats: netBySource\(student\.transactions \|\| \[\]\)/);
+  assert.match(metrics, /return \[\.\.\.bySource\.entries\(\)\]\.map/);
   assert.match(metrics, /title: 'الحركات'/);
   assert.match(server, /app\.get\('\/api\/reports\/student-point-transactions', requireReportsOrOwnCommittee/);
   assert.match(server, /function requireExecutionFollowupOrOwnCommittee/);

@@ -18,7 +18,8 @@ export function normalizeVerifiedNazemRoster(profiles) {
 export async function refreshNazemRoster(connection, teacherId, adapter) {
   // getStudentProfiles verifies all pages and the total before returning.
   // Never infer removal from a failed request or the add-plan picker.
-  const roster = normalizeVerifiedNazemRoster(await adapter.getStudentProfiles());
+  // A roster already verified earlier in the same Nazem session is reused instead of paging it again.
+  const roster = normalizeVerifiedNazemRoster(adapter.verifiedStudentProfiles || await adapter.getStudentProfiles());
   await connection.query(`UPDATE nazem_student_links link
     LEFT JOIN JSON_TABLE(?, '$[*]' COLUMNS (
       externalId VARCHAR(190) PATH '$.id', active TINYINT PATH '$.active' NULL ON EMPTY

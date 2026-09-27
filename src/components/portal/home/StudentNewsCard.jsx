@@ -2,9 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import StudentNewsArtwork from './StudentNewsArtwork';
+import StudentNewsArtwork, { newsCardSize } from './StudentNewsArtwork';
 
-export default function StudentNewsCard({ news, active = true }) {
+export default function StudentNewsCard({ news, active = true, phone = false }) {
   const entries = news?.entries || [];
   const images = entries.map(entry => entry.image);
   const [index, setIndex] = useState(0);
@@ -36,7 +36,7 @@ export default function StudentNewsCard({ news, active = true }) {
         {paused ? <Play size={16} /> : <Pause size={16} />}
       </Button>}
     </div>
-    <div className="relative flex h-[280px] flex-col sm:h-[320px]">
+    <div className={`relative flex flex-col ${newsCardSize(phone).height}`}>
     <Button variant="ghost" className="absolute inset-0 z-[1] !h-full w-full touch-pan-y rounded-none !p-0 hover:translate-y-0 hover:bg-transparent active:scale-100"
       aria-label={`عرض الخبر ${current + 1}: ${title}`} onFocus={() => setPaused(true)}
       onPointerDown={event => { start.current = event.clientX; }}
@@ -53,7 +53,7 @@ export default function StudentNewsCard({ news, active = true }) {
           event.preventDefault(); select(current + (event.key === 'ArrowLeft' ? 1 : -1));
         }
       }} />
-    <StudentNewsArtwork entry={entries[current]} />
+    <StudentNewsArtwork entry={entries[current]} phone={phone} />
     </div>
     {images.length > 1 && <div className="flex flex-wrap justify-center" aria-label="صور الأخبار">
       {entries.map((entry, item) => <Button key={entry.id} variant="ghost" size="icon" className="h-11 w-11 min-w-0 rounded-none px-0"

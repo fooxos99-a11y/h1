@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import DashboardLoader from '@/components/dashboard/DashboardLoader';
+import ProgressBar from '@/components/ui/progress-bar';
 import ErrorState from '@/components/ui/error-state';
 import NazemConflictCard from '@/components/dashboard/NazemConflictCard';
 import NazemPlanRefreshSummary from '@/components/dashboard/NazemPlanRefreshSummary';
@@ -45,6 +46,10 @@ const buildSelections = (candidates, localStudents) => { return (Object.fromEntr
   }];
 }))); };
 
+const isBlockingSelection = (selection = {}) => Boolean(
+  (selection.requiresConfirmation && !selection.confirmed) || selection.requiresPlanChoice,
+);
+
 const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }) => {
   const { toast } = useToast();
   const prepared = teacher?.preparedImport;
@@ -71,6 +76,7 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
   const [refreshResult, setRefreshResult] = useState(prepared?.refreshResult || null);
+  const [refreshProgress, setRefreshProgress] = useState(null);
   const requestRef = useRef(null);
 
   const applyPreview = useCallback((preview, preferredCircle = '') => {
@@ -93,7 +99,8 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
       setLoadError('');
       setData(null);
       setResult(null);
-      if (refresh && await refreshImportPreview({ teacher, signal, applyPreview, setMode, setCommitteeId, setNewCommitteeName, setConflicts, setRefreshResult, setLoadError })) return;
+      setRefreshProgress(refresh ? 0 : null);
+      if (refresh && await refreshImportPreview({ teacher, signal, applyPreview, setMode, setCommitteeId, setNewCommitteeName, setConflicts, setRefreshResult, setLoadError, onProgress: setRefreshProgress })) return;
       const [initial, conflictRows] = await Promise.all([
         nazemIntegrationApi.getImportPreview(teacher.teacherId, '', { signal }),
         nazemIntegrationApi.getConflicts(teacher.teacherId, { signal }),
@@ -200,13 +207,28 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
     }
   };
 
+  // The import button stays pressable; a pending choice is explained and scrolled into view instead.
+  const showBlockingCandidate = (candidate) => {
+    toast({
+      title: selections[candidate.id]?.requiresPlanChoice ? 'اختر خطة ناظم للطالب أولًا' : 'أكد مطابقة الطالب المقترح أولًا',
+      description: candidate.nazemStudentName,
+      variant: 'destructive',
+    });
+    setSearch('');
+    globalThis.requestAnimationFrame(() => globalThis.document
+      .querySelector(`[data-nazem-candidate="${Number(candidate.id)}"]`)
+      ?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+  };
+
+  const confirmSuggestedMatches = () => setSelections((current) => Object.fromEntries(Object.entries(current).map(([id, selection]) => (
+    [id, selection.requiresConfirmation ? { ...selection, confirmed: true } : selection]
+  ))));
+
   const submit = async () => {
     const submittedCandidates = includedCandidates;
-    const needsConfirmation = submittedCandidates.some((candidate) => (
-      selections[candidate.id]?.requiresConfirmation && !selections[candidate.id]?.confirmed
-    ));
-    if (needsConfirmation) {
-      toast({ title: 'أكد مطابقة الطلاب المقترحين أولًا', variant: 'destructive' });
+    const blockingCandidate = submittedCandidates.find((candidate) => isBlockingSelection(selections[candidate.id]));
+    if (blockingCandidate) {
+      showBlockingCandidate(blockingCandidate);
       return;
     }
     const payloadSelections = submittedCandidates.map((candidate) => {
@@ -246,10 +268,9 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
   };
 
   const candidatesToImport = includedCandidates;
-  const hasBlockingSelection = (candidates) => candidates.some((candidate) => (
-    (selections[candidate.id]?.requiresConfirmation && !selections[candidate.id]?.confirmed)
-    || selections[candidate.id]?.requiresPlanChoice
-  ));
+  const pendingMatches = candidatesToImport.filter((candidate) => (
+    selections[candidate.id]?.requiresConfirmation && !selections[candidate.id]?.confirmed
+  )).length;
 
   const _resolveNazemStudentPlanImportDialog = () => {
     if (loadError && !data) {
@@ -261,6 +282,10 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
     if (!data) {
       return <div className="space-y-4">
         <DashboardLoader />
+        {refreshProgress !== null && <div className="mx-auto flex w-full max-w-xs items-center gap-3">
+          <ProgressBar value={refreshProgress} label="تقدم التحديث من ناظم" />
+          <span className="shrink-0 text-sm font-bold tabular-nums text-muted-foreground" dir="ltr">{Math.round(refreshProgress)}%</span>
+        </div>}
         <DialogFooter><Button type="button" variant="outline" className="min-h-11" onClick={() => onOpenChange(false)}>إلغاء</Button></DialogFooter>
       </div>;
     }
@@ -369,7 +394,8 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
           return (
             <div
               key={candidate.id}
-              className={`space-y-3 rounded-xl border p-3 ${isExcluded ? 'border-muted bg-muted/30 opacity-70' : 'border-primary/15 bg-card'}`}
+              data-nazem-candidate={Number(candidate.id)}
+              className={`scroll-mt-4 space-y-3 rounded-xl border p-3 ${isExcluded ? 'border-muted bg-muted/30 opacity-70' : 'border-primary/15 bg-card'}`}
             >
               <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,1fr)_minmax(9rem,auto)] lg:items-center">
                 <div className="min-w-0 space-y-1">
@@ -451,11 +477,17 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
         })}
       </div>
       <DialogFooter className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_1fr]">
+        {pendingMatches > 0 && (
+          <Button type="button" variant="outline" className="min-h-11 gap-2 sm:col-span-2" disabled={saving} onClick={confirmSuggestedMatches}>
+            <Check className="h-4 w-4" />
+            تأكيد جميع المطابقات المقترحة ({pendingMatches})
+          </Button>
+        )}
         <Button type="button" variant="outline" className="min-h-11" disabled={saving} onClick={() => onOpenChange(false)}>إلغاء</Button>
         <Button
           type="button"
           className="min-h-11"
-          disabled={saving || !candidatesToImport.length || hasBlockingSelection(candidatesToImport)}
+          disabled={saving || !candidatesToImport.length}
           onClick={submit}
         >
           {saving ? 'جاري الاستيراد...' : `استيراد الطلاب والخطط المحددة (${candidatesToImport.length})`}
@@ -481,9 +513,12 @@ const NazemStudentPlanImportDialog = ({ open, teacher, onOpenChange, onChanged }
 export default NazemStudentPlanImportDialog;
 
 /** Apply a fresh preview or allow the cached fallback; aborted requests never update state. */
-async function refreshImportPreview({ teacher, signal, applyPreview, setMode, setCommitteeId, setNewCommitteeName, setConflicts, setRefreshResult, setLoadError }) {
+async function refreshImportPreview({ teacher, signal, applyPreview, setMode, setCommitteeId, setNewCommitteeName, setConflicts, setRefreshResult, setLoadError, onProgress }) {
   try {
-    const fresh = await nazemIntegrationApi.prepareImportData(teacher.teacherId, { signal });
+    const fresh = await nazemIntegrationApi.prepareImportData(teacher.teacherId, {
+      signal,
+      onProgress: (value) => { if (!signal.aborted) onProgress(value); },
+    });
     if (signal.aborted) return true;
     applyPreview(fresh.preview);
     setMode(fresh.mode);

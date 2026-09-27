@@ -2047,8 +2047,8 @@ async function reconcileTeacher(connection, job) {
         last_error_code = NULL, last_error = NULL WHERE teacher_id = ?`,
       [encryptNazemJson(context.sessionState), job.teacherId],
     );
-    const refreshPlansRequested = job.payload?.requestedFrom === 'student-plan-import'
-      || Boolean(job.payload?.discoverPlans);
+    const importRequested = job.payload?.requestedFrom === 'student-plan-import';
+    const refreshPlansRequested = importRequested || Boolean(job.payload?.discoverPlans);
     const discovery = refreshPlansRequested
       ? await discoverTeacherData(connection, job, adapter, {
         progressStart: 20,
@@ -2180,16 +2180,20 @@ async function reconcileTeacher(connection, job) {
           continue;
         }
       }
-      const remoteHistory = await adapter.readStudentFollowUpHistory(link.nazemPlanId, {
-        nazemStudentId: link.nazemStudentId,
-        nazemStudentName: link.nazemStudentName,
-      });
-      const imported = await importTeacherFollowUps(connection, { ...link, teacherId: job.teacherId }, remoteHistory);
-      dailyImported += imported.imported;
-      dailySynced += imported.synced;
-      dailyConflicts += imported.conflicts;
-      dailyReview += imported.review;
-      await enqueueMissingNazemAttendance(connection, { teacherId: job.teacherId, studentId: link.studentId });
+      // The import screen waits for this job and needs students and plans only. Reading each linked
+      // student's week of follow-ups is left to the periodic follow-up refresh, which keeps it in sync.
+      if (!importRequested) {
+        const remoteHistory = await adapter.readStudentFollowUpHistory(link.nazemPlanId, {
+          nazemStudentId: link.nazemStudentId,
+          nazemStudentName: link.nazemStudentName,
+        });
+        const imported = await importTeacherFollowUps(connection, { ...link, teacherId: job.teacherId }, remoteHistory);
+        dailyImported += imported.imported;
+        dailySynced += imported.synced;
+        dailyConflicts += imported.conflicts;
+        dailyReview += imported.review;
+        await enqueueMissingNazemAttendance(connection, { teacherId: job.teacherId, studentId: link.studentId });
+      }
       await connection.query(
         `UPDATE nazem_plan_links SET last_remote_checked_at = NOW(3), remote_snapshot = ?
          WHERE ruwasi_plan_id = ? AND teacher_id = ?`,
@@ -2398,6 +2402,20 @@ async function recordDailyFollowUpConflict({ status, connection, job, error, err
   }
 }
 
+/**
+ * The local plan in Nazem's shape, or null when its review is split into separate ranges.
+ * Such a plan cannot equal Nazem's single review range, so the Nazem plan stays offered for
+ * import (which replaces the local review) instead of failing the whole teacher refresh.
+ */
+async function mapLocalPlanForDiscovery(connection, plan) {
+  try {
+    return mapRuwasiPlanBundleToNazem(plan, await loadPlanReviewRange(connection, plan));
+  } catch (error) {
+    if (error?.code === 'NAZEM_REVISION_RANGE_DISCONNECTED') return null;
+    throw error;
+  }
+}
+
 /** Reconcile one discovered plan against its saved baseline without accepting ambiguous student matches. */
 async function reconcileDiscoveredPlan({ connection, teacherId, candidate, linked, review }) {
 
@@ -2444,10 +2462,9 @@ async function reconcileDiscoveredPlan({ connection, teacherId, candidate, linke
       return { linked, review };
     }
     const localPlan = await loadPlan(connection, candidate.localPlanId);
-    const reviewRange = await loadPlanReviewRange(connection, localPlan);
-    const mappedLocal = mapRuwasiPlanBundleToNazem(localPlan, reviewRange);
+    const mappedLocal = await mapLocalPlanForDiscovery(connection, localPlan);
     const remoteSnapshot = safeJson(candidate.remoteSnapshot, {});
-    if (!nazemPlanBundleMatches(remoteSnapshot, mappedLocal)) {
+    if (!mappedLocal || !nazemPlanBundleMatches(remoteSnapshot, mappedLocal)) {
       await connection.query(
         `UPDATE nazem_plan_candidates SET discovery_status = 'discovered',
           last_error_code = NULL, last_error = NULL WHERE id = ?`,

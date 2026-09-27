@@ -7,7 +7,7 @@ import DashboardLoader from '@/components/dashboard/DashboardLoader';
 import ErrorState from '@/components/ui/error-state';
 import { formatStatisticsNumber as formatNumber } from '@/lib/statisticsNumber';
 import { MetricTile } from './MetricCard';
-import { ALL_COMMITTEES } from './reportMetrics';
+import { ALL_COMMITTEES, ALL_STUDENTS } from './reportMetrics';
 
 const tint = (color, amount = 14) => `color-mix(in oklab, ${color} ${amount}%, transparent)`;
 // Summary cards and student figures fill one row on wide screens, whatever their count.
@@ -70,8 +70,38 @@ const RecordGroup = ({ group }) => (
   </section>
 );
 
+const FilterSelect = ({ label, value, onChange, allLabel, allValue, options }) => (
+  <Select value={value} onValueChange={onChange}>
+    <SelectTrigger aria-label={label} className="h-11 w-full text-sm sm:w-56 [&_span]:truncate">
+      <SelectValue />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value={allValue}>{allLabel}</SelectItem>
+      {options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+    </SelectContent>
+  </Select>
+);
+
+/** The circle filter and, for student points, the student whose points log to open. */
+const DetailFilters = ({ metric, committees, committee, onCommitteeChange, onStudentChange }) => {
+  const showCommittees = committees.length > 1;
+  const students = metric.studentOptions || [];
+  if (!showCommittees && !students.length) return null;
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row">
+      {showCommittees && (
+        <FilterSelect label="الحلقة" value={committee} onChange={onCommitteeChange} allLabel="كل الحلقات" allValue={ALL_COMMITTEES}
+          options={committees.map((name) => ({ value: name, label: name }))} />
+      )}
+      {students.length > 0 && (
+        <FilterSelect label="الطالب" value={metric.student} onChange={onStudentChange} allLabel="جميع الطلاب" allValue={ALL_STUDENTS} options={students} />
+      )}
+    </div>
+  );
+};
+
 /** Centred window of one indicator: small summary cards, the circles and the records behind it. */
-export default function MetricDetails({ metric, periodLabel, committees = [], committee = ALL_COMMITTEES, onCommitteeChange, onClose, onRetry }) {
+export default function MetricDetails({ metric, periodLabel, committees = [], committee = ALL_COMMITTEES, onCommitteeChange, onStudentChange, onClose, onRetry }) {
   const Icon = metric?.icon;
   const tiles = metric?.tiles || [];
   return (
@@ -97,17 +127,7 @@ export default function MetricDetails({ metric, periodLabel, committees = [], co
             </div>
 
             <div className="space-y-6 p-4 sm:p-6">
-              {committees.length > 1 && (
-                <Select value={committee} onValueChange={onCommitteeChange}>
-                  <SelectTrigger aria-label="الحلقة" className="h-11 w-full text-sm sm:w-56 [&_span]:truncate">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={ALL_COMMITTEES}>كل الحلقات</SelectItem>
-                    {committees.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              )}
+              <DetailFilters metric={metric} committees={committees} committee={committee} onCommitteeChange={onCommitteeChange} onStudentChange={onStudentChange} />
               {metric.error && <ErrorState message={metric.error} onRetry={onRetry} />}
               {!metric.error && metric.loading && <DashboardLoader className="py-10" />}
               {!metric.error && !metric.loading && (

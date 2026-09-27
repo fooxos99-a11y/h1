@@ -1428,7 +1428,7 @@ test('Nazem discovers student plans and treats Nazem as the authoritative import
   assert.match(worker, /requestedFrom'\)\), ''\) <> 'student-plan-import'/);
   assert.doesNotMatch(worker, /notifyStaleNazemAccounts|notifyNazemFailure|notifyNazemRecovered/);
   assert.match(service, /case 'account\.discover_plans'/);
-  assert.match(service, /refreshPlansRequested[\s\S]*requestedFrom === 'student-plan-import'/);
+  assert.match(service, /const importRequested = job\.payload\?\.requestedFrom === 'student-plan-import';\s+const refreshPlansRequested = importRequested \|\|/);
   assert.match(service, /student\.name AS studentName/);
   assert.match(service, /const planChanges = \[\]/);
   assert.match(service, /describeNazemPlanDifference\(localSnapshot, remoteSnapshot\)/);
@@ -1468,7 +1468,7 @@ test('Nazem discovers student plans and treats Nazem as the authoritative import
   assert.match(importDialog, /const controller = new AbortController\(\)/);
   assert.match(settings, /const openImport = \(account\) => setImportTeacher\(account\)/);
   assert.doesNotMatch(settings, /prepareImportData|ProgressBar/);
-  assert.match(importDialog, /prepareImportData\(teacher\.teacherId, \{ signal \}\)/);
+  assert.match(importDialog, /prepareImportData\(teacher\.teacherId, \{\s+signal,\s+onProgress:/);
   assert.match(importDialog, /return \(\) => requestRef\.current\?\.abort\(\)/);
   assert.doesNotMatch(settings, /جاري جلب الطلاب والخطط/);
   assert.doesNotMatch(importDialog, /وجهة الطلاب في مدارج|nazem-import-mode/);

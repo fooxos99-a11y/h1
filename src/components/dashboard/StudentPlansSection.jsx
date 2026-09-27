@@ -672,7 +672,7 @@ const StudentPlansSection = ({ hideCommitteeFilter = false }) => {
     }
     return <div className="space-y-2">
               {rows.map((row) => { const _resolve_resolveStudentPlansSection = () => {
-                                     if (row.nazemManaged) {
+                                     if (row.nazemManaged && row.plan) {
                                        return <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/5 text-primary" title="الخطة مقفلة" aria-label="الخطة مقفلة">
                         <LockKeyhole className="h-4 w-4" aria-hidden="true" />
                       </span>;
@@ -707,7 +707,7 @@ const StudentPlansSection = ({ hideCommitteeFilter = false }) => {
                   <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 lg:col-start-1">
                     <div className="text-base font-black leading-tight text-foreground">{row.studentName}</div>
                     <div className="text-[10px] font-bold leading-tight text-muted-foreground sm:text-xs">{row.committeeName || 'بدون حلقة'}</div>
-                    {row.nazemManaged && <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary" title="الخطة مقفلة" aria-label="الخطة مقفلة"><LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /></span>}
+                    {row.nazemManaged && row.plan && <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary" title="الخطة مقفلة" aria-label="الخطة مقفلة"><LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /></span>}
                   </div>
                   {row.plan && (
                     <div className="col-span-2 min-w-0 lg:col-span-1 lg:col-start-2 lg:row-start-1">

@@ -1,7 +1,7 @@
 import {
   BookOpenCheck, Building2, CalendarCheck2, Coins, GraduationCap, PlusCircle,
 } from 'lucide-react';
-import { formatStatisticsNumber as formatNumber } from '@/lib/statisticsNumber';
+import { formatStatisticsNumber as formatNumber } from '../../../lib/statisticsNumber.js';
 
 export const METRIC_COLORS = Object.freeze({
   achievement: '#0d9488',
@@ -135,30 +135,118 @@ function attendanceMetric(overview, students, filtered) {
   };
 }
 
-/**
- * Student points by their source: what each source added or deducted in the period,
- * each student's points per source, and every movement with its source.
- */
-function studentPointsMetric(list = { loading: true, rows: [] }, inCommittee, unitText) {
-  const allStudents = list.rows || [];
-  const students = allStudents.filter((row) => inCommittee(row.committeeName));
-  const netOf = (rows) => sum(rows, (row) => row.total);
-  const transactions = students.flatMap((student) => (student.transactions || []).map((row) => ({ ...row, student })));
-  const increases = sum(transactions.filter((row) => row.type !== 'deduction'), (row) => row.points);
-  const deductions = sum(transactions.filter((row) => row.type === 'deduction'), (row) => row.points);
+export const ALL_STUDENTS = 'all';
+const sourceOf = (row) => row.source || 'مصدر غير محدد';
+const isDeduction = (row) => row.type === 'deduction';
+const movementValue = (row) => ltr(`${isDeduction(row) ? '-' : '+'}${faces(row.points)}`);
+const movementTone = (row) => (isDeduction(row) ? TONES.bad : TONES.good);
+const movementTotals = (transactions) => {
+  const increases = sum(transactions.filter((row) => !isDeduction(row)), (row) => row.points);
+  const deductions = sum(transactions.filter(isDeduction), (row) => row.points);
+  return { increases, deductions, movement: increases + deductions };
+};
+
+/** What each source added and deducted, the busiest first, as bars of the whole movement. */
+function sourceBars(transactions) {
   const sources = new Map();
   for (const row of transactions) {
-    const source = row.source || 'مصدر غير محدد';
-    const current = sources.get(source) || { increase: 0, deduction: 0 };
-    current[row.type === 'deduction' ? 'deduction' : 'increase'] += Number(row.points || 0);
-    sources.set(source, current);
+    const current = sources.get(sourceOf(row)) || { increase: 0, deduction: 0 };
+    current[isDeduction(row) ? 'deduction' : 'increase'] += Number(row.points || 0);
+    sources.set(sourceOf(row), current);
   }
-  const sourceRows = [...sources.entries()]
-    .map(([source, totals]) => ({ source, ...totals, net: totals.increase - totals.deduction }))
-    .sort((a, b) => (b.increase + b.deduction) - (a.increase + a.deduction));
-  const movement = increases + deductions;
-  const allIncreases = sum(allStudents.flatMap((row) => row.transactions || []).filter((row) => row.type !== 'deduction'), (row) => row.points);
-  const allMovement = sum(allStudents.flatMap((row) => row.transactions || []), (row) => row.points);
+  const { movement } = movementTotals(transactions);
+  const rows = [...sources.entries()]
+    .map(([source, totals]) => ({ source, ...totals }))
+    .sort((a, b) => (b.increase + b.deduction) - (a.increase + a.deduction))
+    .map((row) => ({ label: row.source, percent: pct(row.increase + row.deduction, movement), display: signed(row.increase - row.deduction) }));
+  return { title: 'المصادر', rows };
+}
+
+const netBySource = (transactions) => {
+  const bySource = new Map();
+  for (const row of transactions) bySource.set(sourceOf(row), (bySource.get(sourceOf(row)) || 0) + (isDeduction(row) ? -1 : 1) * Number(row.points || 0));
+  return [...bySource.entries()].map(([label, value]) => ({ label, value: signed(value) }));
+};
+
+/** Every student of the circle: points per source, then every movement with its source. */
+function allStudentsPoints(students) {
+  const transactions = students.flatMap((student) => (student.transactions || []).map((row) => ({ ...row, student })));
+  const { increases, deductions } = movementTotals(transactions);
+  const bars = sourceBars(transactions);
+  return {
+    tiles: [
+      countTile('الإضافات', increases, faces),
+      countTile('الخصومات', deductions, faces),
+      countTile('الصافي', increases - deductions, faces),
+      countTile('المصادر', bars.rows.length),
+    ],
+    bars: [bars],
+    records: [
+      {
+        title: 'الطلاب',
+        rows: students
+          .filter((student) => (student.transactions || []).length)
+          .sort((a, b) => Number(b.total || 0) - Number(a.total || 0) || String(a.studentName || '').localeCompare(String(b.studentName || ''), 'ar'))
+          .map((student) => ({
+            label: student.studentName,
+            note: student.committeeName || 'بدون حلقة',
+            value: signed(student.total),
+            tone: Number(student.total || 0) < 0 ? TONES.bad : TONES.good,
+            stats: netBySource(student.transactions || []),
+          })),
+        emptyText: 'لا توجد حركات في هذه الفترة',
+      },
+      {
+        title: 'الحركات',
+        rows: transactions
+          .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+          .map((row) => ({
+            label: `${row.student.studentName} · ${sourceOf(row)}`,
+            note: [row.reason && row.reason !== row.source ? row.reason : '', row.date && ltr(row.date), row.actorName].filter(Boolean).join(' · '),
+            value: movementValue(row),
+            tone: movementTone(row),
+          })),
+        emptyText: 'لا توجد حركات في هذه الفترة',
+      },
+    ],
+  };
+}
+
+/** One student's points log: the period totals, their sources and every movement with who made it. */
+function studentPointsLog(student, unitText) {
+  const transactions = [...(student.transactions || [])].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  const { increases, deductions } = movementTotals(transactions);
+  return {
+    tiles: [
+      countTile('صافي الفترة', increases - deductions, faces),
+      countTile('الإضافات', increases, faces),
+      countTile('الخصومات', deductions, faces),
+      countTile('الرصيد الكلي', student.balance, faces),
+    ],
+    bars: [sourceBars(transactions)],
+    records: [{
+      title: unitText('سجل النقاط'),
+      rows: transactions.map((row) => ({
+        label: sourceOf(row),
+        note: [row.reason && row.reason !== row.source ? row.reason : '', row.date && ltr(row.date), row.actorName && `بواسطة: ${row.actorName}`].filter(Boolean).join(' · '),
+        value: movementValue(row),
+        tone: movementTone(row),
+      })),
+      emptyText: 'لا توجد حركات في هذه الفترة',
+    }],
+  };
+}
+
+/**
+ * Student points by their source. The details cover every student of the circle,
+ * or, when one student is chosen, that student's own points log.
+ */
+function studentPointsMetric(list = { loading: true, rows: [] }, inCommittee, unitText, studentId) {
+  const allStudents = list.rows || [];
+  const students = allStudents.filter((row) => inCommittee(row.committeeName));
+  const chosen = students.find((row) => String(row.studentId) === String(studentId));
+  const netOf = (rows) => sum(rows, (row) => row.total);
+  const { increases: allIncreases, movement: allMovement } = movementTotals(allStudents.flatMap((row) => row.transactions || []));
   return {
     id: 'studentPoints',
     label: unitText('نقاط الطلاب'),
@@ -169,55 +257,11 @@ function studentPointsMetric(list = { loading: true, rows: [] }, inCommittee, un
     display: formatNumber(netOf(allStudents)),
     loading: list.loading,
     error: list.error,
-    tiles: [
-      countTile('الإضافات', increases, faces),
-      countTile('الخصومات', deductions, faces),
-      countTile('الصافي', increases - deductions, faces),
-      countTile('المصادر', sourceRows.length),
-    ],
-    bars: [{
-      title: 'المصادر',
-      rows: sourceRows.map((row) => ({
-        label: row.source,
-        percent: pct(row.increase + row.deduction, movement),
-        display: signed(row.net),
-      })),
-    }],
-    records: [
-      {
-        title: 'الطلاب',
-        rows: students
-          .filter((student) => (student.transactions || []).length)
-          .sort((a, b) => Number(b.total || 0) - Number(a.total || 0) || String(a.studentName || '').localeCompare(String(b.studentName || ''), 'ar'))
-          .map((student) => {
-            const bySource = new Map();
-            for (const row of student.transactions || []) {
-              const source = row.source || 'مصدر غير محدد';
-              bySource.set(source, (bySource.get(source) || 0) + (row.type === 'deduction' ? -1 : 1) * Number(row.points || 0));
-            }
-            return {
-              label: student.studentName,
-              note: student.committeeName || 'بدون حلقة',
-              value: signed(student.total),
-              tone: Number(student.total || 0) < 0 ? TONES.bad : TONES.good,
-              stats: [...bySource.entries()].map(([label, value]) => ({ label, value: signed(value) })),
-            };
-          }),
-        emptyText: 'لا توجد حركات في هذه الفترة',
-      },
-      {
-        title: 'الحركات',
-        rows: transactions
-          .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
-          .map((row) => ({
-            label: `${row.student.studentName} · ${row.source || 'مصدر غير محدد'}`,
-            note: [row.reason && row.reason !== row.source ? row.reason : '', row.date && ltr(row.date), row.actorName].filter(Boolean).join(' · '),
-            value: ltr(`${row.type === 'deduction' ? '-' : '+'}${faces(row.points)}`),
-            tone: row.type === 'deduction' ? TONES.bad : TONES.good,
-          })),
-        emptyText: 'لا توجد حركات في هذه الفترة',
-      },
-    ],
+    studentOptions: [...students]
+      .sort((a, b) => String(a.studentName || '').localeCompare(String(b.studentName || ''), 'ar'))
+      .map((row) => ({ value: String(row.studentId), label: row.studentName })),
+    student: chosen ? String(chosen.studentId) : ALL_STUDENTS,
+    ...(chosen ? studentPointsLog(chosen, unitText) : allStudentsPoints(students)),
   };
 }
 
@@ -313,6 +357,7 @@ export const detailCommitteesOf = (overview) => [...new Set((overview?.committee
 /**
  * Every indicator of the statistics page, each with its own summary cards and student details.
  * The card values always cover the whole page scope; `committee` narrows only the details.
+ * `student` opens one student's points log in the student points details.
  * `lists` holds { studentPoints, teacherPoints } as { rows, loading, error } or undefined.
  */
 export function buildReportMetrics(overview, {
@@ -321,6 +366,7 @@ export function buildReportMetrics(overview, {
   showStudentPoints = false,
   showTeacherPoints = false,
   committee = ALL_COMMITTEES,
+  student = ALL_STUDENTS,
   unitText = (text) => text,
 } = {}) {
   const filtered = committee !== ALL_COMMITTEES;
@@ -332,7 +378,7 @@ export function buildReportMetrics(overview, {
       achievementMetric(overview, students, filtered),
       attendanceMetric(overview, students, filtered),
     );
-    if (showStudentPoints) metrics.push(studentPointsMetric(lists.studentPoints, inCommittee, unitText));
+    if (showStudentPoints) metrics.push(studentPointsMetric(lists.studentPoints, inCommittee, unitText, student));
     metrics.push(
       studentsCountMetric(overview, students, filtered),
       committeesCountMetric(overview, inCommittee),

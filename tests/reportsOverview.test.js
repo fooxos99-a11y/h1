@@ -34,8 +34,9 @@ test('statistics are indicator cards with details, then the best students and ci
   assert.match(card, /prefers-reduced-motion: reduce/);
   assert.match(card, /min-h-48[^"]*rounded-2xl border border-border bg-card/);
   assert.match(details, /<DialogTitle className="truncate text-base">تفاصيل \{metric\.label\}<\/DialogTitle>/);
-  assert.match(details, /committees\.length > 1 && \([\s\S]*aria-label="الحلقة"[\s\S]*<SelectItem value=\{ALL_COMMITTEES\}>كل الحلقات<\/SelectItem>/);
-  assert.match(reports, /setDetailCommittee\(ALL_COMMITTEES\); setSelectedId\(item\.id\);/);
+  assert.match(details, /showCommittees && \([\s\S]*label="الحلقة"[\s\S]*allLabel="كل الحلقات" allValue=\{ALL_COMMITTEES\}/);
+  assert.match(details, /students\.length > 0 && \([\s\S]*label="الطالب"[\s\S]*allLabel="جميع الطلاب" allValue=\{ALL_STUDENTS\}/);
+  assert.match(reports, /setDetailCommittee\(ALL_COMMITTEES\); setDetailStudent\(ALL_STUDENTS\); setSelectedId\(item\.id\);/);
   assert.match(metrics, /const inCommittee = \(name\) => !filtered \|\| name === committee;/);
   assert.match(metrics, /label: unitText\('نقاط الطلاب'\)/);
   assert.match(server, /\.\.\.await buildOverviewRankings\(reportDb, \{ from: startDate, to: endDate, attendanceDates, attendanceWeekDays, committeeIndicators \}\)/);
@@ -43,6 +44,31 @@ test('statistics are indicator cards with details, then the best students and ci
   assert.match(permissions, /\{ key: 'reports', label: 'الإحصائيات' \}/);
   assert.match(portal, /label: 'إحصائيات الحلقة'/);
   assert.doesNotMatch(dashboard + permissions + portal, /'التقارير'|تقارير الحلقة/);
+});
+
+test('choosing a student in the points details opens the points log of that student with its sources', async () => {
+  const { buildReportMetrics, ALL_STUDENTS } = await import('../src/components/dashboard/reports/reportMetrics.js');
+  const rows = [
+    { studentId: 1, studentName: 'أحمد', committeeName: 'النور', balance: 120, total: 7, transactions: [
+      { id: 1, type: 'increase', points: 10, source: 'التسميع', reason: 'التسميع', date: '2026-09-02', actorName: 'المعلم' },
+      { id: 2, type: 'deduction', points: 3, source: 'الحضور', reason: 'تأخر', date: '2026-09-03', actorName: 'المشرف' },
+    ] },
+    { studentId: 2, studentName: 'خالد', committeeName: 'الفجر', balance: 5, total: 0, transactions: [] },
+  ];
+  const overview = { committeeIndicators: [], totals: {} };
+  const pointsOf = (options) => buildReportMetrics(overview, { lists: { studentPoints: { rows } }, showStudentPoints: true, ...options }).find((metric) => metric.id === 'studentPoints');
+  const all = pointsOf({});
+  assert.equal(all.student, ALL_STUDENTS);
+  assert.deepEqual(all.studentOptions.map((option) => option.label), ['أحمد', 'خالد']);
+  assert.deepEqual(all.records.map((group) => group.title), ['الطلاب', 'الحركات']);
+  const log = pointsOf({ student: '1' });
+  assert.equal(log.student, '1');
+  assert.deepEqual(log.tiles.map((tile) => [tile.label, tile.display]), [['صافي الفترة', '7'], ['الإضافات', '10'], ['الخصومات', '3'], ['الرصيد الكلي', '120']]);
+  assert.deepEqual(log.bars[0].rows.map((row) => row.label), ['التسميع', 'الحضور']);
+  assert.equal(log.records[0].title, 'سجل النقاط');
+  assert.deepEqual(log.records[0].rows.map((row) => row.label), ['الحضور', 'التسميع']);
+  assert.match(log.records[0].rows[0].note, /تأخر · .*2026-09-03.* · بواسطة: المشرف/);
+  assert.equal(pointsOf({ student: '1', committee: 'الفجر' }).student, ALL_STUDENTS, 'A student outside the chosen circle falls back to all students');
 });
 
 test('rankings order students and circles by earned points and weight teacher achievement by students', async () => {

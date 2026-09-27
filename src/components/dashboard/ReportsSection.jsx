@@ -12,7 +12,7 @@ import { useToast } from '@/components/ui/use-toast';
 import MetricCard from '@/components/dashboard/reports/MetricCard';
 import MetricDetails from '@/components/dashboard/reports/MetricDetails';
 import { RankingPanels, TeachersPanel } from '@/components/dashboard/reports/RankingPanels';
-import { ALL_COMMITTEES, buildReportMetrics, detailCommitteesOf } from '@/components/dashboard/reports/reportMetrics';
+import { ALL_COMMITTEES, ALL_STUDENTS, buildReportMetrics, detailCommitteesOf } from '@/components/dashboard/reports/reportMetrics';
 import { DEFAULT_REPORT_PERIOD, REPORT_PERIOD_LABELS, reportRange } from '@/lib/reportPeriods';
 import { studentsApi } from '@/services/studentsApi';
 import useOnlineStatus from '@/hooks/useOnlineStatus';
@@ -53,6 +53,7 @@ const ReportsSection = ({
   const [retry, setRetry] = useState(0);
   const [selectedId, setSelectedId] = useState(null);
   const [detailCommittee, setDetailCommittee] = useState(ALL_COMMITTEES);
+  const [detailStudent, setDetailStudent] = useState(ALL_STUDENTS);
   const [isDeletingArchive, setIsDeletingArchive] = useState(false);
 
   const archiveId = period.startsWith(ARCHIVE_PREFIX) ? period.slice(ARCHIVE_PREFIX.length) : '';
@@ -130,8 +131,9 @@ const ReportsSection = ({
     showStudentPoints: canViewStandardReports && !archiveId,
     showTeacherPoints: canViewTeacherPoints && !archiveId,
     committee: detailCommittee,
+    student: detailStudent,
     unitText: rewardUnits.text,
-  }), [archiveId, canViewStandardReports, canViewTeacherPoints, detailCommittee, lists, overview, rewardUnits.text]);
+  }), [archiveId, canViewStandardReports, canViewTeacherPoints, detailCommittee, detailStudent, lists, overview, rewardUnits.text]);
   const detailCommittees = useMemo(() => detailCommitteesOf(overview), [overview]);
   const selected = metrics.find((metric) => metric.id === selectedId) || null;
 
@@ -245,7 +247,7 @@ const ReportsSection = ({
             {loadError && <ErrorState message={loadError} onRetry={() => setRetry((value) => value + 1)} />}
             <section aria-label="مؤشرات الأداء" className={`grid grid-cols-2 gap-4 md:grid-cols-3 ${isLoading ? 'opacity-60' : ''}`}>
               {metrics.map((metric) => (
-                <MetricCard key={metric.id} metric={metric} onSelect={(item) => { setDetailCommittee(ALL_COMMITTEES); setSelectedId(item.id); }} />
+                <MetricCard key={metric.id} metric={metric} onSelect={(item) => { setDetailCommittee(ALL_COMMITTEES); setDetailStudent(ALL_STUDENTS); setSelectedId(item.id); }} />
               ))}
             </section>
 
@@ -264,7 +266,8 @@ const ReportsSection = ({
           periodLabel={periodLabel}
           committees={detailCommittees}
           committee={detailCommittee}
-          onCommitteeChange={setDetailCommittee}
+          onCommitteeChange={(value) => { setDetailCommittee(value); setDetailStudent(ALL_STUDENTS); }}
+          onStudentChange={setDetailStudent}
           onClose={() => setSelectedId(null)}
           onRetry={() => retryList({ points: 'teacherPoints', studentPoints: 'studentPoints' }[selected?.id])}
         />

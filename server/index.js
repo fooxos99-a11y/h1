@@ -8839,8 +8839,8 @@ app.put('/api/student-plans/:studentId', requireStudentPlanAccess, async (req, r
       ...submittedPriorMemorization,
     ]);
     const memorizedPlanAyahs = await countMemorizedAyahsInRange(connection, priorMemorization, start, end);
-    const rejectFullyMemorizedPlanResult = await rejectFullyMemorizedPlan({ memorizedPlanAyahs, connection, res });
-    if (rejectFullyMemorizedPlanResult) { return rejectFullyMemorizedPlanResult; }
+    const rejectUnplannableMemorizationResult = await rejectUnplannableMemorization({ memorizedPlanAyahs, priorMemorization, connection, res, studentId });
+    if (rejectUnplannableMemorizationResult) { return rejectUnplannableMemorizationResult; }
 
     const fullyMemorizedPages = await getFullyMemorizedPages(connection, priorMemorization, 1, 604);
     const nextMemorizationStart = await skipFullyMemorizedTraversalPages(
@@ -19210,11 +19210,33 @@ async function rejectUneditableStudentPlan({ student, connection, res, req, stud
     await connection.rollback();
     return res.status(403).json({ message: 'لا يمكنك تعديل خطة طالب خارج حلقاتك.' });
   }
-  if (await isStudentPlanManagedByNazem(connection, studentId)) {
+  // A Nazem student's current plan follows Nazem; a student without one gets a new plan that is sent to Nazem.
+  if (await isStudentPlanManagedByNazem(connection, studentId) && await hasActiveStudentPlan(connection, studentId)) {
     await connection.rollback();
     return rejectNazemManagedPlanChange(res);
   }
   return null;
+}
+
+async function hasActiveStudentPlan(connection, studentId) {
+  const [[plan]] = await connection.query(
+    "SELECT id FROM student_quran_plans WHERE student_id = ? AND status = 'active' LIMIT 1",
+    [studentId],
+  );
+  return Boolean(plan);
+}
+
+/** Reject a plan whose memorized pages cannot be planned: a split review for Nazem, or nothing left to memorize. */
+async function rejectUnplannableMemorization({ memorizedPlanAyahs, priorMemorization, connection, res, studentId }) {
+  return await rejectSplitNazemReview({ priorMemorization, connection, res, studentId })
+    || rejectFullyMemorizedPlan({ memorizedPlanAyahs, connection, res });
+}
+
+/** Nazem keeps one continuous review range, so a Nazem student's memorized ranges must join into one. */
+async function rejectSplitNazemReview({ priorMemorization, connection, res, studentId }) {
+  if (priorMemorization.length < 2 || !await isStudentPlanManagedByNazem(connection, studentId)) return null;
+  await connection.rollback();
+  return res.status(422).json({ message: 'الطالب مرتبط بناظم، وناظم يقبل مراجعة متصلة واحدة. اجعل المحفوظ السابق نطاقًا واحدًا متصلًا.' });
 }
 
 /** Reject future, non-session and disallowed early attendance before checking location. */
