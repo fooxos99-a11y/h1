@@ -817,6 +817,7 @@ const SettingsSection = ({
               />
               {settings.summitEnabled && (
                 <SummitMapEditor
+                  pointsDisabled={isSaving || saveStatus === 'error' || JSON.stringify(settings) !== lastSavedRef.current}
                   value={settings.summitMapConfig}
                   onChange={(summitMapConfig) => setSettings((current) => ({ ...current, summitMapConfig }))}
                 />

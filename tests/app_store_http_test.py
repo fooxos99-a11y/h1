@@ -23,6 +23,19 @@ class AppStoreHttpTests(unittest.TestCase):
                     request_json(path, "fixture-token")
             opener.assert_not_called()
 
+    def test_push_signing_resources_reach_only_apple(self):
+        paths = [
+            "/bundleIds?filter%5Bidentifier%5D=sa.madarij.app",
+            "/bundleIds/registered-app/bundleIdCapabilities",
+            "/bundleIdCapabilities",
+            "/profiles?filter%5BprofileType%5D=IOS_APP_STORE",
+            "/profiles/profile-id/bundleId",
+            "/profiles/profile-id/certificates",
+        ]
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertEqual(app_store_url(path), "https://api.appstoreconnect.apple.com/v1" + path)
+
     def test_json_request_uses_expected_method_payload_and_timeout(self):
         response = MagicMock()
         response.status = 200

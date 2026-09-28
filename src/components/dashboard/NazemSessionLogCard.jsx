@@ -16,21 +16,28 @@ const operations = {
   'plan.upsert': 'حفظ الخطة', 'plan.delete': 'حذف الخطة', 'recitation.submit': 'التسميع',
 };
 const entryLabel = entry => entry.taskType ? getQuranTaskLabel(entry) : operations[entry.operationType] || entry.operationType;
+const statusLabel = entry => entry?.status === 'synced' && (entry.authoritative || entry.alreadyRecorded)
+  ? 'مؤكد في ناظم' : labels[entry?.status] || 'يحتاج مراجعة';
 
 export default function NazemSessionLogCard({ group, retryJob, retryingJobId }) {
   return <article className="rounded-xl border border-primary/15 bg-card p-3 [font-family:var(--font-ui)]" dir="rtl">
-    <div className="font-black text-foreground">{group.studentName || group.teacherName}{group.date ? ` — ${group.date}` : ''}</div>
+    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+      <time dateTime={group.latestAt?.replace(' ', 'T')} dir="ltr" className="font-bold tabular-nums text-muted-foreground">{group.latestAt}</time>
+      <span className={group.latestEntry?.status === 'synced' ? 'font-bold text-emerald-700' : 'font-bold text-amber-700'}>{statusLabel(group.latestEntry)}</span>
+    </div>
+    <div className="mt-1 break-words font-black text-foreground">{group.studentName || group.teacherName}</div>
     {group.studentName && <div className="text-xs text-muted-foreground">{group.teacherName}</div>}
     <div className="mt-2 divide-y divide-primary/10">
       {group.entries.map(entry => <div key={entry.jobId || entry.id} className="py-2">
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-bold">
           <span>{entryLabel(entry)}</span>
-          <span className={entry.status === 'synced' ? 'text-emerald-700' : 'text-amber-700'}>{entry.status === 'synced' && (entry.authoritative || entry.alreadyRecorded) ? 'مؤكد في ناظم' : labels[entry.status] || 'يحتاج مراجعة'}</span>
+          <span className={entry.status === 'synced' ? 'text-emerald-700' : 'text-amber-700'}>{statusLabel(entry)}</span>
         </div>
         {(entry.message || entry.errorCode) && <p className="mt-1 break-words text-xs leading-6">{nazemIssueMessage(entry)}</p>}
         <details className="mt-1 text-xs text-muted-foreground">
           <summary className="min-h-11 cursor-pointer content-center">التفاصيل</summary>
           <p>{entry.createdAt} · المحاولة {entry.attemptNumber || 0}</p>
+          {group.date && <p>تاريخ الجلسة: {group.date}</p>}
           {entry.errorCode && <p className="break-all" dir="ltr">{entry.errorCode}</p>}
         </details>
         {entry.jobId && canRetryNazemIssue(entry) && <Button type="button" variant="outline" size="sm" className="min-h-11 gap-2" disabled={retryingJobId != null} onClick={() => retryJob(entry.jobId)}>

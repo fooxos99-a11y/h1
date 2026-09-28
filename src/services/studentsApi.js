@@ -782,6 +782,8 @@ export const studentsApi = {
       body: JSON.stringify(payload),
     }),
   getProgramGrades: (id) => request(`/programs/${id}/grades`),
+  getStationGrades: (id) => request(`/summit/stations/${encodeURIComponent(id)}/grades`),
+  saveStationGrades: (id, grades) => request(`/summit/stations/${encodeURIComponent(id)}/grades`, { method: 'PUT', body: JSON.stringify({ grades }) }),
   saveProgramGrades: (id, grades) => request(`/programs/${id}/grades`, { method: 'PUT', body: JSON.stringify({ grades }) }),
   saveProgramGrade: (id, studentId, points) => request(`/programs/${id}/grades/${studentId}`, { method: 'PUT', body: JSON.stringify({ points }) }),
   getPrograms: () => request('/programs'),

@@ -1,7 +1,7 @@
 import { blockedNazemError, reviewNazemError } from './errors.js';
 
 // Read the remote day before deciding whether a local attempt still needs sending.
-export async function submitWithNazemAuthority({ adapter, studentLink, planLink, mapped, applyAttendance, importDay, platformWroteDay = async () => false }) {
+export async function submitWithNazemAuthority({ adapter, studentLink, planLink, mapped, applyAttendance, importDay, platformWroteDay = async () => false, beforeSubmit = async () => {} }) {
   const adopt = async (state) => {
     if (state.attendanceStatus != null) {
       mapped.attendanceStatus = state.attendanceStatus;
@@ -36,6 +36,7 @@ export async function submitWithNazemAuthority({ adapter, studentLink, planLink,
     throw blockedNazemError('لا يمكن إرسال تسميع لطالب حالته غائب أو مستأذن في ناظم.', 'NAZEM_ATTENDANCE_BLOCKS_RECITATION');
   }
   try {
+    await beforeSubmit();
     return await adapter.submitRecitation(studentLink, planLink, mapped);
   } catch (error) {
     if (error.syncStatus !== 'conflict') throw error;

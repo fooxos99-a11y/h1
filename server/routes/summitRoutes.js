@@ -1,4 +1,5 @@
 import express from 'express';
+import { createStationPointsRouter } from './stationPointsRoutes.js';
 import { db } from '../db.js';
 import {
   getSummitChallengeTitle,
@@ -87,6 +88,7 @@ export function createSummitRouter({
   getToday,
 }) {
   const router = express.Router();
+  router.use('/stations', createStationPointsRouter({ loadSettings, applyStudentPointDelta, logStudentPointTransaction, getToday }));
 
   router.get('/', async (req, res, next) => {
     try {

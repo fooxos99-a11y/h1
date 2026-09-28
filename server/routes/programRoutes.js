@@ -248,8 +248,9 @@ export function createProgramRouter({ loadSettings, applyStudentPointDelta, logS
   router.get('/:id/grades', requireProgramManagement, async (req, res, next) => {
     try {
       const scope = req.auth.role === 'supervisor';
-      const [students] = await db().query(`SELECT s.id, s.name, sp.earned_points AS earnedPoints, sp.completed_at AS completedAt
+      const [students] = await db().query(`SELECT s.id, s.name, s.committee_id AS committeeId, c.name AS committeeName, sp.earned_points AS earnedPoints, sp.completed_at AS completedAt
         FROM students s LEFT JOIN student_path_progress sp ON sp.student_id = s.id AND sp.path_id = ?
+        LEFT JOIN committees c ON c.id = s.committee_id
         ${scope ? 'WHERE EXISTS (SELECT 1 FROM supervisor_committees sc WHERE sc.committee_id = s.committee_id AND sc.supervisor_id = ?)' : ''}
         ORDER BY s.name, s.id`, scope ? [req.params.id, req.auth.id] : [req.params.id]);
       res.json({ students });

@@ -15,6 +15,8 @@ const SummitMapEventFields = ({
   isStation = false,
   active = false,
   onActiveChange,
+  onRecordPoints,
+  pointsDisabled = false,
   onChange,
 }) => (
   <div className="grid gap-4 sm:grid-cols-2 [font-family:var(--font-ui)]" dir="rtl">
@@ -39,6 +41,10 @@ const SummitMapEventFields = ({
       </div>
     )}
     {isStation && <div className="sm:col-span-2"><SummitImagePicker portrait imageId={entity.imageId} label="صورة المحطة" onChange={imageId => onChange({ imageId })} /></div>}
+    {isStation && <>
+      <div className="space-y-1.5"><Label htmlFor={`${idPrefix}-points`}>نقاط المحطة</Label><Input id={`${idPrefix}-points`} type="number" min="0" max="10000" step="1" value={entity.rewardPoints} onChange={event => onChange({ rewardPoints: event.target.value })} /></div>
+      {active && <div className="flex items-end"><Button type="button" className="min-h-11 w-full" disabled={pointsDisabled} onClick={onRecordPoints}>تسجيل النقاط</Button></div>}
+    </>}
     {!isStation && <><div className="grid grid-cols-2 gap-2 sm:col-span-2">
       <div className="flex min-h-14 items-center justify-between gap-2 rounded-xl border border-primary/15 px-3">
         <Label className="font-black">الإشعار</Label>

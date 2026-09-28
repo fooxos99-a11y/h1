@@ -108,12 +108,12 @@ export default function MetricDetails({ metric, periodLabel, committees = [], co
     <Dialog open={Boolean(metric)} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent
         aria-describedby={undefined}
-        className="max-h-[calc(100dvh-2rem)] max-w-3xl gap-0 bg-[hsl(var(--background))] p-0 sm:p-0 [font-family:var(--font-ui)]"
+        className="flex max-h-[calc(100dvh-2rem)] max-w-3xl flex-col gap-0 overflow-hidden bg-[hsl(var(--background))] p-0 sm:gap-0 sm:p-0 [font-family:var(--font-ui)]"
         dir="rtl"
       >
         {metric && (
           <>
-            <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-[hsl(var(--background))] px-4 py-3 sm:px-6">
+            <div className="flex shrink-0 items-center gap-3 border-b border-border bg-[hsl(var(--background))] px-4 py-3 sm:px-6">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg" style={{ background: tint(metric.color), color: metric.color }}>
                 {Icon && <Icon className="h-5 w-5" />}
               </span>
@@ -126,7 +126,7 @@ export default function MetricDetails({ metric, periodLabel, committees = [], co
               </Button>
             </div>
 
-            <div className="space-y-6 p-4 sm:p-6">
+            <div className="min-h-0 min-w-0 space-y-6 overflow-y-auto overscroll-contain p-4 sm:p-6">
               <DetailFilters metric={metric} committees={committees} committee={committee} onCommitteeChange={onCommitteeChange} onStudentChange={onStudentChange} />
               {metric.error && <ErrorState message={metric.error} onRetry={onRetry} />}
               {!metric.error && metric.loading && <DashboardLoader className="py-10" />}

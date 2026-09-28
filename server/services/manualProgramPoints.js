@@ -1,13 +1,17 @@
 const fail = (message, statusCode = 422) => Object.assign(new Error(message), { statusCode });
 
 /** Save one batch inside the caller's transaction; the same authorization applies to every row. */
-export async function saveManualProgramPointsBatch(connection, { grades, ...context }, dependencies) {
+export function validateManualPointsBatch(grades) {
   if (!Array.isArray(grades) || !grades.length || grades.length > 2000
     || grades.some(row => !row || !Number.isSafeInteger(row.studentId) || row.studentId <= 0
       || !Number.isSafeInteger(row.points) || row.points < 0)
     || new Set(grades.map(row => row.studentId)).size !== grades.length) {
     throw fail('قائمة النقاط غير صالحة أو تحتوي طالبًا مكررًا.');
   }
+}
+
+export async function saveManualProgramPointsBatch(connection, { grades, ...context }, dependencies) {
+  validateManualPointsBatch(grades);
   const results = [];
   for (const grade of [...grades].sort((a, b) => a.studentId - b.studentId)) {
     const result = await saveManualProgramPoints(connection, { ...context, studentId: grade.studentId, points: grade.points }, dependencies);

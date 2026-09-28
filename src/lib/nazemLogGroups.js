@@ -1,4 +1,4 @@
-const trackOrder = { 'attendance.submit': 0, memorization: 1, mastery: 1, link: 2, review: 3 };
+const newestFirst = (first, second) => String(second.createdAt || '').localeCompare(String(first.createdAt || ''));
 export function groupNazemLogEntries(entries = []) {
   const groups = new Map();
   for (const entry of entries) {
@@ -11,7 +11,10 @@ export function groupNazemLogEntries(entries = []) {
     const group = groups.get(key);
     (entry.entryKind === 'current' ? group.entries : group.history).push(entry);
   }
-  return [...groups.values()].map(group => ({ ...group,
-    entries: group.entries.sort((a, b) => (trackOrder[a.taskType || a.operationType] ?? 9) - (trackOrder[b.taskType || b.operationType] ?? 9)),
-  }));
+  return [...groups.values()].map(group => {
+    const entries = group.entries.sort(newestFirst);
+    const history = group.history.sort(newestFirst);
+    const latestEntry = [...entries, ...history].sort(newestFirst)[0];
+    return { ...group, entries, history, latestEntry, latestAt: latestEntry?.createdAt || '' };
+  }).sort((first, second) => second.latestAt.localeCompare(first.latestAt));
 }

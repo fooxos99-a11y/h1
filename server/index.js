@@ -1,3 +1,4 @@
+import { getStudentPointSourceLabel } from '../shared/student-point-sources.js';
 import { loadReviewCycle, saveReviewCycle, selectAuthorizedReview } from './services/quranReviewCycle.js';
 import { parseReviewExecution, reviewRangeLabel } from '../shared/quran-review-cycle.js';
 import { normalizeEventNotifications } from '../shared/event-notifications.js';
@@ -5887,6 +5888,7 @@ async function resetAllProgramPoints(connection) {
     quranTaskRowsReset: 'UPDATE student_quran_tasks SET points = 0 WHERE points <> 0',
     quranExecutionRowsReset: 'UPDATE student_quran_execution_segments SET points_awarded = 0 WHERE points_awarded <> 0',
     learningPathRowsReset: 'UPDATE student_path_progress SET earned_points = 0 WHERE earned_points <> 0',
+    stationPointRowsReset: 'UPDATE student_station_points SET earned_points = 0 WHERE earned_points <> 0',
     familyAchievementRowsReset: 'UPDATE family_achievements SET points = 0 WHERE points <> 0',
     studentBalancesReset: 'UPDATE students SET points = 0, store_balance = 0 WHERE points <> 0 OR store_balance <> 0',
     familyBalancesReset: 'UPDATE committees SET points = 0, student_points_contribution = 0 WHERE points <> 0 OR student_points_contribution <> 0',
@@ -5906,6 +5908,7 @@ async function deleteProgramDataExceptCore(connection) {
     studentAchievementsDeleted: 'DELETE FROM student_achievements',
     familyAchievementsDeleted: 'DELETE FROM family_achievements',
     studentPathProgressDeleted: 'DELETE FROM student_path_progress',
+    studentStationPointsDeleted: 'DELETE FROM student_station_points',
     learningPathOptionsDeleted: 'DELETE FROM learning_path_options',
     learningPathQuestionsDeleted: 'DELETE FROM learning_path_questions',
     learningPathsDeleted: ['DELETE FROM learning_paths WHERE parent_path_id IS NOT NULL', 'DELETE FROM learning_paths'],
@@ -6497,25 +6500,6 @@ async function syncInactiveSourcePointAdjustments(connection, settings, extraStu
 
 
 
-const studentPointSourceLabels = {
-  attendance: 'كيلومترات الحضور',
-  family_evaluation: 'تقييم الحلقة',
-  family_achievement: 'وسام الحلقة',
-  family_adjustment: 'تعديل كيلومترات الحلقة',
-  family_points_setting_adjustment: 'تعطيل تحويل كيلومترات الحلقة إلى الطلاب',
-  daily_challenge: 'التحدي اليومي',
-  summit_challenge: 'تحدي الخريطة',
-  quran_plan: 'خطة القرآن',
-  inactive_source_adjustment: 'مصدر كيلومترات غير مفعل',
-  supervisor_award: 'إضافة كيلومترات من معلم',
-  supervisor_deduction: 'خصم كيلومترات من معلم',
-  manager_adjustment: 'تعديل كيلومترات من المدير',
-  manual_award: 'منح كيلومترات من المدير',
-  manual: 'إدخال يدوي',
-  quran_execution: 'تنفيذ خطة القرآن',
-  quran_evaluation: 'تقييم جلسة التسميع',
-  store_purchase: 'شراء من المتجر',
-};
 const INACTIVE_SOURCE_ADJUSTMENT_SOURCE = 'inactive_source_adjustment';
 const FAMILY_POINTS_SETTING_ADJUSTMENT_SOURCE = 'family_points_setting_adjustment';
 const STUDENT_POINTS_FAMILY_RECONCILED_SETTING = 'studentPointsFamilyContributionReconciled';
@@ -6527,10 +6511,6 @@ const FAMILY_ORIGIN_STUDENT_POINT_SOURCES = [
   ...FAMILY_POINT_STUDENT_CONTRIBUTION_SOURCES,
   FAMILY_POINTS_SETTING_ADJUSTMENT_SOURCE,
 ];
-
-function getStudentPointSourceLabel(sourceType = '') {
-  return studentPointSourceLabels[sourceType] || 'مصدر غير محدد';
-}
 
 function normalizePointReason(reason = '', sourceType = '') {
   const text = String(reason || '').trim();

@@ -58,7 +58,7 @@ for (const [engineName, engine] of [['chromium', chromium], ['webkit', webkit]])
         };
         await route.fulfill(_resolveJson());
       });
-      await page.goto('http://127.0.0.1:3000/tests/fixtures/nazem-recitation-policy.html');
+      await page.goto('http://127.0.0.1:3003/tests/fixtures/nazem-recitation-policy.html');
       await page.getByRole('alert').waitFor();
       assert.equal(await page.getByText('لا توجد مهام للتقييم.', { exact: true }).count(), 0);
       const retry = page.getByRole('button', { name: 'إعادة المحاولة', exact: true });
@@ -78,10 +78,10 @@ for (const [engineName, engine] of [['chromium', chromium], ['webkit', webkit]])
       const beforeReload = evaluationRequests;
       phase = 'cached reload';
       await page.reload();
-      await page.getByRole('button', { name: 'ربط', exact: true }).waitFor();
-      // Cached tasks appear while the network request is still held. Multiple consumers share it.
+      await page.waitForFunction(() => Boolean(globalThis.recitationFixture));
+      assert.equal(await page.getByRole('button', { name: 'ربط', exact: true }).count(), 0);
+      // Online opening waits for the fresh authoritative read; consumers share it. Failure restores cache.
       const overlappingLoads = page.evaluate(async () => {
-        globalThis.dispatchEvent(new globalThis.Event('focus'));
         return Promise.allSettled([
           globalThis.recitationFixture.load('990'),
           globalThis.recitationFixture.load('990'),
@@ -119,8 +119,8 @@ for (const [engineName, engine] of [['chromium', chromium], ['webkit', webkit]])
       assert.equal(await dialog.getByRole('spinbutton').count(), 2);
       assert.equal(await dialog.getByText('مقدار يجب إخفاؤه').count(), 0);
       assert.equal(await dialog.getByText(/المقطع/).count(), 0);
-      await dialog.getByRole('spinbutton', { name: 'عدد الأخطاء', exact: true }).fill('5');
-      await dialog.getByRole('spinbutton', { name: 'عدد التنبيهات', exact: true }).fill('2');
+      await dialog.getByRole('spinbutton', { name: 'عدد الأخطاء', exact: true }).first().fill('5');
+      await dialog.getByRole('spinbutton', { name: 'عدد التنبيهات', exact: true }).first().fill('2');
       await dialog.getByRole('button', { name: 'إنهاء', exact: true }).click();
       await page.waitForFunction(() => !globalThis.document.querySelector('[role="dialog"]'));
       for (let attempt = 0; attempt < 40 && submitted.length < 2; attempt += 1) await page.waitForTimeout(100);
@@ -131,7 +131,7 @@ for (const [engineName, engine] of [['chromium', chromium], ['webkit', webkit]])
       assert.ok(submitted.every((value) => value.expectedNazemLinkCount === 7));
       await page.waitForLoadState('networkidle');
       assert.deepEqual(errors, [], `${engineName} at ${width}px`);
-      results.push({ engine: engineName, width, passed: true, loadingFailureRetry: true, cachedWhileLoading: true, sharedRequest: true });
+      results.push({ engine: engineName, width, passed: true, loadingFailureRetry: true, cachedAfterFailure: true, sharedRequest: true });
       await context.close();
     }
   } finally { await browser.close(); }

@@ -27,6 +27,27 @@ function fixture() {
   return { day, mapped, adapter, calls, student, plan };
 }
 
+test('memorization sends the explicit link choice in the same verified write, including zero', async () => {
+  for (const linkCount of [0, 7]) {
+    const f = fixture();
+    f.day.link = 4;
+    f.mapped.linkCount = linkCount;
+    f.adapter.postFollowUpApi = async (path, payload) => {
+      f.calls.posts++;
+      assert.match(path, /item-days\/101\/partial$/);
+      assert.equal(payload.link, linkCount);
+      Object.assign(f.day, { status: 'completed', actual_surah_to: 1, actual_verse_to: 7,
+        mistake: payload.mistake, hearing: payload.hearing, repetition: payload.repetition, link: payload.link });
+      return { success: true };
+    };
+    await f.adapter.submitRecitation(f.student, f.plan, f.mapped);
+    assert.equal(f.calls.posts, 1);
+    const retry = await f.adapter.submitRecitation(f.student, f.plan, f.mapped);
+    assert.equal(retry.alreadyRecorded, true);
+    assert.equal(f.calls.posts, 1);
+  }
+});
+
 test('accepted POST with a still-pending remote target is never declared completed, including with a saved snapshot', async () => {
   const f = fixture();
   await assert.rejects(f.adapter.submitRecitation(f.student, f.plan, f.mapped), { code: 'NAZEM_DELIVERY_UNVERIFIED' });

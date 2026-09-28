@@ -17,7 +17,8 @@ try {
   await page.getByRole('alert').waitFor();
   await input.fill('65');
   await page.getByRole('button', { name: 'حفظ', exact: true }).click();
-  await page.getByText(/المسجل:/).waitFor();
+  await page.getByRole('button', { name: 'حفظ', exact: true }).waitFor();
+  assert.equal(await input.inputValue(), '65');
   assert.ok(await page.getByRole('button', { name: 'حفظ', exact: true }).isEnabled());
   assert.ok(await page.getByRole('dialog').evaluate(el => el.scrollWidth <= el.clientWidth));
   await page.screenshot({ path: `outputs/manual-program-${width}.png` });

@@ -105,7 +105,7 @@ test('Nazem settings expose a complete sync log for accepted, active, and failed
   assert.match(routes, /router\.get\('\/log', requireSettings/);
   assert.match(routes, /FROM nazem_sync_events event/);
   assert.match(routes, /job\.status IN \('pending','syncing','retrying','blocked','failed','requires_review','conflict','synced'\)/);
-  assert.match(routes, /job\.operation_type IN \('attendance\.submit','recitation\.submit'\)/);
+  assert.match(routes, /ORDER BY job\.updated_at DESC, job\.id DESC LIMIT 500/);
   assert.match(routes, /'current' AS entryKind/);
   assert.match(routes, /'history' AS entryKind/);
   assert.match(routes, /buildNazemLogEntries\(activeRows, eventRows\)/);

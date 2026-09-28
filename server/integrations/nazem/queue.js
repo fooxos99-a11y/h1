@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { wakeNazemMemorizationAfterLink } from './pairedRecitation.js';
 import { captureRecitationTarget } from './recitationSubmission.js';
 import { nazemTaskTrack } from './taskTrack.js';
 import os from 'node:os';
@@ -440,6 +441,7 @@ export async function enqueueNazemRecitation(connection, { attemptId, task, acto
   );
   const barrier = await loadNazemRecitationBarrier(connection, task, dailyTaskType);
   if (!barrier.ready || !barrier.sourceAttemptId) return null;
+  if (submittedTaskType === 'link') await wakeNazemMemorizationAfterLink(connection, task, teacherId);
   const submissionTarget = await captureRecitationTarget(connection, dailyFollowUpId, barrier.attemptSignature);
   return enqueueNazemSyncJob(connection, {
     operationType: 'recitation.submit',
@@ -716,6 +718,10 @@ export async function failNazemJob(connection, job, error) {
   );
   if (!result.affectedRows) return null;
   await recordJobEvent(connection, job, status, error, { diagnostics: nazemErrorDiagnostics(error) });
+  if (error?.code === 'NAZEM_MEMORIZATION_WAITING_FOR_LINK') {
+    // Close the race where the link was committed while this job was still syncing.
+    await wakeNazemMemorizationAfterLink(connection, { ...job.payload, studentId: job.studentId }, job.teacherId);
+  }
   if (NAZEM_STRUCTURAL_ERROR_CODES.has(error?.code)) {
     await registerNazemCircuitFailure(connection, error);
   }

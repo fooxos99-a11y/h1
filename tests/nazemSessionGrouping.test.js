@@ -8,6 +8,18 @@ import { NazemAdapter } from '../server/integrations/nazem/adapter.js';
 import { buildNazemLogEntries } from '../server/integrations/nazem/log.js';
 
 const entry = { teacherId: 1, studentId: 2, studentName: 'محمد', planId: 3, taskDate: '2026-09-22', operationType: 'recitation.submit', entryKind: 'current', jobId: 10 };
+test('log opens in latest event order regardless of session date and operation type', () => {
+  const groups = groupNazemLogEntries([
+    { ...entry, studentId: 4, createdAt: '2026-09-28 08:00:00', status: 'blocked' },
+    { ...entry, createdAt: '2026-09-28 09:00:00', status: 'synced' },
+    { ...entry, jobId: 11, operationType: 'attendance.submit', createdAt: '2026-09-28 10:00:00', status: 'pending' },
+    { ...entry, id: 90, jobId: 12, studentId: 5, taskDate: '2026-09-01', entryKind: 'history', createdAt: '2026-09-28 11:00:00', status: 'failed' },
+  ]);
+  assert.deepEqual(groups.map(group => group.latestAt), ['2026-09-28 11:00:00', '2026-09-28 10:00:00', '2026-09-28 08:00:00']);
+  assert.equal(groups[0].latestEntry.status, 'failed');
+  assert.equal(groups[1].latestEntry.status, 'pending');
+  assert.deepEqual(groups[1].entries.map(row => row.jobId), [11, 10]);
+});
 test('old send recovery requires a later explicit 422 event and cannot unlock uncertain writes', async () => {
   for (const change of [{}, { metadata: { diagnostics: { httpStatus: 503 } } }, { occurredAt: 0 }, { message: 'رفض الحفظ' }]) {
     const job = { id: 3, payload: { deliveryWrites: [{ path: '/item/5', startedAt: '2026-09-22T10:00:00Z' }] } };

@@ -6,11 +6,13 @@ export const nazemSyncStatusLabel = (code, needsRecheck = false) => needsRecheck
   NAZEM_PLAN_STUDENT_MISMATCH: 'تحتاج مطابقة الطالب مع ناظم',
   NAZEM_REVIEW_IDENTITY_CONFLICT: 'تحتاج المراجعة مطابقة مع ناظم',
   NAZEM_LINK_WAITING_FOR_MEMORIZATION: 'الربط ينتظر تسجيل الحفظ في ناظم',
+  NAZEM_MEMORIZATION_WAITING_FOR_LINK: 'الحفظ بانتظار تسجيل نتيجة الربط',
 }[code] || 'تعذرت المزامنة');
 const nonRetryableErrorCodes = new Set([
   'NAZEM_REVISION_RANGE_DISCONNECTED',
   'NAZEM_ATTENDANCE_BLOCKS_RECITATION',
   'NAZEM_ATTENDANCE_SKIPPED',
+  'NAZEM_MEMORIZATION_WAITING_FOR_LINK',
 ]);
 
 export const canRetryNazemIssue = (issue) => retryableStatuses.has(issue?.status || 'requires_review')

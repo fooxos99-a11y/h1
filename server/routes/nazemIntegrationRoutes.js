@@ -1451,7 +1451,7 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
          LEFT JOIN nazem_sync_jobs job ON job.id = event.job_id
          JOIN supervisors teacher ON teacher.id = event.teacher_id
          LEFT JOIN students student ON student.id = event.student_id
-         ORDER BY event.created_at DESC LIMIT 500`,
+         ORDER BY event.created_at DESC, event.id DESC LIMIT 500`,
       );
       const [activeRows] = await db().query(
         `SELECT CONCAT('job-', job.id) AS id, job.id AS jobId, 'current' AS entryKind,
@@ -1469,7 +1469,7 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
           (SELECT JSON_UNQUOTE(JSON_EXTRACT(latest.metadata_json, '$.authoritative'))
              FROM nazem_sync_events latest WHERE latest.job_id = job.id AND latest.status = 'synced'
              ORDER BY latest.id DESC LIMIT 1) AS authoritative,
-          DATE_FORMAT(COALESCE(job.last_succeeded_at, job.updated_at), '%Y-%m-%d %H:%i:%s') AS createdAt,
+          DATE_FORMAT(job.updated_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
           teacher.name AS teacherName, student.name AS studentName
          FROM nazem_sync_jobs job
          JOIN supervisors teacher ON teacher.id = job.teacher_id
@@ -1480,12 +1480,7 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
                AND newer.operation_type = job.operation_type AND newer.entity_type = job.entity_type
                AND newer.entity_id <=> job.entity_id AND newer.id > job.id
            )
-         ORDER BY CASE job.status
-           WHEN 'conflict' THEN 0 WHEN 'requires_review' THEN 1 WHEN 'failed' THEN 2
-           WHEN 'retrying' THEN 3 WHEN 'syncing' THEN 4 WHEN 'pending' THEN 5
-           WHEN 'blocked' THEN 6 WHEN 'synced' THEN 7 ELSE 8 END,
-           CASE WHEN job.operation_type IN ('attendance.submit','recitation.submit') THEN 0 ELSE 1 END,
-           job.updated_at DESC LIMIT 500`,
+         ORDER BY job.updated_at DESC, job.id DESC LIMIT 500`,
       );
       return res.json(buildNazemLogEntries(activeRows, eventRows));
     } catch (error) {

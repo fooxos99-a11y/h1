@@ -1,4 +1,5 @@
 import { importNazemLinkResult } from './linkResultImport.js';
+import { requireRecordedNazemLink } from './pairedRecitation.js';
 import { refreshNazemRoster } from './rosterState.js';
 import { loadConfirmedNazemRecordIds, recitationIdentityFromReceipt } from './followUpCycles.js';
 import { applyRecitationWriteIdentity, hasLocalRecitation, platformWroteNazemDay, recitationWriteJournal, recoverRejectedRecitationWrite, resolveLegacyRecitationTarget, validateRecitationTarget } from './recitationSubmission.js';
@@ -1038,6 +1039,7 @@ async function syncRecitation(connection, job) {
     await persistNazemSession(connection, job.teacherId, adapter);
     const remote = await submitWithNazemAuthority({
       adapter, studentLink, planLink, mapped,
+      beforeSubmit: () => requireRecordedNazemLink(connection, recitation, mapped, job),
       applyAttendance: (attendance) => applyRemoteAttendanceToRuwasi(connection, recitation.studentId, attendance),
       platformWroteDay: (dayId) => platformWroteNazemDay(connection, { teacherId: job.teacherId, studentId: recitation.studentId, dayId }),
       importDay: async (day) => {

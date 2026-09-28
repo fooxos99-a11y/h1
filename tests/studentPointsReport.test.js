@@ -1,6 +1,19 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { getStudentPointSourceLabel } from '../shared/student-point-sources.js';
+import { buildStudentPointsReport } from '../server/services/studentPointsReport.js';
+
+test('student report identifies program and station transactions without changing their points', async () => {
+  const connection = { query: async () => [[
+    { studentId: 1, id: 10, type: 'increase', points: 20, sourceType: 'learning_path' },
+    { studentId: 1, id: 11, type: 'increase', points: 15, sourceType: 'summit_station' },
+  ]] };
+  const report = await buildStudentPointsReport(connection, { from: '2026-09-01', to: '2026-09-28', sourceLabel: getStudentPointSourceLabel });
+  assert.deepEqual(report.rows[0].transactions.map(row => row.source), ['البرامج', 'المحطات']);
+  assert.equal(report.rows[0].total, 35);
+  assert.equal(getStudentPointSourceLabel('unknown'), 'مصدر غير محدد');
+});
 
 test('student points report is shown only for enabled teacher adjustments', async () => {
   const [reports, pointsTable, dashboard, api, server, administrators, popover] = await Promise.all([

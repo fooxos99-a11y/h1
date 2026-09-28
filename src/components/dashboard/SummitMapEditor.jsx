@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Building2, Flag, MapPin, Plus, Trash2 } from 'lucide-react';
 import SummitMapEventFields from '@/components/dashboard/SummitMapEventFields';
+import StudentPointsDialog from '@/components/dashboard/StudentPointsDialog';
+import { studentsApi } from '@/services/studentsApi';
 import SummitCitySceneFields from '@/components/dashboard/SummitCitySceneFields';
 import SummitMapTextInput from '@/components/dashboard/SummitMapTextInput';
 import SummitJourneyMap from '@/components/summit/SummitJourneyMap';
@@ -38,11 +40,12 @@ const EntityPicker = ({ label, icon: Icon, entities, selectedId, onSelect, onAdd
   </div>
 );
 
-const SummitMapEditor = ({ value, onChange }) => {
+const SummitMapEditor = ({ value, onChange, pointsDisabled = false }) => {
   const config = useMemo(() => normalizeSummitMapConfig(value), [value]);
   const [selectedCityId, setSelectedCityId] = useState(config.cities[0]?.id || '');
   const [selectedStationId, setSelectedStationId] = useState(config.stations[0]?.id || '');
   const [previewKilometer, setPreviewKilometer] = useState(0);
+  const [grading, setGrading] = useState(null);
   const totalKilometers = getSummitMapTotalKilometers(config);
   const entityMaximumKilometer = config.goal.enabled
     ? Math.max(0, config.goal.kilometer - 1)
@@ -125,10 +128,14 @@ const SummitMapEditor = ({ value, onChange }) => {
         idPrefix={`station-${selectedStation.id}`}
         maximumKilometer={entityMaximumKilometer}
         active={config.activeStationId === selectedStation.id}
+        pointsDisabled={pointsDisabled}
+        onRecordPoints={() => setGrading({ id: selectedStation.id, title: selectedStation.name, pointsReward: selectedStation.rewardPoints })}
         onActiveChange={(active) => update({ activeStationId: active ? selectedStation.id : null })}
         onChange={(patch) => updateEntity('stations', selectedStation.id, patch)}
       />}
     </EntityPicker>
+
+    <StudentPointsDialog program={grading} onClose={() => setGrading(null)} loadGrades={studentsApi.getStationGrades} saveGrades={studentsApi.saveStationGrades} />
 
   </div>;
 };

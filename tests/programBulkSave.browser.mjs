@@ -14,7 +14,8 @@ try {
     await page.getByRole('checkbox', { name: 'تحديد طالب 3', exact: true }).check();
     await page.getByLabel('نقاط المحددين', { exact: true }).fill('75');
     await page.getByRole('button', { name: 'حفظ', exact: true }).click();
-    await page.getByText('المسجل:').first().waitFor();
+    await page.getByLabel('نقاط طالب 1', { exact: true }).waitFor();
+    assert.equal(await page.getByLabel('نقاط طالب 1', { exact: true }).inputValue(), '75');
     assert.deepEqual(JSON.parse(await page.getByLabel('الدفعة المحفوظة').textContent()), [
       { studentId: 1, points: 75 }, { studentId: 3, points: 75 },
     ]);
