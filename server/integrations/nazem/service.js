@@ -4,6 +4,7 @@ import { loadConfirmedNazemRecordIds, recitationIdentityFromReceipt } from './fo
 import { applyRecitationWriteIdentity, hasLocalRecitation, platformWroteNazemDay, recitationWriteJournal, recoverRejectedRecitationWrite, resolveLegacyRecitationTarget, validateRecitationTarget } from './recitationSubmission.js';
 import { recoverNazemAuthenticationJobs } from './authenticationRecovery.js';
 import { reconcileConfirmedRecitationJobs } from './confirmedRecitationJobs.js';
+import { wakeReadyPendingNazemDay } from './pendingDayRecovery.js';
 import { nazemFollowUpMetricsMatch } from './followUpMetrics.js';
 import { loadRecitationRewardSettings } from '../../services/recitationRewards.js';
 import { recitationFacesFromLines } from '../../services/recitationSegments.js';
@@ -2024,6 +2025,7 @@ async function refreshLinkedStudentFollowUps({ links, connection, job, adapter, 
       imported += result.imported;
       if (result.review) issues.push(...(result.issues?.length ? result.issues : [{ studentId: link.studentId, code: 'NAZEM_FOLLOW_UP_REVIEW' }]));
       await revalidatePendingNazemIdentity(connection, adapter, { ...link, teacherId: job.teacherId });
+      await wakeReadyPendingNazemDay(connection, { ...link, teacherId: job.teacherId });
       timing.importMs += Date.now() - phaseStarted;
       if (!links.slice(index + 1).some(next => Number(next.studentId) === Number(link.studentId))) checkedStudentIds.push(Number(link.studentId));
       await recordNazemStudentRefresh(connection, job, checkedStudentIds);
