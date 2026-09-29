@@ -65,6 +65,7 @@ const QuranTestsSection = lazy(() => import('@/components/dashboard/QuranTestsSe
 const RegistrationRequestsSection = lazy(() => import('@/components/dashboard/RegistrationRequestsSection'));
 const NotificationsSection = lazy(() => import('@/components/dashboard/NotificationsSection'));
 const ReportsSection = lazy(() => import('@/components/dashboard/ReportsSection'));
+const RankingsSection = lazy(() => import('@/components/dashboard/RankingsSection'));
 const StudentNewsEditor = lazy(() => import('@/components/dashboard/StudentNewsEditor'));
 const SettingsSection = lazy(() => import('@/components/dashboard/SettingsSection'));
 const StoreSection = lazy(() => import('@/components/dashboard/StoreSection'));
@@ -90,6 +91,7 @@ const dashboardSectionPreloaders = {
   registrationRequests: () => import('@/components/dashboard/RegistrationRequestsSection'),
   notifications: () => import('@/components/dashboard/NotificationsSection'),
   reports: () => import('@/components/dashboard/ReportsSection'),
+  rankings: () => import('@/components/dashboard/RankingsSection'),
   reciters: () => import('@/components/dashboard/RecitersSection'),
   settings: () => import('@/components/dashboard/SettingsSection'),
   store: () => import('@/components/dashboard/StoreSection'),
@@ -143,6 +145,7 @@ const baseSections = [
   { key: 'staffAttendance', label: 'التحضير', icon: ClipboardCheck },
   { key: 'mushaf', label: 'المصحف', icon: BookOpen },
   { key: 'reports', label: 'الإحصائيات', icon: BarChart3 },
+  { key: 'rankings', label: 'الترتيب', icon: Trophy },
   { key: 'students', label: 'الطلاب', icon: GraduationCap },
   { key: 'families', label: 'الحلقات', icon: Building2 },
   { key: 'studentPlans', label: 'خطط الطلاب', icon: ListChecks },
@@ -298,6 +301,7 @@ const WajehDashboard = () => {
       .sort((first, second) => reciterSectionOrder.get(first.key) - reciterSectionOrder.get(second.key)));
     const filteredSections = baseSections.filter((section) => {
       if (isDashboardSectionDisabled({ section, settings, isManager, isSupervisor, site })) return false;
+      if (section.key === 'rankings') return isManager || isSupervisor || isAdmin;
       if (isSupervisor && section.key === 'studentPlans') return true;
       if (isSupervisor && ['teacherPoints', 'culturalCompetition', 'calls', 'reports'].includes(section.key)) return true;
       if (section.key === 'staffAttendance') return canDisplayStaffAttendance({ settings, alreadyPresentToday, isSupervisor, isReciter, isAdmin, dashboardPermissions });
@@ -373,6 +377,7 @@ const WajehDashboard = () => {
       case 'teacherPoints': return <TeacherPointsAdjustmentSection />;
       case 'quranTests': return <QuranTestsSection />;
       case 'quranEvaluation': return <TeacherEvaluationSection />;
+      case 'rankings': return <RankingsSection />;
       case 'previousRecitationSessions': return <TeacherPreviousSessionsPanel />;
       case 'families': return <FamiliesSection />;
       case 'reports': return (

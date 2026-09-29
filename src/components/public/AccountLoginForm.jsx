@@ -17,8 +17,14 @@ export default function AccountLoginForm({ onLogin, loading, autoFocus = true })
                 id={inputId}
                 value={loginNumber}
                 onChange={(event) => setLoginNumber(normalizeNumericInput(event.target.value))}
-                type="tel"
-                inputMode="numeric"
+                type="text"
+                inputMode="text"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    if (!event.repeat) event.currentTarget.form?.requestSubmit();
+                  }
+                }}
                 pattern="[0-9٠-٩۰-۹]*"
                 maxLength={20}
                 autoComplete="username"

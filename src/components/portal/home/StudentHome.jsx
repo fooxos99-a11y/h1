@@ -41,6 +41,7 @@ function StudentHomeContent({ studentId, showPath, showDailyChallenge, execution
   const [planReady, setPlanReady] = useState(false);
   useEffect(() => { if (!plan.loading) setPlanReady(true); }, [plan.loading]);
   const [extras, setExtras] = useState(null);
+  const [rankedStudent, setRankedStudent] = useState(null);
   const [extrasReady, setExtrasReady] = useState(false);
   const [version, setVersion] = useState(0);
   const { view: requestedView, open: navigate, back } = useStudentHomeNavigation();
@@ -72,14 +73,14 @@ function StudentHomeContent({ studentId, showPath, showDailyChallenge, execution
   return <div className="student-home" dir="rtl">
     {entering && <LoadingIndicator mode="screen" delayMs={0} />}
     <div hidden={entering} inert={(mobile && view) || fullPage || view === 'store' ? '' : undefined}>
-    <StudentHomeHeader showProgress={Boolean(plan.data?.today?.plan)} programsEnabled={features.programs} points={plan.data?.points?.total} progress={currentPlanProgress(plan.data?.today?.plan)} progressLabel="تقدم الخطة الحالية" storeEnabled={storeEnabled} onOpen={open} onLogout={onLogout} />
+    <StudentHomeHeader studentName={rankedStudent?.name || localStorage.getItem('wajeh_name') || ''} rank={rankedStudent?.rank} showProgress={Boolean(plan.data?.today?.plan)} programsEnabled={features.programs} points={plan.data?.points?.total} progress={currentPlanProgress(plan.data?.today?.plan)} progressLabel="تقدم الخطة الحالية" storeEnabled={storeEnabled} onOpen={open} onLogout={onLogout} />
     <main className="student-home-main">
       <StudentNewsCard news={extras?.news} active={!entering && !view} />
       <StudentTodayCard studentId={studentId} executionEnabled={executionEnabled} model={model} loading={plan.loading && !plan.data} error={plan.error} onRetry={plan.retry} onRead={read} />
       {extras?.settingsError && <StudentHomeStatus message="تعذر تحديث إعدادات الصفحة." onRetry={() => setVersion((value) => value + 1)} />}
       {showPath && <StudentHomeJourney journey={studentJourneySummary(extras?.journey)} error={extras?.journeyError} onRetry={() => setVersion((value) => value + 1)} onOpen={() => open('journey')} />}
       {showDailyChallenge && <StudentHomeChallenge challenge={extras?.challenge} error={extras?.challengeError} onRetry={() => setVersion((value) => value + 1)} onOpen={() => open('challenge')} />}
-      <StudentHomeRankings studentId={studentId} />
+      <StudentHomeRankings studentId={studentId} onStudentRank={setRankedStudent} />
     </main></div>
     {!entering && !fullPage && <StudentBottomNavigation programsEnabled={features.programs} storeEnabled={storeEnabled} view={view} onNavigate={(key) => { if (key === view && key !== 'programs') { return; }
       if (key === 'mushaf') { read(null); } else { open(key); } }} />}

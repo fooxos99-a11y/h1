@@ -8,14 +8,15 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import RankingPointsValue from '@/components/points/RankingPointsValue';
 import StudentHomeProgress from './StudentHomeProgress';
 
-export default function StudentHomeHeader({ points, progress, progressLabel = "تقدم الخطة الحالية", showProgress = true, storeEnabled, programsEnabled, onOpen, onLogout }) {
+export default function StudentHomeHeader({ studentName, rank, points, progress, progressLabel = "تقدم الخطة الحالية", showProgress = true, storeEnabled, programsEnabled, onOpen, onLogout }) {
   const mobile = useMediaQuery('(max-width: 899px)');
   const [open, setOpen] = useState(false);
   const select = (key) => { setOpen(false); onOpen(key); };
   return <header className="student-home-header"><div className="student-home-header-inner">
     <div className="student-home-account-group"><Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild><Button variant="ghost" className="student-home-level !text-white" aria-label="قائمة حساب الطالب" title="الملف الشخصي"><User size={24} aria-hidden="true" /></Button></PopoverTrigger>
-      <PopoverContent align="end" className="student-home-account-menu" dir="rtl" aria-label="الحساب">
+      <PopoverTrigger asChild><Button variant="ghost" className="student-home-level !text-white !transform-none" aria-label="قائمة حساب الطالب" title="الملف الشخصي"><User size={24} aria-hidden="true" /></Button></PopoverTrigger>
+      <PopoverContent side="bottom" align="start" className="student-home-account-menu" dir="rtl" aria-label="الحساب">
+        <div className="px-2.5 pt-2.5 text-center"><strong className="block break-words text-sm">{studentName}</strong>{rank > 0 && <span dir="ltr" className="mt-1 block font-bold text-primary">#{rank}</span>}</div>
         <div className="student-home-points" aria-label="إجمالي النقاط">{points == null ? <span>—</span> : <RankingPointsValue value={points} />}</div>
         {[[CalendarDays, 'الجلسات', 'sessions'], [PhoneCall, 'المكالمات', 'calls'], ...(!mobile && programsEnabled ? [[BookOpen, 'البرامج', 'programs']] : [])].map(([Icon, label, key]) => <Button variant="ghost" key={key} className="student-home-menu-item" onClick={() => select(key)}><Icon size={18} /><span>{label}</span></Button>)}
         <Button variant="ghost" className="student-home-menu-item text-destructive" onClick={onLogout}><LogOut size={18} /><span>تسجيل الخروج</span></Button>

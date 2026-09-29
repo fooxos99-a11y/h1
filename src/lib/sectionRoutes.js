@@ -11,6 +11,7 @@ const createSectionRoutes = (entries) => {
 };
 
 export const dashboardSectionRoutes = createSectionRoutes([
+  ['rankings', 'rankings'],
   ['manualAttendance', 'attendance'],
   ['staffAttendance', 'staff-attendance'],
   ['mushaf', 'mushaf'],
