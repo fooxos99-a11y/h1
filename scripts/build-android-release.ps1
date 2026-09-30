@@ -52,7 +52,7 @@ try {
   try {
     $taskName = 'assembleRawasiRelease'
     $bundleTaskName = 'bundleRawasiRelease'
-    & .\gradlew.bat '-Duser.language=en' '-Duser.country=US' $taskName $bundleTaskName
+    & .\gradlew.bat '-Duser.language=en' '-Duser.country=US' '-Pkotlin.compiler.execution.strategy=in-process' $taskName $bundleTaskName
     if ($LASTEXITCODE -ne 0) { throw "Android release build failed with exit code $LASTEXITCODE." }
   } finally {
     Pop-Location
