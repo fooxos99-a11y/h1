@@ -4,17 +4,26 @@ import path from 'node:path';
 import { defineConfig, loadEnv } from 'vite';
 import { getSiteConfig } from './src/site/siteConfigs.js';
 import { renderSiteMetadata } from './src/site/siteMetadata.js';
+import { getOtaBuildConfig } from './scripts/ota/config.mjs';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const base = env.BASE_URL || '/';
   const site = getSiteConfig(env.VITE_SITE_KEY);
   const nativeBuild = mode.includes('mobile') || process.env.VITE_NATIVE_APP === 'true';
+  const ota = nativeBuild ? getOtaBuildConfig(process.cwd(), { ...env, ...process.env }) : { enabled: false };
   let resolvedOutDir = '';
   return {
   base,
+  define: { __OTA_CONFIG__: JSON.stringify(ota) },
   plugins: [
     react(),
+    {
+      name: 'ota-build-metadata',
+      generateBundle() {
+        if (nativeBuild) this.emitFile({ type: 'asset', fileName: 'ota-build.json', source: JSON.stringify(ota) });
+      },
+    },
     {
       name: 'site-branding',
       transformIndexHtml(html) {

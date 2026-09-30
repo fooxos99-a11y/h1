@@ -1,6 +1,8 @@
 import React from 'react';
 import ErrorState from '@/components/ui/error-state';
 import { recoverFromStaleAppAsset } from '@/lib/appVersionRecovery';
+import { Capacitor } from '@capacitor/core';
+import { markNativeStartupFailed } from '@/lib/nativeOta';
 
 class AppErrorBoundary extends React.Component {
   constructor(props) {
@@ -14,13 +16,14 @@ class AppErrorBoundary extends React.Component {
 
   componentDidCatch(error) {
     document.documentElement.classList.add('app-ready');
-    recoverFromStaleAppAsset(error);
+    if (Capacitor.isNativePlatform()) markNativeStartupFailed();
+    else recoverFromStaleAppAsset(error);
   }
 
   render() {
     if (!this.state.hasError) return this.props.children;
     return (
-      <main className="grid min-h-dvh place-items-center bg-background p-4 text-foreground [font-family:var(--font-ui)]" dir="rtl">
+      <main data-app-error className="grid min-h-dvh place-items-center bg-background p-4 text-foreground [font-family:var(--font-ui)]" dir="rtl">
         <ErrorState
           className="w-full max-w-lg bg-card"
           message="تعذر فتح الصفحة"
