@@ -177,10 +177,13 @@ test('OTA runtime stays stable across web edits and CRLF but changes for native 
     execFileSync('git', ['init', '--quiet'], { cwd: directory });
     await mkdir(path.join(directory, 'android'), { recursive: true });
     const manifest = path.join(directory, 'android', 'settings.gradle');
+    const ignoreFile = path.join(directory, 'android', '.gitignore');
     await writeFile(manifest, 'original native config\n');
+    await writeFile(ignoreFile, 'build/\n');
     await writeFile(path.join(directory, 'package-lock.json'), '{}\n');
     const first = nativeFingerprint(directory, {});
     await writeFile(manifest, 'original native config\r\n');
+    await writeFile(ignoreFile, 'build/\r\n');
     assert.equal(nativeFingerprint(directory, {}), first, 'Windows/Linux line endings must agree');
     await writeFile(path.join(directory, 'web.js'), 'new web content');
     assert.equal(nativeFingerprint(directory, {}), first, 'Web edits remain OTA compatible');

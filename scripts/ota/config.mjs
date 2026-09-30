@@ -39,7 +39,7 @@ export function nativeFingerprint(root, settings) {
   const hash = createHash('sha256');
   for (const file of [...new Set(files)].sort()) {
     let content = readFileSync(path.join(root, file));
-    if (file.endsWith('/gradlew') || /\.(json|xml|gradle|properties|java|kt|swift|plist|pbxproj|resolved|storyboard|entitlements|xcconfig|xcscheme|xcworkspacedata|pro|sh|js|md|bat)$/.test(file)) {
+    if (/(^|\/)(gradlew|\.gitignore)$/.test(file) || /\.(json|xml|gradle|properties|java|kt|swift|plist|pbxproj|resolved|storyboard|entitlements|xcconfig|xcscheme|xcworkspacedata|pro|sh|js|md|bat)$/.test(file)) {
       content = Buffer.from(content.toString('utf8').replaceAll('\r\n', '\n'));
     }
     hash.update(`${file}\0${content.length}\0`).update(content);
