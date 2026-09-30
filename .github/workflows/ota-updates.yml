@@ -8,7 +8,7 @@ on:
       action:
         description: Publish tested web files, pause updates, or roll back
         type: choice
-        options: [publish, pause, rollback]
+        options: [publish, pause, rollback, validate]
         default: publish
       bundle_id:
         description: For rollback only, a previous bundle hash or builtin
@@ -50,9 +50,37 @@ jobs:
       - name: Validate public configuration
         run: |
           node --input-type=module <<'JS'
-          for (const name of ['VITE_API_BASE', 'VITE_API_BASE_URL', 'OTA_BASE_URL', 'OTA_PUBLIC_KEY', 'OTA_NATIVE_RUNTIME']) {
+          const required = ['VITE_API_BASE', 'VITE_API_BASE_URL', 'OTA_BASE_URL', 'OTA_PUBLIC_KEY'];
+          if (process.env.OTA_ACTION !== 'validate') required.push('OTA_NATIVE_RUNTIME');
+          for (const name of required) {
             if (!process.env[name]) throw new Error(`Missing repository variable: ${name}`);
           }
+          JS
+      - name: Validate signing key and R2 access without publishing
+        if: env.OTA_ACTION == 'validate'
+        env:
+          OTA_SIGNING_PRIVATE_KEY: ${{ secrets.OTA_SIGNING_PRIVATE_KEY }}
+          OTA_R2_ACCESS_KEY_ID: ${{ secrets.OTA_R2_ACCESS_KEY_ID }}
+          OTA_R2_SECRET_ACCESS_KEY: ${{ secrets.OTA_R2_SECRET_ACCESS_KEY }}
+          OTA_R2_ACCOUNT_ID: ${{ vars.OTA_R2_ACCOUNT_ID }}
+          OTA_R2_BUCKET: ${{ vars.OTA_R2_BUCKET }}
+        run: |
+          node --input-type=module <<'JS'
+          import { S3Client, HeadBucketCommand } from '@aws-sdk/client-s3';
+          import { getOtaBuildConfig } from './scripts/ota/config.mjs';
+          import { checkSigningKey } from './scripts/ota/release.mjs';
+          const env = process.env;
+          for (const name of ['OTA_SIGNING_PRIVATE_KEY', 'OTA_R2_ACCESS_KEY_ID', 'OTA_R2_SECRET_ACCESS_KEY', 'OTA_R2_ACCOUNT_ID', 'OTA_R2_BUCKET']) {
+            if (!env[name]) throw new Error(`Missing ${name}`);
+          }
+          if (!/^[a-f0-9]{32}$/.test(env.OTA_R2_ACCOUNT_ID)) throw new Error('Invalid R2 account ID');
+          const config = getOtaBuildConfig(process.cwd(), env);
+          checkSigningKey(env.OTA_SIGNING_PRIVATE_KEY.replaceAll('\\n', '\n'), config.publicKey);
+          const client = new S3Client({ region: 'auto', endpoint: `https://${env.OTA_R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+            credentials: { accessKeyId: env.OTA_R2_ACCESS_KEY_ID, secretAccessKey: env.OTA_R2_SECRET_ACCESS_KEY } });
+          await client.send(new HeadBucketCommand({ Bucket: env.OTA_R2_BUCKET }));
+          console.info('Signing key matches the native public key; R2 authentication passed. No objects were written.');
+          console.info(`OTA candidate runtime: ${config.runtime}`);
           JS
       - name: Quality gate
         if: env.OTA_ACTION == 'publish'
@@ -68,6 +96,7 @@ jobs:
           npx playwright install --with-deps chromium
           npm run test:ota:browser
       - name: Publish signed OTA channel
+        if: env.OTA_ACTION != 'validate'
         env:
           OTA_SIGNING_PRIVATE_KEY: ${{ secrets.OTA_SIGNING_PRIVATE_KEY }}
           OTA_R2_ACCESS_KEY_ID: ${{ secrets.OTA_R2_ACCESS_KEY_ID }}
