@@ -3,7 +3,7 @@ import { validateOtaManifest, verifyOtaEnvelope } from '../lib/otaProtocol.js';
 export function createOtaUpdater({ plugin, config, fetchImpl = globalThis.fetch, storage = globalThis.localStorage }) {
   let inFlight;
   const storageKey = `ota-issued-at:${config.runtime}`;
-  const check = async () => {
+  const check = async (applyImmediately) => {
     if (!config.enabled) return { status: 'disabled' };
     const { channel } = await plugin.getChannel();
     if (channel !== config.runtime) return { status: 'incompatible-native' };
@@ -25,7 +25,12 @@ export function createOtaUpdater({ plugin, config, fetchImpl = globalThis.fetch,
       return { status: 'paused' };
     }
     if (manifest.action === 'builtin') {
+      if (current === null) return { status: 'builtin-current' };
       await plugin.reset();
+      if (applyImmediately) {
+        await plugin.reload();
+        return { status: 'reloading' };
+      }
       return { status: 'builtin-staged' };
     }
     const { bundleIds: blocked } = await plugin.getBlockedBundles();
@@ -41,13 +46,17 @@ export function createOtaUpdater({ plugin, config, fetchImpl = globalThis.fetch,
         checksum: manifest.checksum, signature: manifest.signature,
       });
     }
-    // No reload: activation happens on the next cold start, preserving in-progress forms.
+    // Reload only during the guarded cold start; resume checks preserve in-progress forms.
     await plugin.setNextBundle({ bundleId: manifest.bundleId });
+    if (applyImmediately) {
+      await plugin.reload();
+      return { status: 'reloading', bundleId: manifest.bundleId };
+    }
     return { status: 'staged', bundleId: manifest.bundleId };
   };
   return {
-    check() {
-      if (!inFlight) inFlight = check().finally(() => { inFlight = undefined; });
+    check({ applyImmediately = false } = {}) {
+      if (!inFlight) inFlight = check(applyImmediately).finally(() => { inFlight = undefined; });
       return inFlight;
     },
   };

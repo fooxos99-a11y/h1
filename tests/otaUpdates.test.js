@@ -36,6 +36,7 @@ function fixture({ manifest = release(), current = null, blocked = [], downloade
     downloadBundle: async (options) => { calls.push(['download', options]); if (downloadError) throw downloadError; },
     setNextBundle: async (options) => { calls.push(['stage', options]); },
     reset: async () => { calls.push(['reset']); },
+    reload: async () => { calls.push(['reload']); },
   };
   const updater = createOtaUpdater({
     plugin, config: { ...config, enabled }, storage: { getItem: (key) => data.get(key), setItem: (key, value) => data.set(key, value) },
@@ -86,6 +87,33 @@ test('OTA keeps the current bundle when network or download verification fails',
   }
 });
 
+test('Mandatory startup updates reload only after a trusted bundle finishes downloading and staging', async () => {
+  const f = fixture();
+  assert.equal((await f.updater.check({ applyImmediately: true })).status, 'reloading');
+  assert.deepEqual(f.calls.map(([action]) => action), ['fetch', 'download', 'stage', 'reload']);
+  for (const options of [
+    { fetchError: new Error('offline') }, { downloadError: new Error('signature mismatch') },
+  ]) {
+    const failed = fixture(options);
+    await assert.rejects(failed.updater.check({ applyImmediately: true }));
+    assert.ok(!failed.calls.some(([action]) => ['stage', 'reload'].includes(action)));
+  }
+  for (const options of [{ current: release().bundleId }, { blocked: [release().bundleId] }, { manifest: release({ action: 'pause' }) }]) {
+    const unchanged = fixture(options);
+    await unchanged.updater.check({ applyImmediately: true });
+    assert.ok(!unchanged.calls.some(([action]) => action === 'reload'));
+  }
+});
+
+test('Mandatory builtin rollback reloads an OTA bundle but does not loop on the bundled app', async () => {
+  const f = fixture({ current: 'c'.repeat(64), manifest: release({ action: 'builtin' }) });
+  assert.equal((await f.updater.check({ applyImmediately: true })).status, 'reloading');
+  assert.deepEqual(f.calls.map(([action]) => action), ['fetch', 'reset', 'reload']);
+  const builtin = fixture({ manifest: release({ action: 'builtin' }) });
+  assert.equal((await builtin.updater.check({ applyImmediately: true })).status, 'builtin-current');
+  assert.ok(!builtin.calls.some(([action]) => ['reset', 'reload'].includes(action)));
+});
+
 test('OTA disabled and native-incompatible builds do not contact the update server', async () => {
   for (const options of [{ enabled: false }, { channel: 'different-native-runtime' }]) {
     const f = fixture(options);
@@ -109,7 +137,7 @@ test('OTA pause cancels a pending update but preserves the current bundle; built
     assert.equal((await f.updater.check()).status, 'paused');
     assert.deepEqual(f.calls.at(-1), ['stage', { bundleId: current }]);
   }
-  const f = fixture({ manifest: release({ action: 'builtin' }) });
+  const f = fixture({ current: 'c'.repeat(64), manifest: release({ action: 'builtin' }) });
   assert.equal((await f.updater.check()).status, 'builtin-staged');
   assert.deepEqual(f.calls.at(-1), ['reset']);
 });
