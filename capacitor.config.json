@@ -21,6 +21,13 @@
     "cleartext": false
   },
   "plugins": {
+    "LiveUpdate": {
+      "autoUpdateStrategy": "none",
+      "autoBlockRolledBackBundles": true,
+      "autoDeleteBundles": true,
+      "readyTimeout": 30000,
+      "httpTimeout": 60000
+    },
     "PushNotifications": { "presentationOptions": ["sound", "banner", "list"] },
     "SystemBars": {
       "insetsHandling": "css",

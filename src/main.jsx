@@ -8,6 +8,7 @@ import { SiteProvider } from '@/site/SiteProvider';
 import { getSiteConfig } from '@/site/siteConfigs';
 import { applyTheme, getPreferredThemeForPath } from '@/lib/theme';
 import { recoverFromStaleAppAsset } from '@/lib/appVersionRecovery';
+import { markNativeStartupFailed, observeNativeOtaReadiness } from '@/lib/nativeOta';
 import '@/index.css';
 
 const NativeAppBridge = React.lazy(() => import('@/components/native/NativeAppBridge'));
@@ -53,7 +54,8 @@ const pwaVersion = `${initialSite.key}-pwa-v38`;
 
 window.addEventListener('vite:preloadError', (event) => {
   event.preventDefault();
-  recoverFromStaleAppAsset(event.payload);
+  if (Capacitor.isNativePlatform()) markNativeStartupFailed();
+  else recoverFromStaleAppAsset(event.payload);
 });
 
 const buildBasePath = import.meta.env.BASE_URL === '/'
@@ -111,6 +113,7 @@ const mountApp = () => {
   const appRoot = document.getElementById('app-root');
   if (!appRoot || appRoot.dataset.mounted === 'true') return;
   appRoot.dataset.mounted = 'true';
+  observeNativeOtaReadiness(appRoot);
   let observer;
   const revealTimeout = window.setTimeout(() => {
     document.documentElement.classList.add('app-ready');

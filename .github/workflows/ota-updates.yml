@@ -1,0 +1,78 @@
+name: OTA web updates
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Publish tested web files, pause updates, or roll back
+        type: choice
+        options: [publish, pause, rollback]
+        default: publish
+      bundle_id:
+        description: For rollback only, a previous bundle hash or builtin
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ota-production
+  cancel-in-progress: false
+
+jobs:
+  ota:
+    # OTA_ENABLED is set only after the first signed native releases pass device testing.
+    # Manual pause/rollback still work when automatic publishing has been disabled.
+    if: github.ref == 'refs/heads/main' && (vars.OTA_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      BASE_URL: /
+      VITE_SITE_KEY: madarij
+      VITE_API_BASE: ${{ vars.MOBILE_API_BASE }}
+      VITE_API_BASE_URL: ${{ vars.MOBILE_API_ROOT }}
+      OTA_BASE_URL: ${{ vars.OTA_BASE_URL }}
+      OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
+      OTA_NATIVE_RUNTIME: ${{ vars.OTA_NATIVE_RUNTIME }}
+      OTA_ACTION: ${{ inputs.action || 'publish' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Validate public configuration
+        run: |
+          node --input-type=module <<'JS'
+          for (const name of ['VITE_API_BASE', 'VITE_API_BASE_URL', 'OTA_BASE_URL', 'OTA_PUBLIC_KEY', 'OTA_NATIVE_RUNTIME']) {
+            if (!process.env[name]) throw new Error(`Missing repository variable: ${name}`);
+          }
+          JS
+      - name: Quality gate
+        if: env.OTA_ACTION == 'publish'
+        run: |
+          cp config/web-build.env .env.madarij
+          npm run verify
+      - name: Build mobile web files
+        if: env.OTA_ACTION == 'publish'
+        run: npm run build:mobile
+      - name: Verify startup readiness in Chromium
+        if: env.OTA_ACTION == 'publish'
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:ota:browser
+      - name: Publish signed OTA channel
+        env:
+          OTA_SIGNING_PRIVATE_KEY: ${{ secrets.OTA_SIGNING_PRIVATE_KEY }}
+          OTA_R2_ACCESS_KEY_ID: ${{ secrets.OTA_R2_ACCESS_KEY_ID }}
+          OTA_R2_SECRET_ACCESS_KEY: ${{ secrets.OTA_R2_SECRET_ACCESS_KEY }}
+          OTA_R2_ACCOUNT_ID: ${{ vars.OTA_R2_ACCOUNT_ID }}
+          OTA_R2_BUCKET: ${{ vars.OTA_R2_BUCKET }}
+          OTA_BUNDLE_ID: ${{ inputs.bundle_id }}
+        run: node scripts/ota/publish.mjs "$OTA_ACTION"
