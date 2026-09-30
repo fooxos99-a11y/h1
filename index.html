@@ -30,7 +30,9 @@
 			}
 
 			html:not(.app-ready),
-			html:not(.app-ready) body {
+			html:not(.app-ready) body,
+			html.ota-startup-check,
+			html.ota-startup-check body {
 				min-height: 100%;
 				overflow: hidden;
 				background: var(--boot-bg);
@@ -51,7 +53,7 @@
 				background: var(--boot-bg);
 			}
 
-			.app-ready .boot-loader {
+			.app-ready:not(.ota-startup-check) .boot-loader {
 				display: none;
 			}
 
