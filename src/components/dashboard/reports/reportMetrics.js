@@ -40,7 +40,7 @@ const percentTile = (label, value) => ({ label, ...percentMetric(value) });
 const countTile = (label, count, format = formatNumber) => ({ label, value: Number(count || 0) > 0 ? 100 : 0, display: format(count) });
 
 const attendedOf = (stats = {}) => Number(stats.present || 0) + Number(stats.late || 0) + Number(stats.excused || 0);
-const committeeBars = (committees = [], read) => (committees.length > 1
+const committeeBars = (committees, read) => (committees.length > 1
   ? committees.map((row) => ({ label: row.name, percent: read(row) }))
   : []);
 
@@ -140,6 +140,14 @@ const sourceOf = (row) => row.source || 'مصدر غير محدد';
 const isDeduction = (row) => row.type === 'deduction';
 const movementValue = (row) => ltr(`${isDeduction(row) ? '-' : '+'}${faces(row.points)}`);
 const movementTone = (row) => (isDeduction(row) ? TONES.bad : TONES.good);
+const oldestMovementFirst = (a, b) => String(a.date || '').localeCompare(String(b.date || ''))
+  || Number(a.id || 0) - Number(b.id || 0);
+const sourceRecord = (row) => ({
+  label: row.student ? row.student.studentName : sourceOf(row),
+  note: [row.reason && row.reason !== row.source ? row.reason : '', row.date && ltr(row.date), row.actorName && `بواسطة: ${row.actorName}`].filter(Boolean).join(' · '),
+  value: movementValue(row),
+  tone: movementTone(row),
+});
 const movementTotals = (transactions) => {
   const increases = sum(transactions.filter((row) => !isDeduction(row)), (row) => row.points);
   const deductions = sum(transactions.filter(isDeduction), (row) => row.points);
@@ -158,7 +166,13 @@ function sourceBars(transactions) {
   const rows = [...sources.entries()]
     .map(([source, totals]) => ({ source, ...totals }))
     .sort((a, b) => (b.increase + b.deduction) - (a.increase + a.deduction))
-    .map((row) => ({ label: row.source, percent: pct(row.increase + row.deduction, movement), display: signed(row.increase - row.deduction) }));
+    .map((row) => ({
+      label: row.source,
+      percent: pct(row.increase + row.deduction, movement),
+      display: signed(row.increase - row.deduction),
+      records: transactions.filter((transaction) => sourceOf(transaction) === row.source)
+        .sort(oldestMovementFirst).map(sourceRecord),
+    }));
   return { title: 'المصادر', rows };
 }
 
@@ -196,24 +210,12 @@ function allStudentsPoints(students) {
           })),
         emptyText: 'لا توجد حركات في هذه الفترة',
       },
-      {
-        title: 'الحركات',
-        rows: transactions
-          .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
-          .map((row) => ({
-            label: `${row.student.studentName} · ${sourceOf(row)}`,
-            note: [row.reason && row.reason !== row.source ? row.reason : '', row.date && ltr(row.date), row.actorName].filter(Boolean).join(' · '),
-            value: movementValue(row),
-            tone: movementTone(row),
-          })),
-        emptyText: 'لا توجد حركات في هذه الفترة',
-      },
     ],
   };
 }
 
 /** One student's points log: the period totals, their sources and every movement with who made it. */
-function studentPointsLog(student, unitText) {
+function studentPointsLog(student) {
   const transactions = [...(student.transactions || [])].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const { increases, deductions } = movementTotals(transactions);
   return {
@@ -224,16 +226,7 @@ function studentPointsLog(student, unitText) {
       countTile('الرصيد الكلي', student.balance, faces),
     ],
     bars: [sourceBars(transactions)],
-    records: [{
-      title: unitText('سجل النقاط'),
-      rows: transactions.map((row) => ({
-        label: sourceOf(row),
-        note: [row.reason && row.reason !== row.source ? row.reason : '', row.date && ltr(row.date), row.actorName && `بواسطة: ${row.actorName}`].filter(Boolean).join(' · '),
-        value: movementValue(row),
-        tone: movementTone(row),
-      })),
-      emptyText: 'لا توجد حركات في هذه الفترة',
-    }],
+    records: [],
   };
 }
 
@@ -241,7 +234,8 @@ function studentPointsLog(student, unitText) {
  * Student points by their source. The details cover every student of the circle,
  * or, when one student is chosen, that student's own points log.
  */
-function studentPointsMetric(list = { loading: true, rows: [] }, inCommittee, unitText, studentId) {
+function studentPointsMetric(inCommittee, unitText, studentId, list) {
+  list ??= { loading: true, rows: [] };
   const allStudents = list.rows || [];
   const students = allStudents.filter((row) => inCommittee(row.committeeName));
   const chosen = students.find((row) => String(row.studentId) === String(studentId));
@@ -261,7 +255,7 @@ function studentPointsMetric(list = { loading: true, rows: [] }, inCommittee, un
       .sort((a, b) => String(a.studentName || '').localeCompare(String(b.studentName || ''), 'ar'))
       .map((row) => ({ value: String(row.studentId), label: row.studentName })),
     student: chosen ? String(chosen.studentId) : ALL_STUDENTS,
-    ...(chosen ? studentPointsLog(chosen, unitText) : allStudentsPoints(students)),
+    ...(chosen ? studentPointsLog(chosen) : allStudentsPoints(students)),
   };
 }
 
@@ -319,7 +313,8 @@ function committeesCountMetric(overview, inCommittee) {
   };
 }
 
-function teacherPointsMetric(list = { loading: true, rows: [] }, inCommittee) {
+function teacherPointsMetric(inCommittee, list) {
+  list ??= { loading: true, rows: [] };
   const allRows = list.rows || [];
   const allIncreases = allRows.filter((row) => row.type === 'increase').length;
   const rows = allRows.filter((row) => inCommittee(row.committeeName));
@@ -378,12 +373,12 @@ export function buildReportMetrics(overview, {
       achievementMetric(overview, students, filtered),
       attendanceMetric(overview, students, filtered),
     );
-    if (showStudentPoints) metrics.push(studentPointsMetric(lists.studentPoints, inCommittee, unitText, student));
+    if (showStudentPoints) metrics.push(studentPointsMetric(inCommittee, unitText, student, lists.studentPoints));
     metrics.push(
       studentsCountMetric(overview, students, filtered),
       committeesCountMetric(overview, inCommittee),
     );
   }
-  if (showTeacherPoints) metrics.push(teacherPointsMetric(lists.teacherPoints, inCommittee));
+  if (showTeacherPoints) metrics.push(teacherPointsMetric(inCommittee, lists.teacherPoints));
   return metrics;
 }

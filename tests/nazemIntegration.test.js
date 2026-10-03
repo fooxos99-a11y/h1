@@ -114,8 +114,10 @@ test('Nazem settings expose a complete sync log for accepted, active, and failed
   assert.match(settings, /<NazemLogDialog/);
   const card = readFileSync(new URL('../src/components/dashboard/NazemSessionLogCard.jsx', import.meta.url), 'utf8');
   assert.match(dialog, /groupNazemLogEntries\(entries\)/);
-  assert.match(card, /synced: 'أُرسل إلى ناظم'/);
-  assert.match(card, /blocked: 'معلّق'/);
+  const status = readFileSync(new URL('../src/lib/nazemLogStatus.js', import.meta.url), 'utf8');
+  assert.match(card, /nazemLogStatus\(entry\)/);
+  assert.match(status, /return 'أُرسل إلى ناظم'/);
+  assert.match(status, /blocked: 'معلّق'/);
   assert.match(card, /entry\.message \|\| entry\.errorCode/);
   assert.match(dialog, /nazemIntegrationApi\.retryJob\(jobId\)/);
   assert.match(card, /entry\.jobId && canRetryNazemIssue\(entry\)/);
@@ -932,7 +934,7 @@ test('Nazem full refresh is manual while outgoing recitations refresh only their
   assert.match(queueSource, /nextAttemptAt: null/);
   assert.match(queueSource, /status IN \('failed','blocked','requires_review','conflict','dismissed'\)/);
   assert.doesNotMatch(serverSource, /req\.query\.refreshNazem|enqueueImmediateNazemReconciliation/);
-  assert.match(serverSource, /operation_type = 'recitation\.submit'[\s\S]*student_id IS NOT NULL/);
+  assert.match(serverSource, /operation_type = 'recitation\.submit'[\s\S]*student_id IN \(\$\{studentSlots\}\)/);
   assert.match(apiSource, /getSupervisorQuranEvaluation: loadTeacherEvaluation/);
   assert.match(apiSource, /const loadTeacherEvaluation = refreshableSingleFlight\([\s\S]*quran-evaluation`/);
   assert.doesNotMatch(apiSource, /refreshNazem/);

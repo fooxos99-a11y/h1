@@ -40,7 +40,9 @@ try {
   await Promise.all([save([{ studentId: 1, points: 80 }]), save([{ studentId: 1, points: 80 }])]);
   assert.equal((await connection.query('SELECT COUNT(*) n FROM student_point_transactions'))[0][0].n, 1);
   await save([{ studentId: 1, points: 30 }]);
-  await assert.rejects(save([{ studentId: 1, points: 50 }, { studentId: 2, points: 40 }]), { statusCode: 403 });
+  await assert.rejects(async () => {
+    await save([{ studentId: 1, points: 50 }, { studentId: 2, points: 40 }]);
+  }, { statusCode: 403 });
   const [[student]] = await connection.query('SELECT points, store_balance FROM students WHERE id=1');
   assert.deepEqual(student, { points: 30, store_balance: 30 });
   const [[family]] = await connection.query('SELECT points, student_points_contribution FROM committees WHERE id=3');

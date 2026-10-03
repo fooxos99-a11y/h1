@@ -3,7 +3,7 @@ export function nazemErrorDiagnostics(error) {
   const message = String(error?.cause?.message || '');
   const httpStatus = Number(/\bHTTP (\d{3})\b/.exec(message)?.[1]);
   const networkCode = /\b(ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN)\b/.exec(message)?.[1];
-  const stage = ['session-check', 'login-form', 'login-submit', 'dashboard-ready', 'target-resolution', 'post-write-verification'].includes(error?.details?.stage)
+  const stage = ['session-check', 'login-form', 'login-submit', 'dashboard-ready', 'target-resolution', 'post-write-verification', 'student-profiles'].includes(error?.details?.stage)
     ? error.details.stage : null;
   return {
     ...(Array.isArray(error?.details?.issues) ? { issues: error.details.issues.slice(0, 100).map(issue => ({
@@ -13,6 +13,8 @@ export function nazemErrorDiagnostics(error) {
       ...(['memorization', 'review', 'link'].includes(issue.taskType) ? { taskType: issue.taskType } : {}),
     })).filter(issue => issue.code) } : {}),
     ...(stage ? { stage } : {}),
+    ...(Number.isInteger(error?.details?.pageNumber) && error.details.pageNumber > 0 && error.details.pageNumber <= 50 ? { pageNumber: error.details.pageNumber } : {}),
+    ...(/^[A-Z][A-Z0-9_]{0,79}$/.test(error?.details?.causeCode || '') ? { causeCode: error.details.causeCode } : {}),
     ...Object.fromEntries(['expectedRecordId', 'observedRecordId'].filter(key => /^\d+$/.test(String(error?.details?.[key] || '')))
       .map(key => [key, String(error.details[key])])),
     ...(/^\d{4}-\d{2}-\d{2}$/.test(error?.details?.taskDate || '') ? { taskDate: error.details.taskDate } : {}),

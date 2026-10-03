@@ -8,6 +8,7 @@ import { matchesNazemTarget } from '../server/integrations/nazem/recitationTarge
 import { captureRecitationTarget, hasLocalRecitation, recitationWriteJournal, validateRecitationTarget } from '../server/integrations/nazem/recitationSubmission.js';
 import { failNazemJob } from '../server/integrations/nazem/queue.js';
 import { reviewNazemError } from '../server/integrations/nazem/errors.js';
+import { tasksMatchingNazemRange } from '../server/integrations/nazem/taskRange.js';
 
 function fixture() {
   const date = getBusinessDate();
@@ -123,9 +124,9 @@ test('a result entered in Nazem replaces the local one, but a day the platform s
   const end = source.indexOf('\nconst NAZEM_ATTENDANCE_TO_RUWASI', start);
   assert.ok(end > start);
   const run = new Function('latestNazemScheduleSql', 'preservesPendingNazemLate', 'nazemTaskTrack', 'safeJson', 'loadDailyFollowUp', 'mapRuwasiRecitationGroupToNazem',
-    'remoteFollowUpMatchesLocal', 'hasLocalRecitation', 'recitationIdentityFromReceipt', 'platformWroteNazemDay', `${source.slice(start, end)}; return saveRemoteFollowUp;`)(
+    'remoteFollowUpMatchesLocal', 'hasLocalRecitation', 'recitationIdentityFromReceipt', 'platformWroteNazemDay', 'tasksMatchingNazemRange', `${source.slice(start, end)}; return saveRemoteFollowUp;`)(
     latestNazemScheduleSql, preservesPendingNazemLate, () => 'memorization', value => value, async () => ({ recitations: [{ id: 7, requestId: 'teacher-local:7' }] }),
-    () => ({ completed: true }), () => false, hasLocalRecitation, recitationIdentityFromReceipt, platformWroteNazemDay,
+    () => ({ completed: true }), () => false, hasLocalRecitation, recitationIdentityFromReceipt, platformWroteNazemDay, tasksMatchingNazemRange,
   );
   const importWith = async (deliveryWrites) => {
     const writes = [];

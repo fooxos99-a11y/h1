@@ -153,7 +153,7 @@ test('opening today\'s session refreshes Nazem, and a late save is labelled as c
   const server = await readFile(new URL('../server/index.js', import.meta.url), 'utf8');
   const worker = await readFile(new URL('../server/workers/nazemSyncWorker.js', import.meta.url), 'utf8');
   const list = await readFile(new URL('../src/components/portal/TeacherRecitationTaskList.jsx', import.meta.url), 'utf8');
-  assert.match(server, /if \(date === now\.date\) await enqueueNazemSessionRefresh\(connection, supervisorId\);/);
+  assert.match(server, /if \(date === now\.date\) \{\s+for \(const teacherId of delegatedScope\.teacherIds\) await enqueueNazemSessionRefresh\(connection, teacherId\);/);
   assert.match(worker, /last_error_code = 'NAZEM_FOLLOW_UP_SAVE_REJECTED'\s+AND \(last_error LIKE '%إكمال المتأخرات%'/);
   assert.match(list, /label=\{nazemLate && \['saved', 'mastery'\]\.includes\(action\.key\) \? 'إكمال متأخر' : action\.label\}/);
 });

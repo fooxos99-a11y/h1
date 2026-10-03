@@ -1,11 +1,13 @@
 import { importNazemLinkResult } from './linkResultImport.js';
 import { requireRecordedNazemLink } from './pairedRecitation.js';
 import { refreshNazemRoster } from './rosterState.js';
+import { tasksMatchingNazemRange } from './taskRange.js';
 import { loadConfirmedNazemRecordIds, recitationIdentityFromReceipt } from './followUpCycles.js';
 import { applyRecitationWriteIdentity, hasLocalRecitation, platformWroteNazemDay, recitationWriteJournal, recoverRejectedRecitationWrite, resolveLegacyRecitationTarget, validateRecitationTarget } from './recitationSubmission.js';
 import { recoverNazemAuthenticationJobs } from './authenticationRecovery.js';
 import { reconcileConfirmedRecitationJobs } from './confirmedRecitationJobs.js';
 import { wakeReadyPendingNazemDay } from './pendingDayRecovery.js';
+import { wakeAcceptedIncompleteNazemDay } from './incompleteDeliveryRecovery.js';
 import { nazemFollowUpMetricsMatch } from './followUpMetrics.js';
 import { loadRecitationRewardSettings } from '../../services/recitationRewards.js';
 import { recitationFacesFromLines } from '../../services/recitationSegments.js';
@@ -883,7 +885,7 @@ async function loadRecitation(connection, attemptId) {
   return recitation;
 }
 
-async function loadDailyFollowUp(connection, dailyFollowUpId) {
+async function loadDailyFollowUp(connection, dailyFollowUpId, attemptIds = null) {
   const [[daily]] = await connection.query(
     `SELECT daily.id, daily.ruwasi_plan_id AS planId,
       daily.ruwasi_student_id AS studentId, daily.teacher_id AS teacherId,
@@ -897,7 +899,7 @@ async function loadDailyFollowUp(connection, dailyFollowUpId) {
   if (!daily) {
     throw reviewNazemError('سجل المتابعة اليومية المجمّع في المنصة غير موجود.', 'RUWASI_DAILY_FOLLOW_UP_NOT_FOUND');
   }
-  const [recitations] = await connection.query(
+  const [rows] = await connection.query(
     `SELECT attempt.id, attempt.request_id AS requestId, attempt.task_id AS taskId,
       receipt.remote_snapshot AS deliverySnapshot, receipt.sync_status AS deliveryStatus,
       DATE_FORMAT(attempt.session_date, '%Y-%m-%d') AS sessionDate,
@@ -963,6 +965,8 @@ async function loadDailyFollowUp(connection, dailyFollowUpId) {
      ORDER BY task.from_page, task.from_surah, task.from_ayah, attempt.id`,
     [daily.planId, daily.studentId, daily.taskDate, daily.taskType, daily.track, daily.id],
   );
+  const recitations = attemptIds ? rows.filter(row => attemptIds.map(Number).includes(Number(row.id)))
+    : daily.taskType === 'memorization' ? tasksMatchingNazemRange(rows, safeJson(daily.remoteSnapshot, null)) : rows;
   if (!recitations.length) {
     throw reviewNazemError('لا توجد محاولات رسمية ضمن متابعة اليوم المجمعة.', 'RUWASI_DAILY_ATTEMPTS_NOT_FOUND');
   }
@@ -971,7 +975,7 @@ async function loadDailyFollowUp(connection, dailyFollowUpId) {
 
 async function syncRecitation(connection, job) {
   const dailyFollowUpId = Number(job.payload?.dailyFollowUpId || (job.entityType === 'recitation_day' ? job.entityId : 0));
-  const grouped = dailyFollowUpId ? await loadDailyFollowUp(connection, dailyFollowUpId) : null;
+  const grouped = dailyFollowUpId ? await loadDailyFollowUp(connection, dailyFollowUpId, job.payload?.submissionTarget?.attemptIds) : null;
   const recitations = grouped?.recitations || [await loadRecitation(connection, job.entityId || job.payload.attemptId)];
   const recitation = recitations[0];
   const studentLink = await loadStudentLink(connection, job.teacherId, recitation.studentId);
@@ -1070,7 +1074,7 @@ async function syncRecitation(connection, job) {
         adapter, teacherId: job.teacherId, studentId: recitation.studentId, planId: recitation.planId,
         nazemPlanId: planLink.nazemPlanId, studentLink,
       });
-      const nextRecitationJobId = await wakeNextBlockedNazemRecitation(connection, job);
+      const nextRecitationJobId = remote.latePending ? null : await wakeNextBlockedNazemRecitation(connection, job);
       return { ...remote, nextTaskRefresh, nextRecitationJobId };
     }
     if (dailyFollowUpId) {
@@ -1103,9 +1107,12 @@ async function syncRecitation(connection, job) {
         studentLink,
       });
       await persistNazemSession(connection, job.teacherId, adapter);
-      const nextRecitationJobId = await wakeNextBlockedNazemRecitation(connection, job);
+      const nextRecitationJobId = remote.latePending ? null : await wakeNextBlockedNazemRecitation(connection, job);
       return {
         dailyFollowUpId,
+        resultStatus: remote?.status || null,
+        latePending: remote?.latePending === true,
+        alreadyRecorded: remote?.alreadyRecorded === true,
         attemptIds: mapped.attemptIds,
         externalRecordId: remote?.externalId || null,
         nextTaskRefresh,
@@ -1128,14 +1135,18 @@ async function syncRecitation(connection, job) {
       studentLink,
     });
     await persistNazemSession(connection, job.teacherId, adapter);
-    const nextRecitationJobId = await wakeNextBlockedNazemRecitation(connection, job);
+    const nextRecitationJobId = remote.latePending ? null : await wakeNextBlockedNazemRecitation(connection, job);
     return {
       recitationId: recitation.id,
+      resultStatus: remote?.status || null,
+      latePending: remote?.latePending === true,
+      alreadyRecorded: remote?.alreadyRecorded === true,
       externalRecordId: remote?.externalId || null,
       nextTaskRefresh,
       nextRecitationJobId,
     };
   } catch (cause) {
+    if (cause?.code === 'NAZEM_LINK_WAITING_FOR_MEMORIZATION') await wakeNextBlockedNazemRecitation(connection, job);
     throw translateAdapterFailure(cause, 'إرسال التسميع');
   } finally {
     await adapter.close();
@@ -1199,7 +1210,8 @@ async function wakeNextBlockedNazemRecitation(connection, job) {
      WHERE teacher_id = ? AND student_id = ? AND operation_type = 'recitation.submit'
        AND id <> ? AND status IN ('blocked','conflict','requires_review')
        AND last_error_code IN ('NAZEM_PREVIOUS_DAYS_BLOCKING','NAZEM_RECITATION_START_CONFLICT','NAZEM_LINK_WAITING_FOR_MEMORIZATION')
-     ORDER BY JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.taskDate')), id
+     ORDER BY JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.taskDate')),
+       CASE JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.taskType')) WHEN 'memorization' THEN 0 WHEN 'review' THEN 1 ELSE 2 END, id
      LIMIT 1`,
     [job.teacherId, job.studentId, job.id],
   );
@@ -1453,7 +1465,7 @@ async function saveRemoteFollowUp(connection, link, day) {
   }
   const reconcileExistingRemoteFollowUpResult = await reconcileExistingRemoteFollowUp({ existingGrouped, local, day, connection, dailyFollowUpId, link });
     if (reconcileExistingRemoteFollowUpResult) { return reconcileExistingRemoteFollowUpResult; }
-      const [tasks] = await connection.query(
+      const [taskRows] = await connection.query(
     `SELECT task.id, task.track, task.target_pages AS targetPages, task.from_page AS fromPage, task.to_page AS toPage,
       task.from_surah AS fromSurah, task.from_ayah AS fromAyah,
       task.to_surah AS toSurah, task.to_ayah AS toAyah,
@@ -1468,6 +1480,7 @@ async function saveRemoteFollowUp(connection, link, day) {
      FOR UPDATE`,
     [link.planId, link.studentId, day.date, day.taskType, track],
   );
+  const tasks = day.taskType === 'memorization' ? tasksMatchingNazemRange(taskRows, day) : taskRows;
   const first = tasks[0];
   const last = tasks.at(-1);
   const exactRange = first && last
@@ -2028,6 +2041,7 @@ async function refreshLinkedStudentFollowUps({ links, connection, job, adapter, 
       if (result.review) issues.push(...(result.issues?.length ? result.issues : [{ studentId: link.studentId, code: 'NAZEM_FOLLOW_UP_REVIEW' }]));
       await revalidatePendingNazemIdentity(connection, adapter, { ...link, teacherId: job.teacherId });
       await wakeReadyPendingNazemDay(connection, { ...link, teacherId: job.teacherId });
+      await wakeAcceptedIncompleteNazemDay(connection, { ...link, teacherId: job.teacherId });
       timing.importMs += Date.now() - phaseStarted;
       if (!links.slice(index + 1).some(next => Number(next.studentId) === Number(link.studentId))) checkedStudentIds.push(Number(link.studentId));
       await recordNazemStudentRefresh(connection, job, checkedStudentIds);

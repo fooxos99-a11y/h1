@@ -21,7 +21,7 @@ test('same-day Nazem memorization and mastery retain separate tasks, ranges and 
       if (sql.includes('FROM quran_ayah_pages')) return [[{ page: 3 }]];
       if (sql.includes('FROM student_quran_tasks t')) {
         assert.match(sql, /t\.track = \?/);
-        return [tasks.filter((task) => task.type === params[3] && task.track === params[4])];
+        return [tasks.filter((task) => task.type === params[4] && task.track === params[5])];
       }
       if (sql.includes('INSERT INTO nazem_daily_follow_up_links')) {
         daily.set(params.slice(0, 6).join(':'), params[6]);

@@ -1,3 +1,5 @@
+import { selectNarrationStudents, manualNarrationRange } from './services/narrationSelection.js';
+import { loadReciterNazemScope } from './services/reciterNazemScope.js';
 import { getStudentPointSourceLabel } from '../shared/student-point-sources.js';
 import { loadReviewCycle, saveReviewCycle, selectAuthorizedReview } from './services/quranReviewCycle.js';
 import { parseReviewExecution, reviewRangeLabel } from '../shared/quran-review-cycle.js';
@@ -45,6 +47,8 @@ import { loadRecitationDeliveryReceipts } from './services/recitationDeliveryRec
 import { buildStudentPointsReport } from './services/studentPointsReport.js';
 import { setQuranTaskGroupReward } from './services/quranTaskRewards.js';
 import { buildNazemLateTaskExistsSql } from './integrations/nazem/lateTaskScope.js';
+import { nazemTaskRangeSql } from './integrations/nazem/taskRange.js';
+import { nazemRemainderSuffix } from './integrations/nazem/remainderScope.js';
 import { nazemStudentRefreshState } from './integrations/nazem/refreshState.js';
 import { loadNazemCompletedStudentIds } from './integrations/nazem/completedRecitation.js';
 import { validateNazemLateSession } from './services/nazemLateSelection.js';
@@ -64,6 +68,7 @@ import { createSharedPreparation } from './services/sharedPreparation.js';
 import { loadStudentRecitationHistory } from './services/studentRecitationHistory.js';
 import { createOverviewReportScope } from './services/overviewReportScope.js';
 import { buildOverviewRankings } from './services/overviewRankings.js';
+import { loadOverviewStudentAttendanceWindow } from './services/overviewStudentAttendance.js';
 import { getStudentNextDayPreview, nameStudentPreviewTasks } from './services/studentNextDayPreview.js';
 import { filterPlanMarksByLatestAttempt } from './services/studentPlanMarks.js';
 import { notificationRouter, notificationManagementRouter } from './routes/notificationRoutes.js';
@@ -4679,6 +4684,7 @@ function normalizeTaskRow(row, referenceMode = 'ayah') {
     committeeName: row.committeeName,
     taskDate: row.taskDate,
     taskType: row.taskType,
+    nazemRemainderKey: row.nazemRemainderKey || '',
     track: normalizeQuranPlanTrack(row.track),
     trackLabel: QURAN_PLAN_TRACK_LABELS[normalizeQuranPlanTrack(row.track)],
     fromPage: row.fromPage,
@@ -6885,6 +6891,30 @@ app.get('/api/narration-events', requireNarrationAccess, async (req, res, next) 
   } catch (error) { next(error); }
 });
 
+app.get('/api/narration-events/setup', requireNarrationAccess, async (req, res, next) => {
+  const connection = await db().getConnection();
+  try {
+    const startDate = String(req.query.startDate || getSaudiDateTimeParts().date);
+    if (!isValidDateOnly(startDate)) return res.status(422).json({ message: 'تاريخ البداية غير صحيح.' });
+    const scopeSql = req.auth.role === 'supervisor'
+      ? 'WHERE EXISTS (SELECT 1 FROM supervisor_committees sc WHERE sc.supervisor_id = ? AND sc.committee_id = s.committee_id)' : '';
+    const [students] = await connection.query(`SELECT s.id, s.name, s.committee_id AS committeeId, c.name AS committeeName
+      FROM students s LEFT JOIN committees c ON c.id = s.committee_id ${scopeSql} ORDER BY c.name, s.name`,
+      req.auth.role === 'supervisor' ? [req.auth.id] : []);
+    const juzRanges = await getQuranJuzRanges(connection);
+    const preview = [];
+    for (const student of students) {
+      const ranges = await mergeQuranRanges(connection, await getStudentMemorizedRanges(connection, student.id, { beforeDate: addUtcDays(startDate, 1) }));
+      const parts = [];
+      await collectNarrationJuzParts(ranges, juzRanges, parts, connection);
+      preview.push({ ...student, memorizedFaces: parts.reduce((sum, part) => sum + Number(part.faces), 0),
+        memorizedRanges: parts.map((part) => ({ juz: part.juz, fromPage: part.start.page, toPage: part.end.page,
+          fromSurah: part.start.surah, fromAyah: part.start.ayah, toSurah: part.end.surah, toAyah: part.end.ayah })) });
+    }
+    res.json({ students: preview, juzRanges: juzRanges.map((juz) => ({ juz: juz.juz, fromPage: getQuranRangeStart(juz).page })) });
+  } catch (error) { next(error); } finally { connection.release(); }
+});
+
 app.get('/api/narration-events/:id', requireNarrationAccess, async (req, res, next) => {
   try {
     const event = await getNarrationEvent(Number(req.params.id), req.auth);
@@ -6984,7 +7014,12 @@ app.post('/api/narration-events', requireNarrationAccess, async (req, res, next)
     );
     const juzRanges = await getQuranJuzRanges(connection);
     let included = 0;
-    included = await createNarrationStudentEntries({ students, connection, startDate, juzRanges, created, included });
+    const selectedStudents = selectNarrationStudents(students, req.body);
+    included = await createNarrationStudentEntries({ students: selectedStudents, connection, startDate, juzRanges, created, included });
+    if (!included) {
+      await connection.rollback();
+      return res.status(422).json({ message: 'لا يوجد مقدار سرد للطلاب المحددين.' });
+    }
     await connection.commit();
     const event = await getNarrationEvent(created.insertId, req.auth);
     if (event) void sendNarrationMessages(event, { type: 'start' }).catch(() => undefined);
@@ -9777,8 +9812,7 @@ app.get('/api/rankings/students', async (req, res, next) => {
       FROM students s
       LEFT JOIN committees c ON c.id = s.committee_id
       ${filters.length ? 'WHERE ' + filters.join(' AND ') : ''}
-      ORDER BY s.points DESC, s.name ASC
-      LIMIT 8
+      ORDER BY s.points DESC, s.name ASC, s.id ASC
       `,
       params
     );
@@ -9807,8 +9841,7 @@ app.get('/api/rankings/families', async (_req, res, next) => {
        FROM committees c
        LEFT JOIN students s ON s.committee_id = c.id
        GROUP BY c.id, c.name, c.points
-       ORDER BY averagePoints DESC, studentsCount DESC, c.name ASC
-       LIMIT 8`,
+       ORDER BY averagePoints DESC, studentsCount DESC, c.name ASC, c.id ASC`,
     );
     res.json(rankFamilies(rows, 'average'));
   } catch (error) {
@@ -10987,10 +11020,15 @@ function countNarrationWarnings(evaluationMode, normalizedWordMarks, req) {
 /** Snapshot each eligible student range within the narration event transaction. */
 async function createNarrationStudentEntries({ students, connection, startDate, juzRanges, created, included }) {
   for (const student of students) {
-    const memorized = await mergeQuranRanges(connection, await getStudentMemorizedRanges(connection, student.id, { beforeDate: addUtcDays(startDate, 1) }));
+    const memorized = student.narrationSelection
+      ? [await manualNarrationRange(student.narrationSelection, (page) => getQuranPageBoundary(connection, page))]
+      : await mergeQuranRanges(connection, await getStudentMemorizedRanges(connection, student.id, { beforeDate: addUtcDays(startDate, 1) }));
     const parts = [];
     await collectNarrationJuzParts(memorized, juzRanges, parts, connection);
-    if (!parts.length) continue;
+    if (!parts.length) {
+      if (student.narrationSelected) throw Object.assign(new Error(`لا يوجد محفوظ مسجل للطالب ${student.name}. اختر مقدارًا يدويًا.`), { statusCode: 422 });
+      continue;
+    }
     const totalFaces = parts.reduce((sum, part) => sum + Number(part.faces || 0), 0);
     const [studentResult] = await connection.query(
       `INSERT INTO narration_event_students (event_id, student_id, student_name, committee_id, committee_name, total_faces) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -12482,7 +12520,7 @@ async function buildSupervisorTeacherModeTasks(
   fromDate,
   toDate,
   settings,
-  { skipNazemManagedPlans = false, nazemToDate = toDate } = {},
+  { skipNazemManagedPlans = false, nazemToDate = toDate, delegatedReciter = false } = {},
 ) {
   const [students] = await connection.query(
     `
@@ -12497,7 +12535,7 @@ async function buildSupervisorTeacherModeTasks(
           ON managedStudentSetting.setting_key = 'nazemIntegrationEnabled'
          AND managedStudentSetting.setting_value = 'true'
         WHERE managedStudentLink.ruwasi_student_id = s.id
-          AND managedStudentLink.teacher_id = sc.supervisor_id
+          ${delegatedReciter ? "" : "AND managedStudentLink.teacher_id = sc.supervisor_id"}
           AND managedStudentLink.sync_status NOT IN ('deleted','detached')
       ) AS nazemManaged
     FROM students s
@@ -12505,7 +12543,8 @@ async function buildSupervisorTeacherModeTasks(
     JOIN supervisor_committees sc ON sc.committee_id = s.committee_id
     WHERE sc.supervisor_id = ?
       AND NOT EXISTS (SELECT 1 FROM nazem_student_links rosterLink
-        WHERE rosterLink.teacher_id = sc.supervisor_id AND rosterLink.ruwasi_student_id = s.id
+        WHERE rosterLink.ruwasi_student_id = s.id
+          ${delegatedReciter ? "AND EXISTS (SELECT 1 FROM nazem_plan_links p WHERE p.teacher_id = rosterLink.teacher_id AND p.ruwasi_student_id = s.id AND p.sync_status NOT IN ('deleted','detached'))" : 'AND rosterLink.teacher_id = sc.supervisor_id'}
           AND rosterLink.status = 'linked' AND rosterLink.roster_active = 0)
     ORDER BY c.name ASC, s.name ASC
     `,
@@ -12592,14 +12631,25 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
       addUtcDays(previousSessionDate, 1),
       generationEndDate,
       settings,
-      { nazemToDate: date },
+      { nazemToDate: date, delegatedReciter: req.auth.role === 'reciter' },
     );
-    if (date === now.date) await enqueueNazemSessionRefresh(connection, supervisorId);
-    const [[followUpRefresh]] = await connection.query(
-      `SELECT status, payload_json AS payload, UNIX_TIMESTAMP(created_at) * 1000 AS createdEpochMs
-       FROM nazem_sync_jobs WHERE teacher_id = ? AND operation_type = 'account.refresh_followups'
-       ORDER BY id DESC LIMIT 1`, [supervisorId],
-    );
+    const delegatedScope = req.auth.role === 'reciter'
+      ? await loadReciterNazemScope(connection, supervisorId)
+      : { teacherIds: [supervisorId], teacherByStudent: new Map() };
+    const nazemTeacherIds = delegatedScope.teacherIds.length ? delegatedScope.teacherIds : [0];
+    const teacherSlots = nazemTeacherIds.map(() => '?').join(', ');
+    if (date === now.date) {
+      for (const teacherId of delegatedScope.teacherIds) await enqueueNazemSessionRefresh(connection, teacherId);
+    }
+    const refreshByTeacher = new Map();
+    for (const teacherId of delegatedScope.teacherIds) {
+      const [[refresh]] = await connection.query(
+        `SELECT status, payload_json AS payload, UNIX_TIMESTAMP(created_at) * 1000 AS createdEpochMs
+         FROM nazem_sync_jobs WHERE teacher_id = ? AND operation_type = 'account.refresh_followups'
+         ORDER BY id DESC LIMIT 1`, [teacherId]);
+      refreshByTeacher.set(teacherId, refresh);
+    }
+    const followUpRefresh = refreshByTeacher.get(supervisorId);
     const attendanceSnapshotAt = Date.now();
     const [attendanceRows] = await connection.query(
       `
@@ -12725,6 +12775,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
         DATE_FORMAT(t.task_date, '%Y-%m-%d') AS taskDate,
         t.task_type AS taskType,
         t.track AS track,
+        t.nazem_remainder_key AS nazemRemainderKey,
         t.from_page AS fromPage,
         t.to_page AS toPage,
         t.from_surah AS fromSurah,
@@ -12908,6 +12959,8 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
       [supervisorId, date, taskEndDate, date, date, taskEndDate]
     );
     const visibleStudentIds = new Set(students.map(student => Number(student.id)));
+    const studentSlots = [...visibleStudentIds].map(() => '?').join(', ') || '?';
+    const scopedStudentIds = visibleStudentIds.size ? [...visibleStudentIds] : [0];
     const allRows = candidateRows.filter((row) => {
       if (!visibleStudentIds.has(Number(row.studentId))) return false;
       if (Number(row.nazemManaged)) return true;
@@ -12921,8 +12974,8 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
         JSON_UNQUOTE(JSON_EXTRACT(remote_snapshot, '$.nazemActionableDate')) AS taskDate,
         JSON_UNQUOTE(JSON_EXTRACT(remote_snapshot, '$.nazemLinkDate')) AS linkDate
        FROM nazem_daily_follow_up_links
-       WHERE teacher_id = ? AND JSON_UNQUOTE(JSON_EXTRACT(remote_snapshot, '$.nazemQueueDate')) = ?
-       ORDER BY last_remote_checked_at DESC, id DESC`, [supervisorId, date],
+       WHERE teacher_id IN (${teacherSlots}) AND ruwasi_student_id IN (${studentSlots}) AND JSON_UNQUOTE(JSON_EXTRACT(remote_snapshot, '$.nazemQueueDate')) = ?
+       ORDER BY last_remote_checked_at DESC, id DESC`, [...nazemTeacherIds, ...scopedStudentIds, date],
     );
     const rows = selectNazemFirstActionableTasks(allRows, nazemAuthorities);
     const [sessionAttemptRows] = await connection.query(
@@ -12951,14 +13004,14 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
                AND currentLink.ruwasi_student_id = nazem_sync_jobs.student_id
                AND currentLink.sync_status = 'synced' AND currentLink.last_synced_at > nazem_sync_jobs.updated_at)) AS needsIdentityRecheck
        FROM nazem_sync_jobs
-       WHERE teacher_id = ? AND operation_type = 'recitation.submit'
-         AND student_id IS NOT NULL
+       WHERE teacher_id IN (${teacherSlots}) AND operation_type = 'recitation.submit'
+         AND student_id IN (${studentSlots})
          AND EXISTS (SELECT 1 FROM student_quran_recitation_attempts currentAttempt
            WHERE currentAttempt.id = CAST(JSON_UNQUOTE(JSON_EXTRACT(nazem_sync_jobs.payload_json, '$.attemptId')) AS UNSIGNED)
              AND currentAttempt.session_date = ?)
          AND status IN ('pending','retrying','syncing','failed','blocked','requires_review','conflict')
        GROUP BY student_id`,
-      [supervisorId, date],
+      [...nazemTeacherIds, ...scopedStudentIds, date],
     );
     const nazemPendingStudentIds = new Set(nazemPendingRows.map((row) => Number(row.studentId)));
     const nazemFailedStudentIds = new Set(nazemPendingRows.filter((row) => Number(row.syncFailed)).map((row) => Number(row.studentId)));
@@ -12971,9 +13024,10 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
        JOIN nazem_plan_links planLink
          ON planLink.ruwasi_plan_id = due.ruwasi_plan_id
         AND planLink.ruwasi_student_id = due.ruwasi_student_id
-        AND planLink.teacher_id = ?
+        AND planLink.teacher_id = due.teacher_id
+        AND planLink.teacher_id IN (${teacherSlots})
         AND planLink.sync_status NOT IN ('deleted','detached')
-       WHERE (due.follow_up_date = ? OR (
+       WHERE due.ruwasi_student_id IN (${studentSlots}) AND (due.follow_up_date = ? OR (
          (JSON_UNQUOTE(JSON_EXTRACT(due.remote_snapshot, '$.nazemLate')) = 'true'
            OR JSON_UNQUOTE(JSON_EXTRACT(due.remote_snapshot, '$.nazemPendingDay')) = 'true')
          AND JSON_UNQUOTE(JSON_EXTRACT(due.remote_snapshot, '$.nazemLateAvailableOn')) = '${date}'
@@ -12993,11 +13047,17 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
              AND dueTask.task_date = due.follow_up_date
              AND due.track = IF(dueTask.task_type = 'memorization', dueTask.track, 'memorization')
              AND dueTask.task_type = due.task_type
+             AND ${nazemTaskRangeSql('dueTask', 'due')}
          )`,
-      [supervisorId, date, date, date],
+      [...nazemTeacherIds, ...scopedStudentIds, date, date, date],
     );
     const nazemDueStudentIds = new Set(nazemDueRows.map((row) => Number(row.studentId)));
-    const remotelyCompletedStudentIds = await loadNazemCompletedStudentIds(connection, supervisorId, date);
+    const remotelyCompletedStudentIds = new Set();
+    for (const teacherId of delegatedScope.teacherIds) {
+      for (const studentId of await loadNazemCompletedStudentIds(connection, teacherId, date)) {
+        if (visibleStudentIds.has(Number(studentId))) remotelyCompletedStudentIds.add(Number(studentId));
+      }
+    }
     const serializeEvaluationTask = (row) => {
       const _resolveExpectedRepeatCount = () => {
         if (row.nazemManaged) {
@@ -13038,7 +13098,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
             { page: Number(row.planStartPage), surah: Number(row.planStartSurah), ayah: Number(row.planStartAyah) },
             { page: Number(row.planEndPage), surah: Number(row.planEndSurah), ayah: Number(row.planEndAyah) },
           ),
-        ...(executionOptionsByGroup.get(`${row.planId}:${row.taskDate}:${row.taskType}:${row.track}`)),
+        ...(executionOptionsByGroup.get(`${row.planId}:${row.taskDate}:${row.taskType}:${row.track}${nazemRemainderSuffix(row)}`)),
         ayahMarkCount: new Set((marksByTask.get(Number(row.id)) || []).map(quranTaskMarkVerseKey)).size,
         ayahMarks: marksByTask.get(Number(row.id)) || [],
       });
@@ -13057,7 +13117,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
         repeat: getQuranTaskExecutionSource(settings, 'repeat'),
       },
       recitationAttendanceSource: settings.recitationAttendanceSource,
-      nazemRefreshPending: ['pending', 'retrying', 'syncing'].includes(followUpRefresh?.status)
+      nazemRefreshPending: [...refreshByTeacher.values()].some((refresh) => ['pending', 'retrying', 'syncing'].includes(refresh?.status))
         || nazemPendingRows.some((row) => Number(row.syncPending)),
       allowRepeatCountEditing: canTeacherExecuteQuranTask(settings, 'repeat'),
       listeningEnabled: true,
@@ -13097,7 +13157,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
             managed: Number(student.nazemManaged), studentId: student.id,
             hasTasks: activeTaskStudentIds.has(Number(student.id)),
             finished: attemptedStudentIds.has(Number(student.id)) && !nazemDueStudentIds.has(Number(student.id)),
-            refresh: followUpRefresh
+            refresh: req.auth.role === 'reciter' ? refreshByTeacher.get(delegatedScope.teacherByStudent.get(Number(student.id))) : followUpRefresh
           }),
           recitationFinished: attemptedStudentIds.has(Number(student.id))
             && !activeTaskStudentIds.has(Number(student.id))
@@ -13168,6 +13228,7 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
       `SELECT
         t.id, t.plan_id AS planId, t.student_id AS studentId,
         DATE_FORMAT(t.task_date, '%Y-%m-%d') AS taskDate, t.task_type AS taskType, t.track,
+        t.nazem_remainder_key AS nazemRemainderKey,
         t.from_page AS fromPage, t.from_surah AS fromSurah, t.from_ayah AS fromAyah,
         t.to_page AS toPage, t.to_surah AS toSurah, t.to_ayah AS toAyah,
         p.track AS planTrack, p.start_page AS startPage, p.start_surah AS startSurah, p.start_ayah AS startAyah,
@@ -13206,7 +13267,7 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
         from_surah AS fromSurah, from_ayah AS fromAyah, to_surah AS toSurah, to_ayah AS toAyah,
         target_pages AS targetPages
        FROM student_quran_tasks
-       WHERE plan_id = ? AND student_id = ? AND ${taskScopeSql} AND task_type = ? AND track = ?
+       WHERE plan_id = ? AND student_id = ? AND ${taskScopeSql} AND task_type = ? AND track = ? AND nazem_remainder_key = ?
          AND NOT EXISTS (
            SELECT 1
            FROM student_quran_tasks newer
@@ -13223,7 +13284,7 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
              AND COALESCE(newer.to_ayah, 0) = COALESCE(student_quran_tasks.to_ayah, 0)
          )
        ORDER BY id ASC FOR UPDATE`,
-      [plan.id, anchor.studentId, ...taskScopeParams, anchor.taskType, anchor.track, generationEndDate],
+      [plan.id, anchor.studentId, ...taskScopeParams, anchor.taskType, anchor.track, anchor.nazemRemainderKey || '', generationEndDate],
     );
     if (!tasks.some((task) => Number(task.id) === taskId)) {
       await connection.rollback();
@@ -13397,9 +13458,9 @@ async function settleEvaluatedTaskGroup({ task, settings, connection, date, atte
       to_page AS toPage, to_surah AS toSurah, to_ayah AS toAyah,
       actual_to_page AS actualToPage, actual_to_surah AS actualToSurah, actual_to_ayah AS actualToAyah
      FROM student_quran_tasks
-     WHERE plan_id = ? AND task_date = ? AND task_type = ? AND track = ?
+     WHERE plan_id = ? AND task_date = ? AND task_type = ? AND track = ? AND nazem_remainder_key = ?
      FOR UPDATE`,
-    [task.planId, task.taskDate, task.taskType, task.track],
+    [task.planId, task.taskDate, task.taskType, task.track, task.nazemRemainderKey || ''],
   );
   const groupEvaluated = groupTasks.length > 0 && groupTasks.every((row) => row.evaluatedAt);
   const groupPassed = groupEvaluated && groupTasks.every((row) => Number(row.teacherCompleted) === 1);
@@ -13484,6 +13545,7 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
         DATE_FORMAT(t.task_date, '%Y-%m-%d') AS taskDate,
         t.task_type AS taskType,
         t.track AS track,
+        t.nazem_remainder_key AS nazemRemainderKey,
         t.from_page AS fromPage,
         t.to_page AS toPage,
         t.from_surah AS fromSurah,
@@ -14835,7 +14897,7 @@ async function buildTeacherExecutionChoices(allRows, executionOptionsByGroup, co
   for (const row of allRows.filter((item) => (
     item.taskType === 'memorization' || (item.taskType === 'review' && Number(item.nazemManaged))
   ))) {
-    const groupKey = `${row.planId}:${row.taskDate}:${row.taskType}:${row.track}`;
+    const groupKey = `${row.planId}:${row.taskDate}:${row.taskType}:${row.track}${nazemRemainderSuffix(row)}`;
     if (executionOptionsByGroup.has(groupKey)) continue;
     const plan = {
       id: row.planId,
@@ -14856,7 +14918,7 @@ async function buildTeacherExecutionChoices(allRows, executionOptionsByGroup, co
       scheduleAnchorSurah: row.planScheduleAnchorSurah,
       scheduleAnchorAyah: row.planScheduleAnchorAyah,
     };
-    const groupRows = allRows.filter((item) => `${item.planId}:${item.taskDate}:${item.taskType}:${item.track}` === groupKey);
+    const groupRows = allRows.filter((item) => `${item.planId}:${item.taskDate}:${item.taskType}:${item.track}${nazemRemainderSuffix(item)}` === groupKey);
     const direction = row.taskType === 'review' || row.track !== row.planTrack
       ? getQuranRangeDirection(taskStartPosition(row), taskEndPosition(row))
       : getQuranRangeDirection(
@@ -15203,7 +15265,7 @@ async function saveEvaluatedGroupRewards({ settings, connection, groupTasks, tas
       supervisorId,
       sourceType: 'quran_evaluation',
       reason: `تقييم ${taskLabel}`,
-      dedupeKey: `quran_evaluation:${task.planId}:${task.taskDate}:${task.taskType}${task.track === 'mastery' ? ':mastery' : ''}`,
+      dedupeKey: `quran_evaluation:${task.planId}:${task.taskDate}:${task.taskType}${task.track === 'mastery' ? ':mastery' : ''}${nazemRemainderSuffix(task)}`,
     });
     await saveEvaluatedRepeatRewards({ task, connection, settings, groupPassed, req, supervisorId });
   }
@@ -15211,7 +15273,7 @@ async function saveEvaluatedGroupRewards({ settings, connection, groupTasks, tas
 
 /** Award repetition and listening only after the memorization group passes. */
 async function saveEvaluatedRepeatRewards({ task, connection, settings, groupPassed, req, supervisorId }) {
-  if (task.taskType === 'memorization') {
+  if (task.taskType === 'memorization' && !task.nazemRemainderKey) {
     const [repeatRows] = await connection.query(
       `SELECT id, actual_repeat_count AS actualRepeatCount, actual_listening_count AS actualListeningCount
              FROM student_quran_tasks
@@ -15592,6 +15654,9 @@ async function buildOverviewReport({ from, startDate: requestedStartDate, date, 
     const rangeDates = getDatesInRange(startDate, endDate);
     const attendanceDates = getAttendanceDatesInRange(startDate, endDate, settings);
     const attendanceWeekDays = getOverviewAttendanceWeekDays(settings);
+    const studentAttendanceWindow = await loadOverviewStudentAttendanceWindow(reportDb, {
+      from: startDate, to: endDate, settings, weekdays: attendanceWeekDays,
+    });
 
     const [[totals]] = await reportDb.query(`
       SELECT
@@ -15656,7 +15721,8 @@ async function buildOverviewReport({ from, startDate: requestedStartDate, date, 
     const emptySupervisorAttendance = { total: 0, present: 0, late: 0, excused: 0, absent: 0, notRecorded: 0 };
     const dayPlaceholders = attendanceWeekDays.map(() => '?').join(', ');
     const attendanceRangeParams = [startDate, endDate, ...attendanceWeekDays];
-    const [[studentAttendanceRows]] = await readOverviewStudentAttendance({ attendanceDates, attendanceWeekDays, reportDb, dayPlaceholders, attendanceRangeParams, emptyStudentAttendance });
+    const studentAttendanceRangeParams = [startDate, studentAttendanceWindow.to, ...attendanceWeekDays];
+    const [[studentAttendanceRows]] = await readOverviewStudentAttendance({ attendanceDates: studentAttendanceWindow.dates, attendanceWeekDays, reportDb, dayPlaceholders, attendanceRangeParams: studentAttendanceRangeParams, emptyStudentAttendance });
     const [[supervisorAttendanceRows]] = await readOverviewSupervisorAttendance({ attendanceDates, attendanceWeekDays, reportDb, dayPlaceholders, attendanceRangeParams, emptySupervisorAttendance });
 
     const normalizeRangeAttendance = (row, expectedTotal) => {
@@ -15675,7 +15741,7 @@ async function buildOverviewReport({ from, startDate: requestedStartDate, date, 
     };
     const studentAttendance = normalizeRangeAttendance(
       studentAttendanceRows,
-      Number(totals.studentsCount || 0) * attendanceDates.length
+      studentAttendanceWindow.totalExpected
     );
     const supervisorAttendance = normalizeRangeAttendance(
       supervisorAttendanceRows,
@@ -15832,9 +15898,9 @@ async function buildOverviewReport({ from, startDate: requestedStartDate, date, 
     `);
     const committeeIndicatorMap = new Map();
     const studentIndicatorMap = new Map();
-    const attendanceExpectedPerStudent = attendanceDates.length;
-    initializeCommitteeIndicators({ committeeStudentRows, committeeIndicatorMap, createIndicatorTotals, addIndicatorValue, attendanceExpectedPerStudent, studentIndicatorMap });
-    if (attendanceDates.length && attendanceWeekDays.length) {
+    const attendanceExpectedByStudent = studentAttendanceWindow.expectedByStudent;
+    initializeCommitteeIndicators({ committeeStudentRows, committeeIndicatorMap, createIndicatorTotals, addIndicatorValue, attendanceExpectedByStudent, studentIndicatorMap });
+    if (studentAttendanceWindow.dates.length && attendanceWeekDays.length) {
     const [attendanceIndicatorRows] = await reportDb.query(
         `
         SELECT
@@ -15846,7 +15912,7 @@ async function buildOverviewReport({ from, startDate: requestedStartDate, date, 
           AND ar.status IN ('present', 'late', 'excused')
         GROUP BY ar.student_id
         `,
-        attendanceRangeParams
+        studentAttendanceRangeParams
       );
       for (const row of attendanceIndicatorRows) {
         const entry = studentIndicatorMap.get(String(row.studentId));
@@ -15929,7 +15995,7 @@ async function buildOverviewReport({ from, startDate: requestedStartDate, date, 
         from: startDate,
         to: endDate,
         totalDays: rangeDates.length,
-        attendanceDaysCount: attendanceDates.length,
+        attendanceDaysCount: studentAttendanceWindow.dates.length,
         nazemEnabled: Boolean(settings.nazemIntegrationEnabled),
       },
       totals: {
@@ -16018,7 +16084,7 @@ const progressTaskTypes = ['memorization', 'repeat', 'review', 'link'];
 const progressScoredTaskTypes = ['memorization', 'review', 'link'];
 
 /** Initialize student and committee indicators with the same expected attendance denominator. */
-function initializeCommitteeIndicators({ committeeStudentRows, committeeIndicatorMap, createIndicatorTotals, addIndicatorValue, attendanceExpectedPerStudent, studentIndicatorMap }) {
+function initializeCommitteeIndicators({ committeeStudentRows, committeeIndicatorMap, createIndicatorTotals, addIndicatorValue, attendanceExpectedByStudent, studentIndicatorMap }) {
   for (const row of committeeStudentRows) {
     const committeeKey = String(row.committeeId);
     if (!committeeIndicatorMap.has(committeeKey)) {
@@ -16037,8 +16103,9 @@ function initializeCommitteeIndicators({ committeeStudentRows, committeeIndicato
       name: row.studentName,
       totals: createIndicatorTotals(),
     };
-    addIndicatorValue(student.totals, 'attendance', 0, attendanceExpectedPerStudent);
-    addIndicatorValue(committee.totals, 'attendance', 0, attendanceExpectedPerStudent);
+    const expectedAttendance = attendanceExpectedByStudent.get(String(row.studentId)) || 0;
+    addIndicatorValue(student.totals, 'attendance', 0, expectedAttendance);
+    addIndicatorValue(committee.totals, 'attendance', 0, expectedAttendance);
     committee.studentsCount += 1;
     committee.students.push(student);
     studentIndicatorMap.set(String(row.studentId), { committee, student });

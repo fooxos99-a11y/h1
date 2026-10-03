@@ -2,6 +2,7 @@ import { blockedNazemError, reviewNazemError } from './errors.js';
 
 // Read the remote day before deciding whether a local attempt still needs sending.
 export async function submitWithNazemAuthority({ adapter, studentLink, planLink, mapped, applyAttendance, importDay, platformWroteDay = async () => false, beforeSubmit = async () => {} }) {
+  if (mapped.acceptedIncompleteDayId) return adapter.verifySubmittedRecitation(studentLink, planLink, mapped);
   const adopt = async (state) => {
     if (state.attendanceStatus != null) {
       mapped.attendanceStatus = state.attendanceStatus;

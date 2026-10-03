@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { wakeNazemMemorizationAfterLink } from './pairedRecitation.js';
 import { captureRecitationTarget } from './recitationSubmission.js';
+import { tasksMatchingNazemRange } from './taskRange.js';
 import { nazemTaskTrack } from './taskTrack.js';
 import os from 'node:os';
 import { nazemFollowUpSlot } from '../../services/nazemFollowUpSchedule.js';
@@ -125,6 +126,7 @@ export async function resolveNazemTeacherForStudent(
   studentId,
   preferredTeacherId = null,
   planId = null,
+  requirePlanLink = false,
 ) {
   if (planId) {
     const [[existingPlanLink]] = await connection.query(
@@ -133,10 +135,12 @@ export async function resolveNazemTeacherForStudent(
        JOIN nazem_accounts account ON account.teacher_id = link.teacher_id AND account.status = 'connected'
        JOIN nazem_student_links studentLink ON studentLink.teacher_id = link.teacher_id
          AND studentLink.ruwasi_student_id = link.ruwasi_student_id AND studentLink.status = 'linked'
-       WHERE link.ruwasi_plan_id = ? AND link.ruwasi_student_id = ? LIMIT 1`,
+       WHERE link.ruwasi_plan_id = ? AND link.ruwasi_student_id = ?
+         AND link.sync_status NOT IN ('deleted','detached') LIMIT 1`,
       [planId, studentId],
     );
     if (existingPlanLink) return Number(existingPlanLink.teacherId);
+    if (requirePlanLink) return null;
   }
   if (preferredTeacherId) {
     const [[preferred]] = await connection.query(
@@ -339,9 +343,11 @@ export function resolveNazemRecitationBarrier(rows = [], dailyTaskType = undefin
   };
 }
 
-async function loadNazemRecitationBarrier(connection, task, dailyTaskType) {
+export async function loadNazemRecitationBarrier(connection, task, dailyTaskType, teacherId) {
   const [rows] = await connection.query(
     `SELECT currentTask.id, currentTask.task_type AS taskType, currentTask.track,
+      currentTask.from_surah AS fromSurah, currentTask.from_ayah AS fromAyah,
+      currentTask.to_surah AS toSurah, currentTask.to_ayah AS toAyah,
       (
         SELECT attempt.id
         FROM student_quran_recitation_attempts attempt
@@ -357,7 +363,13 @@ async function loadNazemRecitationBarrier(connection, task, dailyTaskType) {
      ORDER BY currentTask.id`,
     [task.planId, task.studentId, task.taskDate, dailyTaskType, nazemTaskTrack(task), task.id],
   );
-  return resolveNazemRecitationBarrier(rows, dailyTaskType);
+  const [[daily]] = await connection.query(`SELECT remote_snapshot AS remote FROM nazem_daily_follow_up_links
+    WHERE ruwasi_plan_id = ? AND ruwasi_student_id = ? AND follow_up_date = ? AND task_type = ? AND track = ? AND teacher_id = ? LIMIT 1`,
+  [task.planId, task.studentId, task.taskDate, dailyTaskType, nazemTaskTrack(task), teacherId]);
+  const remote = typeof daily?.remote === 'string' ? JSON.parse(daily.remote) : daily?.remote;
+  const current = dailyTaskType === 'memorization' ? tasksMatchingNazemRange(rows, remote) : rows;
+  if (!current.some(row => Number(row.id) === Number(task.id))) return resolveNazemRecitationBarrier([], dailyTaskType);
+  return resolveNazemRecitationBarrier(current, dailyTaskType);
 }
 
 export async function enqueueNazemRecitation(connection, { attemptId, task, actor }) {
@@ -375,8 +387,12 @@ export async function enqueueNazemRecitation(connection, { attemptId, task, acto
     task.studentId,
     actor?.role === 'supervisor' ? Number(actor.id) : null,
     task.planId,
+    Boolean(Number(task.nazemManaged)),
   );
-  if (!teacherId) return null;
+  if (!teacherId) {
+    if (Number(task.nazemManaged)) throw Object.assign(new Error('تعذر التحقق من حساب معلم الخطة في ناظم. حدّث الجلسة ثم حاول مجددًا.'), { statusCode: 409, code: 'NAZEM_TEACHER_CONTEXT_MISSING' });
+    return null;
+  }
   const dailyTaskType = submittedTaskType;
   const [dailyResult] = await connection.query(
     `INSERT INTO nazem_daily_follow_up_links
@@ -439,7 +455,7 @@ export async function enqueueNazemRecitation(connection, { attemptId, task, acto
      WHERE id = ?`,
     [dailyFollowUpId],
   );
-  const barrier = await loadNazemRecitationBarrier(connection, task, dailyTaskType);
+  const barrier = await loadNazemRecitationBarrier(connection, task, dailyTaskType, teacherId);
   if (!barrier.ready || !barrier.sourceAttemptId) return null;
   if (submittedTaskType === 'link') await wakeNazemMemorizationAfterLink(connection, task, teacherId);
   const submissionTarget = await captureRecitationTarget(connection, dailyFollowUpId, barrier.attemptSignature);

@@ -1,10 +1,10 @@
 import { createHash, createPublicKey } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 export function normalizePublicKey(value = '') {
-  const pem = value.replaceAll('\\n', '\n').trim();
+  const pem = value.replaceAll(String.raw`\n`, '\n').trim();
   if (!pem) return '';
   const key = createPublicKey(pem);
   if (key.asymmetricKeyType !== 'rsa' || key.asymmetricKeyDetails.modulusLength < 2048) {
@@ -33,11 +33,16 @@ export function isNativeInput(file) {
 
 // Deliberately conservative: dependency-lock changes also require a new store runtime.
 export function nativeFingerprint(root, settings) {
-  const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard',
+  const gitPaths = process.platform === 'win32'
+    ? ['C:/Program Files/Git/cmd/git.exe', 'C:/Program Files/Git/bin/git.exe']
+    : ['/usr/bin/git', '/usr/local/bin/git'];
+  const gitExecutable = gitPaths.find(existsSync);
+  if (!gitExecutable) throw new Error('Install Git in a standard system directory to calculate the native runtime.');
+  const files = execFileSync(gitExecutable, ['ls-files', '-z', '--cached', '--others', '--exclude-standard',
     '--', 'android', 'ios', 'public/runners', 'capacitor.config.json', 'package-lock.json'], { cwd: root })
     .toString().split('\0').filter(Boolean).filter(isNativeInput);
   const hash = createHash('sha256');
-  for (const file of [...new Set(files)].sort()) {
+  for (const file of [...new Set(files)].sort((first, second) => first < second ? -1 : Number(first > second))) {
     let content = readFileSync(path.join(root, file));
     if (/(^|\/)(gradlew|\.gitignore)$/.test(file) || /\.(json|xml|gradle|properties|java|kt|swift|plist|pbxproj|resolved|storyboard|entitlements|xcconfig|xcscheme|xcworkspacedata|pro|sh|js|md|bat)$/.test(file)) {
       content = Buffer.from(content.toString('utf8').replaceAll('\r\n', '\n'));

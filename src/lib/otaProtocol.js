@@ -1,6 +1,6 @@
 const HASH = /^[a-f0-9]{64}$/;
 const SIGNATURE = /^[A-Za-z0-9+/]+={0,2}$/;
-const bytes = (base64) => Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+const bytes = (base64) => Uint8Array.from(atob(base64), (character) => character.codePointAt(0));
 
 export async function verifyOtaEnvelope(envelope, publicKey, subtle = globalThis.crypto.subtle) {
   if (typeof envelope?.payload !== 'string' || envelope.payload.length > 12000

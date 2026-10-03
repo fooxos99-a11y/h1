@@ -55,7 +55,7 @@ export default function StudentProgramContent({ program, onCompleted }) {
       setQuestionIndex((current) => current + 1);
       return;
     }
-    submit();
+    void submit();
   };
 
   const _resolveConditional = () => {

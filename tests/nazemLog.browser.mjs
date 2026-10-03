@@ -17,6 +17,11 @@ try {
     assert.ok(await first.getByText('الطالب صاحب آخر تحديث', { exact: true }).isVisible());
     assert.ok(await first.getByText('قيد الانتظار', { exact: true }).first().isVisible());
     assert.equal(await first.locator('details[open]').count(), 0);
+    assert.ok(await dialog.getByText('تحديث مقادير الطلاب', { exact: true }).first().isVisible());
+    assert.ok(await dialog.getByText('الطالب صاحب المقدار المتبقي', { exact: false }).isVisible());
+    assert.ok(await dialog.getByText('المتأخر لم يكتمل', { exact: true }).first().isVisible());
+    assert.ok(await dialog.getByText('تعذر التحديث', { exact: true }).first().isVisible());
+    assert.equal(await dialog.getByText('account.refresh_followups', { exact: true }).count(), 0);
     const bounds = await dialog.evaluate(element => {
       const rect = element.getBoundingClientRect();
       return { left: rect.left, right: rect.right, overflow: element.scrollWidth - element.clientWidth, rtl: globalThis.getComputedStyle(element).direction };

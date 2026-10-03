@@ -10,6 +10,7 @@ import { loadAdjacentQuranPosition } from './quranTraversalIndex.js';
 import { compareQuranPositionInDirection } from '../../shared/quran-execution-policy.js';
 import { buildNazemLateTaskExistsSql } from '../integrations/nazem/lateTaskScope.js';
 import { publicErrorMessage } from './publicErrors.js';
+import { nazemRemainderSuffix, scopeNazemRewardTasks } from '../integrations/nazem/remainderScope.js';
 
 const position = (task, prefix) => ({ page: Number(task[`${prefix}Page`]), surah: Number(task[`${prefix}Surah`]), ayah: Number(task[`${prefix}Ayah`]) });
 const getQuranRangeDirection = (start, end) => {
@@ -45,6 +46,7 @@ async function adjacent(connection, start, direction) {
 }
 
 export async function calculateNazemRewardGroups(connection, daily, tasks, settings) {
+  tasks = scopeNazemRewardTasks(daily, tasks);
   const primary = tasks.filter((task) => task.taskType === daily.taskType && task.track === daily.track);
   if (!primary.length || primary.some((task) => !task.evaluatedAt)) {
     const error = new Error('متابعة ناظم لا تطابق مجموعة مهام مقيمة كاملة.'); error.statusCode = 409; throw error;
@@ -103,6 +105,7 @@ export async function settleNazemPoints(connection, dailyId) {
     const [[daily]] = await connection.query(`SELECT d.id, d.ruwasi_student_id AS studentId, d.ruwasi_plan_id AS planId,
       d.teacher_id AS teacherId, DATE_FORMAT(d.follow_up_date, '%Y-%m-%d') AS taskDate, d.task_type AS taskType,
       d.track,
+      d.local_snapshot AS localSnapshot,
       JSON_UNQUOTE(JSON_EXTRACT(d.remote_snapshot, '$.status')) AS remoteResultStatus,
       JSON_UNQUOTE(JSON_EXTRACT(d.remote_snapshot, '$.link')) AS remoteLinkCount,
       JSON_UNQUOTE(JSON_EXTRACT(d.remote_snapshot, '$.attendanceStatus')) AS attendanceStatus,
@@ -114,6 +117,7 @@ export async function settleNazemPoints(connection, dailyId) {
     if (daily.syncStatus !== 'synced') { await connection.commit(); return false; }
     const [[activation]] = await connection.query("SELECT setting_value AS value FROM app_settings WHERE setting_key = 'nazemPointsStartDate'");
     const [tasks] = await connection.query(`SELECT task.id, task.task_type AS taskType, task.track, task.points,
+      task.nazem_remainder_key AS nazemRemainderKey,
       task.evaluated_at AS evaluatedAt, task.teacher_completed AS teacherCompleted, task.evaluation_score AS evaluationScore,
       task.from_page AS fromPage, task.from_surah AS fromSurah, task.from_ayah AS fromAyah,
       task.to_page AS toPage, task.to_surah AS toSurah, task.to_ayah AS toAyah,
@@ -157,7 +161,7 @@ export async function settleNazemPoints(connection, dailyId) {
       taskIds: group.tasks.map((task) => task.id), studentId: daily.studentId, targetPoints: group.points,
       settings, date: daily.taskDate, actorRole: 'system', actorName: 'مزامنة ناظم', supervisorId: daily.teacherId,
       sourceType: 'quran_evaluation', reason: _resolveReason(group),
-      dedupeKey: `quran_evaluation:${daily.planId}:${daily.taskDate}:${group.taskType}${daily.track === 'mastery' ? ':mastery' : ''}`,
+      dedupeKey: `quran_evaluation:${daily.planId}:${daily.taskDate}:${group.taskType}${daily.track === 'mastery' ? ':mastery' : ''}${nazemRemainderSuffix(group.tasks[0])}`,
     });
     await connection.query(`UPDATE nazem_point_reconciliations SET status = 'synced', expected_points = ?, recorded_points = ?,
       last_error = NULL, checked_at = NOW(3) WHERE daily_follow_up_id = ?`, [expected, expected, dailyId]);

@@ -78,7 +78,7 @@ test('statistics drop the report tabs and trace student points by source while s
   assert.match(metrics, /title: 'المصادر'/);
   assert.match(metrics, /stats: netBySource\(student\.transactions \|\| \[\]\)/);
   assert.match(metrics, /return \[\.\.\.bySource\.entries\(\)\]\.map/);
-  assert.match(metrics, /title: 'الحركات'/);
+  assert.match(metrics, /records: transactions\.filter\(\(transaction\) => sourceOf\(transaction\) === row\.source\)/);
   assert.match(server, /app\.get\('\/api\/reports\/student-point-transactions', requireReportsOrOwnCommittee/);
   assert.match(server, /function requireExecutionFollowupOrOwnCommittee/);
   assert.match(server, /const supervisorExecutionFollowup = req\.auth\.role === 'supervisor'[\s\S]*path === '\/execution-followup'/);

@@ -44,10 +44,8 @@ try {
     await linkTask.click();
     await page.waitForFunction(() => globalThis.document.querySelectorAll('.student-home-task[aria-pressed=true]').length === 1);
     await page.locator('.student-home-rank-list>li:visible').first().waitFor();
-    assert.equal(await page.locator('.student-home-rank-list>li:visible').count(), width < 900 ? 5 : 10);
-    await page.getByRole('button', { name: 'عرض الكل', exact: true }).click();
     assert.equal(await page.locator('.student-home-rank-list>li:visible').count(), width < 900 ? 8 : 16);
-    await page.getByRole('button', { name: 'عرض أقل', exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: 'اعرض المزيد', exact: true }).count(), 0);
     assert.equal(await page.getByRole('navigation', { name: 'تنقل الطالب' }).isVisible(), width < 900);
     if (width < 900) {
       const bottom = page.getByRole('navigation', { name: 'تنقل الطالب' });

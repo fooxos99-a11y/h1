@@ -210,6 +210,14 @@ test('OTA runtime stays stable across web edits and CRLF but changes for native 
     await writeFile(ignoreFile, 'build/\n');
     await writeFile(path.join(directory, 'package-lock.json'), '{}\n');
     const first = nativeFingerprint(directory, {});
+    const originalPath = process.env.PATH;
+    try {
+      process.env.PATH = directory;
+      assert.equal(nativeFingerprint(directory, {}), first, 'Native fingerprint must not resolve Git from a caller-controlled PATH');
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+    }
     await writeFile(manifest, 'original native config\r\n');
     await writeFile(ignoreFile, 'build/\r\n');
     assert.equal(nativeFingerprint(directory, {}), first, 'Windows/Linux line endings must agree');

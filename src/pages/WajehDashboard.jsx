@@ -145,7 +145,6 @@ const baseSections = [
   { key: 'staffAttendance', label: 'التحضير', icon: ClipboardCheck },
   { key: 'mushaf', label: 'المصحف', icon: BookOpen },
   { key: 'reports', label: 'الإحصائيات', icon: BarChart3 },
-  { key: 'rankings', label: 'الترتيب', icon: Trophy },
   { key: 'students', label: 'الطلاب', icon: GraduationCap },
   { key: 'families', label: 'الحلقات', icon: Building2 },
   { key: 'studentPlans', label: 'خطط الطلاب', icon: ListChecks },
@@ -169,6 +168,7 @@ const baseSections = [
   { key: 'whatsappSend', label: 'الإرسال عبر الواتس', icon: Send },
   { key: 'registrationRequests', label: 'طلبات التسجيل', icon: UserPlus },
   { key: 'store', label: 'المتجر', icon: Store, managementOnly: true },
+  { key: 'rankings', label: 'الترتيب', icon: Trophy },
   { key: 'settingsNews', label: 'الأخبار', icon: Newspaper, permissionKey: 'settings', managementOnly: true },
   { key: 'settings', label: 'الإعدادات', icon: Settings, children: settingsNavigationItems },
   { key: 'quranEvaluation', label: 'جلسات التسميع', icon: ClipboardCheck, supervisorOnly: true },
@@ -238,7 +238,7 @@ const WajehDashboard = () => {
   const [activeCallRoom, setActiveCallRoom] = useState(null);
   const role = localStorage.getItem('wajeh_role') || '';
   const supervisorId = Number(localStorage.getItem('wajeh_supervisor_id') || 0);
-  const { hasSession, isManager, isSupervisor, isReciter, isAdmin, hasDashboardAccess } = dashboardAccountFlags(role, dashboardPermissions);
+  const { isManager, isSupervisor, isReciter, isAdmin, hasDashboardAccess } = dashboardAccountFlags(role, dashboardPermissions);
 
   useEffect(() => {
     const routeKey = dashboardSectionRoutes.getKey(sectionSlug);

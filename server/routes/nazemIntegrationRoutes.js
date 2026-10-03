@@ -1444,6 +1444,15 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
           event.status, event.attempt_number AS attemptNumber,
           JSON_UNQUOTE(JSON_EXTRACT(event.metadata_json, '$.alreadyRecorded')) AS alreadyRecorded,
           JSON_UNQUOTE(JSON_EXTRACT(event.metadata_json, '$.authoritative')) AS authoritative,
+          event.metadata_json AS metadata,
+          COALESCE(JSON_UNQUOTE(JSON_EXTRACT(event.metadata_json, '$.latePending')),
+            (SELECT JSON_UNQUOTE(JSON_EXTRACT(receipt.remote_snapshot, '$.latePending'))
+             FROM nazem_recitation_links receipt WHERE receipt.ruwasi_recitation_id = JSON_EXTRACT(job.payload_json, '$.attemptId')
+               AND receipt.teacher_id = job.teacher_id AND receipt.sync_status = 'synced' LIMIT 1)) AS latePending,
+          COALESCE(JSON_UNQUOTE(JSON_EXTRACT(event.metadata_json, '$.resultStatus')),
+            (SELECT JSON_UNQUOTE(JSON_EXTRACT(receipt.remote_snapshot, '$.status'))
+             FROM nazem_recitation_links receipt WHERE receipt.ruwasi_recitation_id = JSON_EXTRACT(job.payload_json, '$.attemptId')
+               AND receipt.teacher_id = job.teacher_id AND receipt.sync_status = 'synced' LIMIT 1)) AS resultStatus,
           event.error_code AS errorCode, event.message,
           DATE_FORMAT(event.created_at, '%Y-%m-%d %H:%i:%s') AS createdAt,
           teacher.name AS teacherName, student.name AS studentName
@@ -1463,6 +1472,14 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
           JSON_UNQUOTE(JSON_EXTRACT(job.payload_json, '$.planId')) AS planId,
           job.attempt_count AS attemptNumber, job.last_error_code AS errorCode,
           job.last_error AS message,
+          (SELECT latest.metadata_json FROM nazem_sync_events latest WHERE latest.job_id = job.id
+             ORDER BY latest.id DESC LIMIT 1) AS metadata,
+          (SELECT JSON_UNQUOTE(JSON_EXTRACT(receipt.remote_snapshot, '$.latePending'))
+             FROM nazem_recitation_links receipt WHERE receipt.ruwasi_recitation_id = JSON_EXTRACT(job.payload_json, '$.attemptId')
+               AND receipt.teacher_id = job.teacher_id AND receipt.sync_status = 'synced' LIMIT 1) AS latePending,
+          (SELECT JSON_UNQUOTE(JSON_EXTRACT(receipt.remote_snapshot, '$.status'))
+             FROM nazem_recitation_links receipt WHERE receipt.ruwasi_recitation_id = JSON_EXTRACT(job.payload_json, '$.attemptId')
+               AND receipt.teacher_id = job.teacher_id AND receipt.sync_status = 'synced' LIMIT 1) AS resultStatus,
           (SELECT JSON_UNQUOTE(JSON_EXTRACT(latest.metadata_json, '$.alreadyRecorded'))
              FROM nazem_sync_events latest WHERE latest.job_id = job.id AND latest.status = 'synced'
              ORDER BY latest.id DESC LIMIT 1) AS alreadyRecorded,
@@ -1482,7 +1499,15 @@ export function createNazemIntegrationRouter({ db, requirePermission, importPlan
            )
          ORDER BY job.updated_at DESC, job.id DESC LIMIT 500`,
       );
-      return res.json(buildNazemLogEntries(activeRows, eventRows));
+      const entries = buildNazemLogEntries(activeRows, eventRows);
+      const studentIds = [...new Set(entries.flatMap(entry => entry.diagnostics?.issues || [])
+        .map(issue => issue.studentId).filter(id => Number.isSafeInteger(id) && id > 0))];
+      if (studentIds.length) {
+        const [students] = await db().query(`SELECT id, name FROM students WHERE id IN (${studentIds.map(() => '?').join(',')})`, studentIds);
+        const names = new Map(students.map(student => [Number(student.id), student.name]));
+        for (const entry of entries) for (const issue of entry.diagnostics?.issues || []) issue.studentName = names.get(issue.studentId) || null;
+      }
+      return res.json(entries);
     } catch (error) {
       return next(error);
     }

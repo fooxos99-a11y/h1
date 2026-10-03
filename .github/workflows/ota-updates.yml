@@ -93,7 +93,7 @@ jobs:
       - name: Verify startup readiness in Chromium
         if: env.OTA_ACTION == 'publish'
         run: |
-          npx playwright install --with-deps chromium
+          node node_modules/playwright/cli.js install --with-deps chromium
           npm run test:ota:browser
       - name: Publish signed OTA channel
         if: env.OTA_ACTION != 'validate'

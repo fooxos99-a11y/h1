@@ -6,6 +6,12 @@ import { generateKeyPairSync, sign } from 'node:crypto';
 import { readFile, mkdir } from 'node:fs/promises';
 import { Buffer } from 'node:buffer';
 
+function nativeMockSource(modulePath, core, liveUpdate) {
+  if (modulePath === '@capacitor/core') return core;
+  if (modulePath === '@capacitor/app') return 'export const App = { addListener: async () => ({ remove() {} }) };';
+  return liveUpdate;
+}
+
 // Exercise the real readiness observer in Chromium; only native device APIs are mocked.
 const bundle = await build({
   entryPoints: ['src/lib/nativeOta.js'], bundle: true, write: false, format: 'iife', globalName: 'OtaReadiness',
@@ -14,11 +20,9 @@ const bundle = await build({
     name: 'synthetic-capacitor',
     setup(builder) {
       builder.onResolve({ filter: /^@capacitor\/core$|^@capawesome\/capacitor-live-update$|^@capacitor\/app$/ }, (args) => ({ path: args.path, namespace: 'native-mock' }));
-      builder.onLoad({ filter: /.*/, namespace: 'native-mock' }, ({ path }) => ({ contents: path === '@capacitor/core'
-        ? 'export const Capacitor = { isNativePlatform: () => window.nativePlatform, isPluginAvailable: () => true };'
-        : path === '@capacitor/app'
-          ? 'export const App = { addListener: async () => ({ remove() {} }) };'
-          : 'export const LiveUpdate = { ready: async () => { window.readyCalls++; } };' }));
+      builder.onLoad({ filter: /.*/, namespace: 'native-mock' }, ({ path }) => ({ contents: nativeMockSource(path,
+        'export const Capacitor = { isNativePlatform: () => window.nativePlatform, isPluginAvailable: () => true };',
+        'export const LiveUpdate = { ready: async () => { window.readyCalls++; } };') }));
     },
   }],
 });
@@ -31,8 +35,8 @@ try {
     await page.addScriptTag({ content: bundle.outputFiles[0].text });
     await page.evaluate((kind) => {
       const root = document.getElementById('app-root');
-      if (kind === 'loading') root.firstElementChild.setAttribute('data-loading-indicator', 'screen');
-      if (kind === 'error-boundary') root.firstElementChild.setAttribute('data-app-error', '');
+      if (kind === 'loading') root.firstElementChild.dataset.loadingIndicator = 'screen';
+      if (kind === 'error-boundary') root.firstElementChild.dataset.appError = '';
       window.OtaReadiness.observeNativeOtaReadiness(root);
       if (kind === 'startup-error') window.OtaReadiness.markNativeStartupFailed();
     }, scenario);
@@ -59,11 +63,9 @@ try {
     define: { __OTA_CONFIG__: JSON.stringify(config) },
     plugins: [{ name: 'synthetic-native-update', setup(builder) {
       builder.onResolve({ filter: /^@capacitor\/core$|^@capawesome\/capacitor-live-update$|^@capacitor\/app$/ }, (args) => ({ path: args.path, namespace: 'mandatory-mock' }));
-      builder.onLoad({ filter: /.*/, namespace: 'mandatory-mock' }, ({ path }) => ({ contents: path === '@capacitor/core'
-        ? 'export const Capacitor = { isNativePlatform: () => true, isPluginAvailable: () => true };'
-        : path === '@capacitor/app'
-          ? 'export const App = { addListener: async () => ({ remove() {} }) };'
-          : `export const LiveUpdate = {
+      builder.onLoad({ filter: /.*/, namespace: 'mandatory-mock' }, ({ path }) => ({ contents: nativeMockSource(path,
+        'export const Capacitor = { isNativePlatform: () => true, isPluginAvailable: () => true };',
+          `export const LiveUpdate = {
               ready: async () => { window.readyCalls++; },
               getChannel: async () => ({ channel: '${config.runtime}' }),
               getCurrentBundle: async () => ({ bundleId: window.currentBundle }),
@@ -72,7 +74,7 @@ try {
               downloadBundle: async () => { window.downloadCalls++; await new Promise(resolve => { window.finishDownload = resolve; }); },
               setNextBundle: async () => { window.stageCalls++; },
               reload: async () => { window.reloadCalls++; }
-            };` }));
+            };`) }));
     } }],
   });
   const html = await readFile('index.html', 'utf8');

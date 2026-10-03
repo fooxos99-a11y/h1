@@ -26,19 +26,20 @@ export function readSignedEnvelope(envelope, publicKey) {
 }
 
 export async function listWebFiles(root, directory = '') {
-  const files = [];
-  for (const entry of await readdir(path.join(root, directory), { withFileTypes: true })) {
+  const entries = await readdir(path.join(root, directory), { withFileTypes: true });
+  const nestedFiles = await Promise.all(entries.map(async (entry) => {
     const name = directory ? `${directory}/${entry.name}` : entry.name;
     if (entry.isSymbolicLink() || entry.name.startsWith('.')
       || /\.(apk|aab|ipa|dex|jar|so|swift|kt|java|pem|key|p12|p8|map)$/i.test(entry.name)
       || /^(downloads|node_modules|server)(\/|$)/.test(name)) {
       throw new Error(`Non-web or sensitive file in OTA build: ${name}`);
     }
-    if (entry.isDirectory()) files.push(...await listWebFiles(root, name));
-    else if (entry.isFile()) files.push(name);
-    else throw new Error(`Unsupported OTA file: ${name}`);
-  }
-  return files.sort();
+    if (entry.isDirectory()) return listWebFiles(root, name);
+    if (entry.isFile()) return [name];
+    throw new Error(`Unsupported OTA file: ${name}`);
+  }));
+  const files = nestedFiles.flat();
+  return files.sort((first, second) => first < second ? -1 : Number(first > second));
 }
 
 export async function packageWebBundle(webDir, outputFile, config, privateKey) {
