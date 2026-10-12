@@ -63,8 +63,20 @@ test('a late completed in Nazem matches without comparing evaluation details Naz
 test('a matching final outcome is reconciled without resending or replacing its metrics', async () => {
   const task = fixture();
   task.mapped.completed = true;
-  assert.equal((await submitWithNazemAuthority(task)).authoritative, true);
-  assert.equal(task.imported[0].mistake, 4);
+  const receipt = await submitWithNazemAuthority(task);
+  assert.equal(receipt.alreadyRecorded, true);
+  assert.equal(receipt.externalId, '31');
+  assert.deepEqual(task.imported, []);
+  assert.deepEqual(task.sent, []);
+});
+
+test('rechecking a confirmed result preserves the original grade through repeated retries', async () => {
+  const task = fixture();
+  task.mapped.completed = true;
+  task.importDay = async () => { throw new Error('Would insert another graded attempt'); };
+  for (let retry = 0; retry < 3; retry += 1) {
+    assert.equal((await submitWithNazemAuthority(task)).alreadyRecorded, true);
+  }
   assert.deepEqual(task.sent, []);
 });
 
@@ -83,6 +95,24 @@ test('remote absence prevents sending even when local attendance says present', 
   assert.deepEqual(task.sent, []);
 });
 
+test('historical presence cannot replace missing attendance on the execution day', async () => {
+  const task = fixture('pending', null);
+  Object.assign(task.mapped, { attendanceStatus: 2, sessionDate: '2026-09-07' });
+  await assert.rejects(submitWithNazemAuthority(task), { code: 'RUWASI_ATTENDANCE_MISSING' });
+  assert.deepEqual(task.sent, []);
+  assert.deepEqual(task.attendances, []);
+  assert.deepEqual(task.imported, []);
+});
+
+test('attendance saved for the actual execution day can send an older pending task', async () => {
+  const task = fixture('pending', null);
+  Object.assign(task.mapped, { attendanceStatus: 2, sessionDate: getBusinessDate() });
+  await submitWithNazemAuthority(task);
+  assert.equal(task.sent.length, 1);
+  assert.equal(task.sent[0].attendanceStatus, 2);
+  assert.equal(task.sent[0].date, '2026-09-06');
+});
+
 test('missing attendance on both sides and failed remote reads never submit fallback data', async () => {
   const task = fixture('pending', null);
   await assert.rejects(submitWithNazemAuthority(task), { code: 'RUWASI_ATTENDANCE_MISSING' });
@@ -94,7 +124,7 @@ test('missing attendance on both sides and failed remote reads never submit fall
 
 test('identity and local import failures do not overwrite the remote record', async () => {
   const task = fixture();
-  task.mapped.completed = true;
+  task.mapped.completed = false;
   task.importDay = async () => ({ synced: 0, review: 1 });
   await assert.rejects(submitWithNazemAuthority(task), { code: 'NAZEM_REMOTE_DAILY_RANGE_UNMATCHED' });
   task.studentLink.nazemStudentId = '92';
@@ -105,6 +135,7 @@ test('identity and local import failures do not overwrite the remote record', as
 
 test('a remote result finalized during submission is imported after one fresh read', async () => {
   const task = fixture('pending');
+  task.mapped.completed = true;
   task.adapter.submitRecitation = async () => {
     task.day.status = 'not_completed';
     throw Object.assign(new Error('changed'), { syncStatus: 'conflict' });

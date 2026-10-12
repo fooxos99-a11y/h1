@@ -3,6 +3,12 @@ import { validateManualPointsBatch } from './manualProgramPoints.js';
 
 const fail = (message, statusCode = 422) => Object.assign(new Error(message), { statusCode });
 
+async function requireStudentScope(connection, actor, student) {
+  if (!['supervisor', 'reciter'].includes(actor.role)) return;
+  const [[scope]] = await connection.query('SELECT 1 AS allowed FROM supervisor_committees WHERE supervisor_id = ? AND committee_id = ? LIMIT 1', [actor.id, student.committeeId]);
+  if (!scope) throw fail('يمكنك تسجيل نقاط طلاب حلقاتك فقط.', 403);
+}
+
 export function requireActivePointsStation(settings, stationId) {
   if (!settings.pointsSystemEnabled || !settings.summitEnabled) throw fail('الخريطة أو نظام النقاط غير مفعّل.');
   const config = normalizeSummitMapConfig(settings.summitMapConfig);
@@ -21,10 +27,7 @@ export async function saveStationPointsBatch(connection, { stationId, grades, ac
   for (const { studentId, points } of [...grades].sort((a, b) => a.studentId - b.studentId)) {
     const [[student]] = await connection.query('SELECT id, committee_id AS committeeId FROM students WHERE id = ? FOR UPDATE', [studentId]);
     if (!student) throw fail('الطالب غير موجود.', 404);
-    if (actor.role === 'supervisor' || actor.role === 'reciter') {
-      const [[scope]] = await connection.query('SELECT 1 AS allowed FROM supervisor_committees WHERE supervisor_id = ? AND committee_id = ? LIMIT 1', [actor.id, student.committeeId]);
-      if (!scope) throw fail('يمكنك تسجيل نقاط طلاب حلقاتك فقط.', 403);
-    }
+    await requireStudentScope(connection, actor, student);
     const [[previous]] = await connection.query('SELECT id, earned_points AS earnedPoints FROM student_station_points WHERE student_id = ? AND station_id = ? FOR UPDATE', [studentId, station.id]);
     const delta = points - Number(previous?.earnedPoints || 0);
     const [saved] = await connection.query(`INSERT INTO student_station_points (student_id, station_id, earned_points, completed_at)

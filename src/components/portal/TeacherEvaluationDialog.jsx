@@ -208,7 +208,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
   };
 
   const openRecitation = (student) => {
-    prepareRecitation(student);
+    void prepareRecitation(student);
   };
 
   const selectedTask = selectedStudent?.tasks?.[0];

@@ -27,6 +27,15 @@ test('only linked students without attendance default to present, once, through 
   assert.equal(f.calls.filter((c) => c.save).length, 1);
 });
 
+test('delegated reciter can use the configured Nazem attendance default without replacing absence', async () => {
+  const f = fixture({ actor: { role: 'reciter', id: 99 } });
+  assert.deepEqual(await ensureNazemAutomaticAttendance(f.connection, f.options, f.dependencies), [1]);
+  assert.equal(f.calls.find((call) => call.queue)?.queue.actor.id, 99);
+  const absent = fixture({ actor: { role: 'reciter', id: 99 }, attendanceByStudent: new Map([[1, 'absent']]) });
+  assert.deepEqual(await ensureNazemAutomaticAttendance(absent.connection, absent.options, absent.dependencies), []);
+  assert.equal(absent.calls.length, 0);
+});
+
 test('automatic attendance preserves all recorded statuses and skips history, other roles and disabled sites', async () => {
   for (const status of ['absent', 'excused', 'late', 'present']) {
     const f = fixture({ attendanceByStudent: new Map([[1, status]]) });

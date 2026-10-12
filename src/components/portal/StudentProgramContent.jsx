@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, FileDown, Sparkles } from 'lucide-react';
+import { CheckCircle2, Sparkles } from 'lucide-react';
 import ProgramChoiceIndicator from '@/components/programs/ProgramChoiceIndicator';
 import ProgramRichText from '@/components/programs/ProgramRichText';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/use-toast';
 import useRewardUnits from '@/hooks/useRewardUnits';
 import { hasProgramActivity } from '@/lib/programActivity';
 import StudentProgramResult from '@/components/programs/StudentProgramResult';
+import ProgramAttachment from '@/components/programs/ProgramAttachment';
 
 export default function StudentProgramContent({ program, onCompleted }) {
   const rewardUnits = useRewardUnits();
@@ -55,7 +56,7 @@ export default function StudentProgramContent({ program, onCompleted }) {
       setQuestionIndex((current) => current + 1);
       return;
     }
-    submit();
+    void submit();
   };
 
   const _resolveConditional = () => {
@@ -75,16 +76,7 @@ export default function StudentProgramContent({ program, onCompleted }) {
             <ProgramRichText className="rounded-2xl border border-primary/10 bg-primary/[0.05] p-4 text-sm font-semibold text-foreground sm:p-5 sm:text-base">
               {content?.value || ''}
             </ProgramRichText>
-            {attachment && (
-              <a
-                href={attachment.value}
-                download={attachment.fileName || 'ملف مرفق'}
-                className="flex min-h-12 items-center gap-3 rounded-2xl border border-primary/20 bg-background px-4 font-black text-primary transition-colors hover:bg-primary/5"
-              >
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10"><FileDown className="h-5 w-5" /></span>
-                <span className="min-w-0 flex-1 truncate">{attachment.fileName || 'تحميل الملف المرفق'}</span>
-              </a>
-            )}
+            <ProgramAttachment attachment={attachment} />
             {program.completedAt && !canAttempt && (
               <p className="rounded-xl bg-emerald-500/10 px-4 py-3 text-sm font-black text-emerald-700 dark:text-emerald-300">
                 النتيجة: {rewardUnits.format(program.earnedPoints)}

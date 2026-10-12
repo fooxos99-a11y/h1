@@ -83,7 +83,8 @@ test('session failures are scoped to the actual recitation day and automatic imp
   const server = await readFile(new URL('../server/index.js', import.meta.url), 'utf8');
   const query = server.slice(server.indexOf('const [nazemPendingRows]'), server.indexOf('const nazemPendingStudentIds'));
   assert.match(query, /currentAttempt\.session_date = \?/);
-  assert.match(query, /\[supervisorId, date\]/);
+  assert.match(query, /\[\.\.\.nazemTeacherIds, \.\.\.scopedStudentIds, date\]/);
+  assert.match(query, /teacher_id IN \(\$\{teacherSlots\}\)/);
   const service = await readFile(new URL('../server/integrations/nazem/service.js', import.meta.url), 'utf8');
   const refresh = service.slice(service.indexOf('async function refreshTeacherFollowUps'), service.indexOf('async function reconcileTeacher'));
   assert.match(refresh, /readStudentFollowUpHistory/);

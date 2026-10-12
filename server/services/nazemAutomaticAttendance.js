@@ -4,7 +4,7 @@ import { enqueueNazemAttendance } from '../integrations/nazem/queue.js';
 export async function ensureNazemAutomaticAttendance(connection, {
   enabled, students, attendanceByStudent, date, today, actor, settings,
 }, { saveAttendance = saveAttendanceWithPoints, enqueueAttendance = enqueueNazemAttendance } = {}) {
-  if (!enabled || date !== today || actor?.role !== 'supervisor' || !settings.nazemIntegrationEnabled) return [];
+  if (!enabled || date !== today || !['supervisor', 'reciter'].includes(actor?.role) || !settings.nazemIntegrationEnabled) return [];
   const added = [];
   for (const student of students) {
     const studentId = Number(student.id);

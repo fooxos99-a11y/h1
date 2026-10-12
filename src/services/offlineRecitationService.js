@@ -446,6 +446,7 @@ export function syncOfflineRecitations(supervisorId, { force = false } = {}) {
     results.push(...await syncOfflineActions(supervisorId, { force }));
     const pendingStatuses = ['pending', 'failed', 'invalid_sequence', 'syncing'];
     if (force) pendingStatuses.push('rejected_permission');
+    if (force) pendingStatuses.push('conflict');
     const pending = (await offlineRecitationStore.getSessions(
       actorKey,
       pendingStatuses,
@@ -545,7 +546,7 @@ async function applyOfflineBatchOutcomes({ batch, outcomeById, actorKey, results
       nextRetryAt: status.startsWith('rejected_') || status === 'conflict'
         ? null
         : nextRetryAt(retryCount),
-      lastError: outcome.tasks?.find((item) => item.message)?.message || 'تعذرت مزامنة الجلسة.',
+      lastError: outcome.tasks?.find((item) => item.message)?.message || outcome.message || 'تعذرت مزامنة الجلسة.',
     });
     results.push(resolved);
     resolvedSessionIds.add(session.sessionId);

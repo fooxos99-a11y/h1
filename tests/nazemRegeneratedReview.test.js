@@ -162,7 +162,7 @@ test('current review cycles survive identity regeneration through authority, sub
         path: `/educational-plans/item-days/${f.day.id}/not-completed`, acceptedAt: '2026-09-23',
       }] } }, false);
       const replay = await submitWithNazemAuthority(task);
-      assert.equal(replay.authoritative, true);
+      assert.equal(replay.alreadyRecorded, true);
       assert.equal(f.posts(), 1);
     }
   }

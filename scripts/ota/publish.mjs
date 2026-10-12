@@ -16,7 +16,7 @@ for (const name of ['OTA_BASE_URL', 'OTA_PUBLIC_KEY', 'OTA_NATIVE_RUNTIME', 'OTA
 if (!/^[a-f0-9]{32}$/.test(env.OTA_R2_ACCOUNT_ID) || !/^[a-f0-9]{64}$/.test(env.OTA_NATIVE_RUNTIME)) {
   throw new Error('Invalid R2 account or approved OTA runtime.');
 }
-const privateKey = env.OTA_SIGNING_PRIVATE_KEY.replaceAll('\\n', '\n');
+const privateKey = env.OTA_SIGNING_PRIVATE_KEY.replaceAll(String.raw`\n`, '\n');
 const config = {
   appId: JSON.parse(await readFile('capacitor.config.json', 'utf8')).appId,
   runtime: env.OTA_NATIVE_RUNTIME,

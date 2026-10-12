@@ -1,5 +1,5 @@
-import React from 'react';
-import { X } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowRight, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -14,13 +14,13 @@ const tint = (color, amount = 14) => `color-mix(in oklab, ${color} ${amount}%, t
 const TILE_GRID = Object.freeze({ 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-2 sm:grid-cols-4', 5: 'grid-cols-3 sm:grid-cols-5' });
 const STAT_GRID = Object.freeze({ 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-2 sm:grid-cols-4', 5: 'grid-cols-2 sm:grid-cols-5' });
 
-const BarGroup = ({ group, color }) => (
+const BarGroup = ({ group, color, onSourceClick }) => (
   <section className="space-y-3">
     <h3 className="text-xs font-bold text-muted-foreground">{group.title}</h3>
     {group.rows.map((row, index) => {
       const percent = Math.max(0, Math.min(100, Number(row.percent || 0)));
-      return (
-        <div key={`${row.label}-${index}`} className="rounded-xl border border-border bg-card p-4">
+      const content = (
+        <>
           <div className="flex items-center justify-between gap-3 text-sm">
             <span className="min-w-0 truncate font-bold">{row.label}</span>
             <span className="shrink-0 font-black tabular-nums" style={{ color }} dir="ltr">{row.display ?? `${formatNumber(percent)}%`}</span>
@@ -31,8 +31,14 @@ const BarGroup = ({ group, color }) => (
               style={{ width: `${percent}%`, background: color, transitionDelay: `${index * 45}ms` }}
             />
           </div>
-        </div>
+        </>
       );
+      const className = 'h-auto w-full rounded-xl border border-border bg-card p-4';
+      return row.records ? (
+        <Button key={`${row.label}-${index}`} type="button" variant="ghost" className={`${className} block text-start`} onClick={() => onSourceClick(row.label)}>
+          {content}
+        </Button>
+      ) : <div key={`${row.label}-${index}`} className={className}>{content}</div>;
     })}
   </section>
 );
@@ -102,10 +108,16 @@ const DetailFilters = ({ metric, committees, committee, onCommitteeChange, onStu
 
 /** Centred window of one indicator: small summary cards, the circles and the records behind it. */
 export default function MetricDetails({ metric, periodLabel, committees = [], committee = ALL_COMMITTEES, onCommitteeChange, onStudentChange, onClose, onRetry }) {
+  const [sourceSelection, setSourceSelection] = useState(null);
+  const selectionContext = JSON.stringify([metric?.id, metric?.student, committee, periodLabel]);
+  const selectedSource = sourceSelection?.context === selectionContext
+    ? (metric?.bars || []).flatMap(group => group.rows).find(row => row.records && row.label === sourceSelection.label)
+    : null;
+  const close = () => { setSourceSelection(null); onClose(); };
   const Icon = metric?.icon;
   const tiles = metric?.tiles || [];
   return (
-    <Dialog open={Boolean(metric)} onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog open={Boolean(metric)} onOpenChange={(open) => { if (!open) close(); }}>
       <DialogContent
         aria-describedby={undefined}
         className="flex max-h-[calc(100dvh-2rem)] max-w-3xl flex-col gap-0 overflow-hidden bg-[hsl(var(--background))] p-0 sm:gap-0 sm:p-0 [font-family:var(--font-ui)]"
@@ -121,7 +133,7 @@ export default function MetricDetails({ metric, periodLabel, committees = [], co
                 <DialogTitle className="truncate text-base">تفاصيل {metric.label}</DialogTitle>
                 <p className="text-xs text-muted-foreground">{periodLabel}</p>
               </div>
-              <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" onClick={onClose} aria-label="إغلاق">
+              <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" onClick={close} aria-label="إغلاق">
                 <X className="h-5 w-5" />
               </Button>
             </div>
@@ -132,15 +144,24 @@ export default function MetricDetails({ metric, periodLabel, committees = [], co
               {!metric.error && metric.loading && <DashboardLoader className="py-10" />}
               {!metric.error && !metric.loading && (
                 <>
+                  {selectedSource ? (
+                    <>
+                      <Button type="button" variant="outline" className="min-h-11 gap-2" onClick={() => setSourceSelection(null)}>
+                        <ArrowRight className="h-4 w-4" /> المصادر
+                      </Button>
+                      <RecordGroup group={{ title: selectedSource.label, rows: selectedSource.records }} />
+                    </>
+                  ) : <>
                   {tiles.length > 0 && (
                     <div className={`grid gap-3 ${TILE_GRID[tiles.length] || 'grid-cols-2 sm:grid-cols-4'}`}>
                       {tiles.map((tile) => <MetricTile key={tile.label} tile={tile} color={metric.color} />)}
                     </div>
                   )}
                   {(metric.bars || []).filter((group) => group.rows.length).map((group) => (
-                    <BarGroup key={group.title} group={group} color={metric.color} />
+                    <BarGroup key={group.title} group={group} color={metric.color} onSourceClick={(label) => setSourceSelection({ context: selectionContext, label })} />
                   ))}
                   {(metric.records || []).map((group) => <RecordGroup key={group.title} group={group} />)}
+                  </>}
                 </>
               )}
             </div>

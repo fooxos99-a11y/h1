@@ -42,7 +42,7 @@ test('server receipts require remote evidence and distinguish adoption from subm
   const connection = { query: async (sql, params) => {
     assert.match(sql, /a\.is_official = 1/);
     assert.match(sql, /sc\.supervisor_id = \? AND sc\.committee_id = s\.committee_id/);
-    assert.deepEqual(params, [11, 11, task.taskDate, 11]);
+    assert.deepEqual(params, [11, task.taskDate, 11]);
     const base = { linkId: 1, syncStatus: 'synced', confirmedAt: '2026-09-08', remoteSnapshot: '{"id":9}' };
     return [[base, { ...base, importedFromNazem: 'true' }, { ...base, remoteSnapshot: '{}' },
       { ...base, syncStatus: 'failed' }, { ...base, linkId: null }, { ...base, linkId: null, nazemManaged: 1 }]];

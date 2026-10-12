@@ -162,6 +162,16 @@ def run(operation, cwd=None, *, services=(), release=None):
     # Avoid printing service environment variables or npm configuration.
     result = subprocess.run([executable, *args[1:]], cwd=cwd, capture_output=True, text=True, shell=False)
     if result.returncode:
+        if operation == 'preflight':
+            phases = {'configuration', 'dependencies', 'migrations', 'database'}
+            codes = {'PENDING_MIGRATIONS', 'ER_ACCESS_DENIED_ERROR', 'ER_BAD_DB_ERROR', 'ECONNREFUSED', 'ETIMEDOUT', 'CHECK_FAILED'}
+            for line in result.stdout.splitlines():
+                try:
+                    diagnostic = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                if isinstance(diagnostic, dict) and diagnostic.get('event') == 'WEB_PREFLIGHT_FAILED' and diagnostic.get('phase') in phases and diagnostic.get('code') in codes:
+                    raise RuntimeError('Deployment preflight failed: ' + diagnostic['phase'] + ' / ' + diagnostic['code'])
         raise RuntimeError('Command failed: ' + args[0] + ' ' + args[1])
     return result.stdout
 

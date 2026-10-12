@@ -33,7 +33,10 @@ export default function ProgramsSection() {
         setPrograms([]);
         return;
       }
-      setPrograms((await studentsApi.getPrograms()).programs || []);
+      const currentPrograms = (await studentsApi.getPrograms()).programs || [];
+      setPrograms(currentPrograms);
+      setEntered(current => current ? currentPrograms.find(program => program.id === current.id) || null : null);
+      setEditing(current => current ? currentPrograms.find(program => program.id === current.id) || null : null);
     } catch (error) {
       toast({ title: 'تعذر تحميل البرامج', description: error.message, variant: 'destructive' });
     } finally {
@@ -63,8 +66,14 @@ export default function ProgramsSection() {
   const save = async (payload) => {
     setSaving(true);
     try {
-      if (editing) await studentsApi.updateProgram(editing.id, payload);
-      else await studentsApi.createProgram(payload);
+      const response = editing ? await studentsApi.updateProgram(editing.id, payload) : await studentsApi.createProgram(payload);
+      const savedProgram = response?.program;
+      if (savedProgram) {
+        setPrograms(current => current.some(program => program.id === savedProgram.id)
+          ? current.map(program => program.id === savedProgram.id ? savedProgram : program) : [savedProgram, ...current]);
+        setEntered(current => current?.id === savedProgram.id ? savedProgram : current);
+        setEditing(current => current?.id === savedProgram.id ? savedProgram : current);
+      }
       await load();
       setEditorOpen(false);
       toast({ title: editing ? 'حُفظت التعديلات' : 'أُضيف المستوى' });

@@ -84,6 +84,41 @@ test('incomplete or unrelated batch evidence never manufactures an acknowledgeme
   assert.deepEqual(merged, tasks);
 });
 
+test('forced retry reuses a conflicted session and its saved task payload', async () => {
+  let session = { sessionId: 'saved-conflict', status: 'conflict', studentId: 8, sessionDate: '2026-09-08', tasks: [
+    { taskId: 1, synced: true, payload: { mistakeCount: 2 }, result: { ok: true } },
+    { taskId: 2, synced: false, payload: { mistakeCount: 3 } },
+  ] };
+  const original = structuredClone(session);
+  let calls = 0;
+  const ports = {
+    store: {
+      getMeta: async () => null, setMeta: async () => {},
+      getSessions: async (_actor, statuses) => statuses.includes(session.status) ? [structuredClone(session)] : [],
+      updateSession: async (_actor, id, patch) => {
+        assert.equal(id, original.sessionId);
+        session = structuredClone({ ...session, ...patch });
+        return structuredClone(session);
+      },
+    },
+    api: { syncOfflineRecitationBatch: async (batch) => {
+      calls++;
+      assert.deepEqual(JSON.parse(JSON.stringify(batch)), [original]);
+      return { results: [{ sessionId: original.sessionId, result: 'accepted', tasks: [
+        { taskId: 1, result: 'already_synced', data: { ok: true } },
+        { taskId: 2, result: 'accepted', data: { ok: true } },
+      ] }] };
+    } },
+  };
+  const service = await loadService(ports);
+  await service.syncOfflineRecitations(11);
+  assert.equal(calls, 0);
+  await service.syncOfflineRecitations(11, { force: true });
+  assert.equal(calls, 1);
+  assert.equal(session.status, 'synced');
+  assert.deepEqual(session.tasks.map((task) => task.payload), original.tasks.map((task) => task.payload));
+});
+
 test('editing remaining work retains accepted payload and cannot advance an incomplete session', () => {
   const saved = { taskId: 1, synced: true, syncResultCode: 'accepted', result: { ok: true, teacherCompleted: true }, payload: { mistakeCount: 2 } };
   const pending = { taskId: 2, synced: false, payload: { offlineOutcome: { completed: true } } };

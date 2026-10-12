@@ -1,5 +1,6 @@
 import { mergeEditableRecitationTasks } from '../lib/recitationTaskResults.js';
 import { Capacitor } from '@capacitor/core';
+import { serializedSqliteConnection } from '../lib/serializedSqliteConnection.js';
 import { getAccountDeviceId } from '../lib/recitationDeviceIdentity.js';
 import {
   OFFLINE_RECITATION_DB_VERSION,
@@ -158,7 +159,7 @@ class OfflineRecitationStore {
     }
     await connection.execute(`CREATE INDEX IF NOT EXISTS offline_sessions_actor_student_date_type
       ON offline_recitation_sessions(actor_key, student_id, session_date, session_type)`);
-    this.connection = connection;
+    this.connection = serializedSqliteConnection(connection);
     this.driver = 'sqlite';
   }
 
@@ -268,25 +269,19 @@ class OfflineRecitationStore {
     }
     const row = { ...existing, ...session, actorKey, nextRetryAt: null, lastError: '' };
     if (this.driver === 'sqlite') {
-      await this.connection.beginTransaction();
-      try {
-        await this.connection.run(
-          `INSERT INTO offline_recitation_sessions
+      await this.connection.executeSet([
+        {
+          statement: `INSERT INTO offline_recitation_sessions
             (session_id, actor_key, student_id, session_date, session_type, status, payload_json,
              created_at_local, updated_at_local, next_retry_at, last_error)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
            ON CONFLICT(session_id) DO UPDATE SET status = excluded.status,
              payload_json = excluded.payload_json, updated_at_local = excluded.updated_at_local,
              next_retry_at = NULL, last_error = NULL`,
-          [row.sessionId, actorKey, row.studentId, row.sessionDate, row.sessionType, row.status, json(row), row.createdAtLocal, row.updatedAtLocal],
-          false,
-        );
-        await this.connection.run('DELETE FROM offline_drafts WHERE key = ?', [`${actorKey}:${row.studentId}`], false);
-        await this.connection.commitTransaction();
-      } catch (error) {
-        await this.connection.rollbackTransaction().catch(() => undefined);
-        throw error;
-      }
+          values: [row.sessionId, actorKey, row.studentId, row.sessionDate, row.sessionType, row.status, json(row), row.createdAtLocal, row.updatedAtLocal],
+        },
+        { statement: 'DELETE FROM offline_drafts WHERE key = ?', values: [`${actorKey}:${row.studentId}`] },
+      ], true);
     } else {
       const transaction = this.connection.transaction(['sessions', 'drafts'], 'readwrite');
       transaction.objectStore('sessions').put(row);

@@ -126,14 +126,16 @@ export async function collectComplianceFailures(root = projectRoot) {
 }
 
 async function inspectProjectSources(policy, root, failures) {
-  for (const sourceRoot of policy.sourceRoots) {
-    const files = await sourceFiles(path.join(root, sourceRoot));
-    for (const file of files) {
-      const relativePath = path.relative(root, file).replaceAll("\\", "/");
-      const source = await readFile(file, "utf8");
-      failures.push(...inspectSource(source, relativePath));
-      if (file.endsWith(".css")) failures.push(...inspectCssFonts(source, relativePath));
-    }
+  const files = (await Promise.all(policy.sourceRoots.map((sourceRoot) => sourceFiles(path.join(root, sourceRoot))))).flat();
+  const results = await Promise.all(files.map(async (file) => {
+    const relativePath = path.relative(root, file).replaceAll("\\", "/");
+    const source = await readFile(file, "utf8");
+    const sourceFailures = inspectSource(source, relativePath);
+    if (file.endsWith(".css")) sourceFailures.push(...inspectCssFonts(source, relativePath));
+    return sourceFailures;
+  }));
+  for (const result of results) {
+    failures.push(...result);
   }
 }
 

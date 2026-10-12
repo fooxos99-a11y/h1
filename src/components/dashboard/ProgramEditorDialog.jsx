@@ -1,6 +1,6 @@
 import { secureRandomId } from '../../../shared/secure-random.js';
 import ProgramSectionsEditor from '@/components/programs/ProgramSectionsEditor';
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { Paperclip, Plus, Trash2, X } from 'lucide-react';
 import ProgramChoiceIndicator from '@/components/programs/ProgramChoiceIndicator';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import SettingToggle from '@/components/ui/setting-toggle';
 import { Textarea } from '@/components/ui/textarea';
 import useRewardUnits from '@/hooks/useRewardUnits';
+import ProgramAttachment from '@/components/programs/ProgramAttachment';
 
 const emptyOption = () => ({ editorKey: secureRandomId('option'), text: '', isCorrect: false });
 const emptyQuestion = () => ({ editorKey: secureRandomId('question'), text: '', options: [{ ...emptyOption(), isCorrect: true }, emptyOption()] });
@@ -38,6 +39,8 @@ export default function ProgramEditorDialog({ open, program, saving, onOpenChang
   const fieldId = useId();
   const [draft, setDraft] = useState(emptyDraft);
   const [fileError, setFileError] = useState('');
+  const [readingFile, setReadingFile] = useState(false);
+  const fileReadId = useRef(0);
 
   useEffect(() => {
     if (!open) return;
@@ -69,25 +72,37 @@ export default function ProgramEditorDialog({ open, program, saving, onOpenChang
       });
     }
     setFileError('');
+    setReadingFile(false);
+    return () => { fileReadId.current += 1; };
   }, [open, program]);
 
   const readFile = async (file) => {
     if (!file) return;
+    const readId = ++fileReadId.current;
     if (file.size > 10 * 1024 * 1024) {
       setFileError('حجم الملف يجب ألا يتجاوز 10 ميجابايت.');
+      setReadingFile(false);
       return;
     }
     setFileError('');
-    const value = await fileAsDataUrl(file);
-    setDraft((current) => ({
-      ...current,
-      attachment: {
-        type: 'file',
-        value,
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-      },
-    }));
+    setReadingFile(true);
+    try {
+      const value = await fileAsDataUrl(file);
+      if (fileReadId.current !== readId) return;
+      setDraft((current) => ({
+        ...current,
+        attachment: { type: 'file', value, fileName: file.name, mimeType: file.type || 'application/octet-stream' },
+      }));
+    } catch (error) {
+      if (fileReadId.current === readId) setFileError(error.message || 'تعذرت قراءة الملف.');
+    } finally {
+      if (fileReadId.current === readId) setReadingFile(false);
+    }
+  };
+  const removeFile = () => {
+    fileReadId.current += 1;
+    setReadingFile(false); setFileError('');
+    setDraft(current => ({ ...current, attachment: null }));
   };
 
   const updateQuestion = (index, patch) => setDraft((current) => ({
@@ -103,7 +118,9 @@ export default function ProgramEditorDialog({ open, program, saving, onOpenChang
   const chooseCorrect = (questionIndex, optionIndex) => updateQuestion(questionIndex, {
     options: draft.questions[questionIndex].options.map((item, index) => ({ ...item, isCorrect: index === optionIndex })),
   });
-  const submit = () => onSave({
+  const submit = () => {
+    if (saving || readingFile || fileError) return;
+    return onSave({
     sectionsEnabled: !sectionMode && draft.sectionsEnabled,
     sections: !sectionMode && draft.sectionsEnabled ? draft.sections : [],
     title: draft.title,
@@ -115,7 +132,8 @@ export default function ProgramEditorDialog({ open, program, saving, onOpenChang
       ...(draft.attachment ? [draft.attachment] : []),
     ],
     questions: draft.manual ? [] : draft.questions.map(({ text, options }) => ({ text, options: options.map(({ text: optionText, isCorrect }) => ({ text: optionText, isCorrect })) })),
-  });
+    });
+  };
 
   const _resolveConditional = () => {
     if (sectionMode) {
@@ -160,15 +178,15 @@ export default function ProgramEditorDialog({ open, program, saving, onOpenChang
               <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-primary/20 bg-background px-4 text-sm font-black text-primary transition-colors hover:bg-primary/5">
                 <Paperclip className="h-4 w-4" />
                 إرفاق ملف
-                <input type="file" className="sr-only" onChange={(event) => readFile(event.target.files?.[0])} />
+                <input type="file" className="sr-only" disabled={saving} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; void readFile(file); }} />
               </label>
               {draft.attachment && (
-                <span className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-xl bg-muted/60 px-3 text-sm font-bold text-foreground">
-                  <span className="truncate">{draft.attachment.fileName}</span>
-                  <button type="button" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-destructive hover:bg-destructive/10" aria-label="حذف الملف" onClick={() => setDraft({ ...draft, attachment: null })}>
+                <div className="flex w-full min-w-0 items-center gap-2">
+                  <div className="min-w-0 flex-1"><ProgramAttachment attachment={draft.attachment} /></div>
+                  <Button type="button" variant="ghost" size="icon" className="shrink-0 text-destructive" aria-label="حذف الملف" disabled={saving} onClick={removeFile}>
                     <X className="h-4 w-4" />
-                  </button>
-                </span>
+                  </Button>
+                </div>
               )}
             </div>
             {fileError && <p className="text-sm font-bold text-destructive">{fileError}</p>}
@@ -230,7 +248,7 @@ export default function ProgramEditorDialog({ open, program, saving, onOpenChang
         </div>}
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>إلغاء</Button>
-          <Button type="button" disabled={saving || !draft.title.trim() || (draft.sectionsEnabled && !draft.sections.length)} onClick={submit}>{saving ? 'جارٍ الحفظ...' : 'حفظ'}</Button>
+          <Button type="button" loading={readingFile} disabled={saving || readingFile || Boolean(fileError) || !draft.title.trim() || (draft.sectionsEnabled && !draft.sections.length)} onClick={submit}>{saving ? 'جارٍ الحفظ...' : 'حفظ'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

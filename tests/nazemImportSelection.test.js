@@ -34,10 +34,9 @@ test('roster IDs resolve missing dropdown IDs within the same circle without cho
 const rosterAdapter = (pages) => {
   const adapter = new NazemAdapter();
   let index = 0;
-  adapter.page = {
-    waitForResponse: async () => ({ json: async () => ({ data: pages[index++] }) }),
-    goto: async () => {},
-    getByRole: () => ({ click: async () => {} }),
+  adapter.getPlanApi = async path => {
+    assert.equal(path, `/api/students?page=${index + 1}`);
+    return { data: pages[index++] };
   };
   return adapter;
 };

@@ -1,6 +1,7 @@
 import { nazemLateOptions } from '../../shared/nazem-late-selection.js';
 import { isNazemFollowUpCompleted } from '../../shared/nazem-integration.js';
 import { isCurrentNazemSession } from '../integrations/nazem/scheduleAuthority.js';
+import { nazemTaskRangeSql } from '../integrations/nazem/taskRange.js';
 
 /**
  * A newer Nazem memorization cannot be saved while an older late of the same plan and track is
@@ -57,6 +58,7 @@ export async function validateNazemLateSession(connection, session, teacherId) {
      LEFT JOIN quran_surahs surah ON surah.surah_number = t.to_surah
      WHERE t.student_id = ? AND d.teacher_id = ? AND t.task_type = 'memorization'
        AND JSON_UNQUOTE(JSON_EXTRACT(d.remote_snapshot, '$.nazemLate')) = 'true'
+       AND ${nazemTaskRangeSql('t', 'd')}
      ORDER BY t.task_date, t.id FOR UPDATE`,
     [session.sessionId, Number(session.studentId), teacherId],
   );

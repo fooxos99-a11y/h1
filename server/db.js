@@ -1776,7 +1776,11 @@ export async function initDatabase(databaseName = defaultDatabaseName, options =
       databasePools.delete(normalizedName);
       databasePoolUsage.delete(normalizedName);
       if (normalizedName === defaultDatabaseName) defaultPool = undefined;
-      await failedPool?.end().catch(() => {});
+      try {
+        await failedPool?.end();
+      } catch {
+        // Preserve the initialization error if closing its failed pool also fails.
+      }
       throw error;
     })
     .finally(() => databaseInitializations.delete(normalizedName));

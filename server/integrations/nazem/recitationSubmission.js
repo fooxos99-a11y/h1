@@ -31,7 +31,7 @@ export async function captureRecitationTarget(connection, dailyFollowUpId, attem
           AND source.teacher_id = daily.teacher_id AND source.follow_up_date = daily.follow_up_date
           AND source.task_type = 'memorization' AND source.track = daily.track LIMIT 1
       ) WHEN daily.task_type = 'review' THEN daily.remote_snapshot
-      ELSE COALESCE(JSON_EXTRACT(daily.local_snapshot, '$.nazemSavedTarget'), daily.remote_snapshot) END AS source, student.nazem_student_id AS studentExternalId,
+      ELSE daily.remote_snapshot END AS source, student.nazem_student_id AS studentExternalId,
       plan.nazem_plan_id AS planExternalId
      FROM nazem_daily_follow_up_links daily
      JOIN nazem_plan_links plan ON plan.ruwasi_plan_id = daily.ruwasi_plan_id AND plan.teacher_id = daily.teacher_id
@@ -90,6 +90,10 @@ export function applyRecitationWriteIdentity(mapped, job, verificationOnly) {
   if (ids.length === 1) {
     mapped.nazemOriginalSourceDayId = mapped.nazemSourceDayId;
     mapped.nazemSourceDayId = ids[0];
+    if (mapped.taskType === 'memorization' && !mapped.completed && sent.some(write => write.acceptedAt
+      && write.path === `/educational-plans/item-days/${ids[0]}/not-completed`)) {
+      mapped.acceptedIncompleteDayId = ids[0];
+    }
   }
 }
 
@@ -124,6 +128,7 @@ export function recitationWriteJournal(connection, job) {
     job.payload.deliveryWrites = writes;
   };
   return {
+    isAccepted: path => (job.payload.deliveryWrites || []).some(write => write.path === path && write.acceptedAt && !write.rejectedAt),
     before: async path => {
       const writes = job.payload.deliveryWrites || [];
       if (writes.some(write => write.path === path && !write.rejectedAt)) {

@@ -109,7 +109,7 @@ const PublicRankingsSection = () => {
         if (mounted) setIsLoading(false);
       }
     };
-    loadRankings();
+    void loadRankings();
     return () => { mounted = false; };
   }, []);
 

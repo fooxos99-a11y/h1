@@ -2,6 +2,8 @@ import { nazemTaskTrack } from './taskTrack.js';
 import { reconcileNazemReview } from './reviewIdentity.js';
 import { loadNazemPlanLinkCount } from './planLinkCount.js';
 import { latestNazemScheduleSql } from './scheduleAuthority.js';
+import { tasksMatchingNazemRange } from './taskRange.js';
+import { isConfirmedNazemRemainder } from './partialRemainder.js';
 
 const supportedTaskTypes = new Set(['memorization', 'review']);
 
@@ -25,7 +27,7 @@ async function loadAyahPage(connection, surah, ayah) {
 }
 
 async function insertTaskRange(connection, {
-  plan, date, taskType, fromPage, toPage, fromSurah, fromAyah, toSurah, toAyah, nazemReviewId = null,
+  plan, date, taskType, fromPage, toPage, fromSurah, fromAyah, toSurah, toAyah, nazemReviewId = null, nazemRemainderKey = '',
 }) {
   const targetPages = Math.max(0.25, Math.abs(Number(toPage) - Number(fromPage)) + 1);
   await connection.query(
@@ -33,11 +35,11 @@ async function insertTaskRange(connection, {
       (plan_id, student_id, task_date, task_type, track, from_page, to_page,
        from_surah, from_ayah, to_surah, to_ayah, target_pages,
        normal_to_page, normal_to_surah, normal_to_ayah,
-       scheduled_to_page, scheduled_to_surah, scheduled_to_ayah, nazem_review_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       scheduled_to_page, scheduled_to_surah, scheduled_to_ayah, nazem_review_id, nazem_remainder_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [plan.id, plan.studentId, date, taskType, plan.track, fromPage, toPage,
       fromSurah, fromAyah, toSurah, toAyah, targetPages,
-      toPage, toSurah, toAyah, toPage, toSurah, toAyah, nazemReviewId],
+      toPage, toSurah, toAyah, toPage, toSurah, toAyah, nazemReviewId, nazemRemainderKey],
   );
 }
 
@@ -52,21 +54,29 @@ async function replaceUntouchedTaskType(connection, {
   toSurah,
   toAyah,
   nazemReviewId = null,
+  sourceDay = null,
 }) {
   const [tasks] = await connection.query(
     `SELECT t.id, t.from_surah AS fromSurah, t.from_ayah AS fromAyah,
       t.to_surah AS toSurah, t.to_ayah AS toAyah, t.student_status AS studentStatus,
       t.teacher_completed AS teacherCompleted, t.evaluated_at AS evaluatedAt,
       t.execution_actor_role AS executionActorRole,
+      receipt.sync_status AS deliveryStatus, receipt.remote_snapshot AS deliverySnapshot,
+      receipt.local_snapshot AS deliveryLocal,
       EXISTS (SELECT 1 FROM student_quran_recitation_attempts a WHERE a.task_id = t.id) AS hasAttempt,
       EXISTS (SELECT 1 FROM student_quran_task_ayah_marks m WHERE m.task_id = t.id) AS hasAyahMarks,
       EXISTS (SELECT 1 FROM student_quran_task_word_marks w WHERE w.task_id = t.id) AS hasWordMarks
      FROM student_quran_tasks t
+     LEFT JOIN nazem_recitation_links receipt ON receipt.ruwasi_recitation_id = (
+       SELECT a.id FROM student_quran_recitation_attempts a WHERE a.task_id = t.id AND a.is_official = 1
+       ORDER BY a.attempt_number DESC, a.id DESC LIMIT 1
+     ) AND receipt.teacher_id = ?
      WHERE t.plan_id = ? AND t.student_id = ? AND t.task_date = ? AND t.task_type = ? AND t.track = ?
      ORDER BY t.from_page, t.from_surah, t.from_ayah FOR UPDATE`,
-    [plan.id, plan.studentId, date, taskType, plan.track],
+    [plan.teacherId || 0, plan.id, plan.studentId, date, taskType, plan.track],
   );
-  if (exactRangeMatches(tasks, { surah_from: fromSurah, verse_from: fromAyah, surah_to: toSurah, verse_to: toAyah })) {
+  const range = { surah_from: fromSurah, verse_from: fromAyah, surah_to: toSurah, verse_to: toAyah };
+  if (exactRangeMatches(tasksMatchingNazemRange(tasks, range), range)) {
     return { matched: true, changed: false };
   }
   const touched = tasks.some((task) => (
@@ -78,7 +88,16 @@ async function replaceUntouchedTaskType(connection, {
     || Number(task.hasAyahMarks)
     || Number(task.hasWordMarks)
   ));
-  if (touched) return { matched: false, changed: false, reason: 'task_started' };
+  if (touched) {
+    if (taskType !== 'memorization' || !await isConfirmedNazemRemainder(connection, tasks, sourceDay)) {
+      return { matched: false, changed: false, reason: 'task_started' };
+    }
+    await insertTaskRange(connection, {
+      plan, date, taskType, fromPage, toPage, fromSurah, fromAyah, toSurah, toAyah,
+      nazemRemainderKey: `${sourceDay.source_day_id}:${fromSurah}:${fromAyah}:${toSurah}:${toAyah}`,
+    });
+    return { matched: true, changed: true, remainder: true };
+  }
 
   if (tasks.length) {
     await connection.query(
@@ -150,9 +169,12 @@ async function syncScheduledRange(connection, link, day) {
     toSurah: values[2],
     toAyah: values[3],
     nazemReviewId: taskType === 'review' ? dailyId : null,
+    sourceDay: day,
   });
   if (!primary.matched || taskType !== 'memorization') return primary;
   await ensureScheduledLinkTask({ plan, connection, day, fromPage, toPage, values });
+  // Repetition belonging to the original evaluation keeps its history too.
+  if (primary.remainder) return primary;
   const repeat = await replaceUntouchedTaskType(connection, {
     plan,
     date: day.date,

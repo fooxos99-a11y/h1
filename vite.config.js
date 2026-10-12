@@ -5,6 +5,7 @@ import { defineConfig, loadEnv } from 'vite';
 import { getSiteConfig } from './src/site/siteConfigs.js';
 import { renderSiteMetadata } from './src/site/siteMetadata.js';
 import { getOtaBuildConfig } from './scripts/ota/config.mjs';
+import { pdfPreviewAssets } from './scripts/pdf-preview-assets.mjs';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -18,6 +19,7 @@ export default defineConfig(({ mode }) => {
   define: { __OTA_CONFIG__: JSON.stringify(ota) },
   plugins: [
     react(),
+    pdfPreviewAssets(),
     {
       name: 'ota-build-metadata',
       generateBundle() {

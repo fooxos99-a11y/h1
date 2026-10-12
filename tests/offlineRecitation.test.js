@@ -220,8 +220,9 @@ test('client persists atomically, restores drafts, retries globally, and never b
     read('../src/lib/authSession.js'),
     read('../capacitor.config.json'),
   ]);
-  assert.match(store, /beginTransaction\(\)/);
-  assert.match(store, /rollbackTransaction/);
+  assert.match(store, /this\.connection\.executeSet\(\[/);
+  assert.match(store, /\], true\)/);
+  assert.match(store, /serializedSqliteConnection\(connection\)/);
   assert.match(store, /indexedDB\.open/);
   assert.match(sync, /RETRY_DELAYS_MS/);
   assert.match(sync, /syncOfflineRecitationBatch/);

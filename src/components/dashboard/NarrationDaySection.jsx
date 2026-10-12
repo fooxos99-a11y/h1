@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Archive, CheckCircle2, Plus, RotateCcw, Trash2, Users } from 'lucide-react';
 import { DashboardDatePicker } from '@/components/dashboard/DashboardControls';
 import DashboardMobileHeaderActions from '@/components/dashboard/DashboardMobileHeaderActions';
+import NarrationSetupStudents from '@/components/dashboard/NarrationSetupStudents';
 import NarrationStudentPanel from '@/components/dashboard/NarrationStudentPanel';
 import DashboardLoader from '@/components/dashboard/DashboardLoader';
 import CommitteeMultiSelect from '@/components/dashboard/CommitteeMultiSelect';
@@ -71,7 +72,8 @@ const NarrationDaySection = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [form, setForm] = useState({ name: '', startDate: today(), endDate: today(), committeeIds: ['all'] });
+  const [setupReady, setSetupReady] = useState(false);
+  const [form, setForm] = useState({ selectionMode: 'full', studentSelections: [], name: '', startDate: today(), endDate: today(), committeeIds: ['all'] });
 
   const loadEvent = useCallback(async (id) => {
     if (!id) { setEvent(null); return; }
@@ -394,7 +396,7 @@ const NarrationDaySection = () => {
       </Dialog>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="bg-card" dir="rtl">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto bg-card [font-family:var(--font-ui)]" dir="rtl">
           <DialogHeader><DialogTitle>فتح يوم سرد</DialogTitle></DialogHeader>
           <div className="grid gap-4">
             <div className="space-y-1"><Label>اسم يوم السرد</Label><Input aria-label="اسم يوم السرد" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></div>
@@ -402,9 +404,13 @@ const NarrationDaySection = () => {
               <div className="min-w-0 space-y-1"><Label>البداية</Label><DashboardDatePicker value={form.startDate} max={form.endDate} onChange={(startDate) => setForm({ ...form, startDate })} ariaLabel="بداية يوم السرد" /></div>
               <div className="min-w-0 space-y-1"><Label>النهاية</Label><DashboardDatePicker value={form.endDate} min={form.startDate} onChange={(endDate) => setForm({ ...form, endDate })} ariaLabel="نهاية يوم السرد" /></div>
             </div>
-            <div className="space-y-2"><Label>الحلقات</Label><CommitteeMultiSelect committees={committees} value={form.committeeIds} onChange={(committeeIds) => setForm({ ...form, committeeIds })} /></div>
+            <div className="space-y-2"><Label>الحلقات</Label><CommitteeMultiSelect committees={committees} value={form.committeeIds} onChange={(committeeIds) => setForm({ ...form, committeeIds, studentSelections: [] })} /></div>
+            {createOpen && <NarrationSetupStudents startDate={form.startDate} committeeIds={form.committeeIds} selectionMode={form.selectionMode} selections={form.studentSelections}
+              onReady={setSetupReady} onModeChange={(selectionMode) => setForm({ ...form, selectionMode, studentSelections: [] })}
+              onChange={(studentSelections) => setForm({ ...form, studentSelections })} />}
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setCreateOpen(false)}>إلغاء</Button><Button onClick={createEvent} disabled={isSaving || !form.name || !form.committeeIds.length}>فتح</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setCreateOpen(false)}>إلغاء</Button><Button onClick={createEvent} disabled={isSaving || !setupReady || !form.name.trim() || !form.committeeIds.length || !form.studentSelections.length
+              || (form.selectionMode === 'manual' && form.studentSelections.some((item) => !Number.isInteger(Number(item.fromPage)) || !Number.isInteger(Number(item.faces)) || Number(item.fromPage) < 1 || Number(item.faces) < 1 || Number(item.fromPage) + Number(item.faces) - 1 > 604))}>فتح</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

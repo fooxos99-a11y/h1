@@ -6,9 +6,9 @@ import { calculateEvaluatedGroupReward, loadRecitationRewardSettings } from './r
 // never today's prices. The regular activation boundary remains unchanged.
 export function historicalPointRecoveryPlan(daily, tasks, ledger) {
   const skip = reason => ({ eligible: false, reason, dailyId: daily?.id });
-  if (!daily || daily.status !== 'requires_review' || daily.syncStatus !== 'synced'
+  if (daily?.status !== 'requires_review' || daily.syncStatus !== 'synced'
     || !daily.activationDate || daily.taskDate >= daily.activationDate) return skip('not_historical_review');
-  if (!isNazemFollowUpCompleted(daily.remoteStatus) || !/^[1-9][0-9]*$/.test(String(daily.remoteRecordId || ''))
+  if (!isNazemFollowUpCompleted(daily.remoteStatus) || !/^[1-9]\d*$/.test(String(daily.remoteRecordId || ''))
     || daily.remoteDate !== daily.taskDate) return skip('remote_unconfirmed');
   const primary = tasks.filter(task => task.taskType === daily.taskType && task.track === daily.track);
   if (!primary.length || tasks.some(task => task.taskType !== 'repeat'
@@ -63,12 +63,16 @@ export async function recoverHistoricalNazemPoints(connection, dailyId, { apply 
       WHERE d.id = ? FOR UPDATE`, [dailyId]);
     if (!daily) { await connection.rollback(); return { eligible: false, reason: 'missing_entitlement', dailyId }; }
     const types = daily.taskType === 'memorization' ? ['memorization', 'repeat', ...(daily.track === 'memorization' ? ['link'] : [])] : ['review'];
-    const [tasks] = await connection.query(`SELECT id, task_type AS taskType, track, points,
+    const [tasks] = await connection.query(`SELECT id, task_type AS taskType, track, points, nazem_remainder_key AS nazemRemainderKey,
       teacher_completed AS teacherCompleted, evaluated_at AS evaluatedAt,
       evaluation_score AS evaluationScore, actual_link_count AS actualLinkCount
       FROM student_quran_tasks WHERE student_id = ? AND plan_id = ? AND task_date = ? AND track = ?
       AND task_type IN (?) ORDER BY (task_type = ?) DESC, id FOR UPDATE`,
     [daily.studentId, daily.planId, daily.taskDate, daily.track, types, daily.taskType]);
+    if (tasks.some(task => task.nazemRemainderKey)) {
+      await connection.rollback();
+      return { eligible: false, reason: 'remainder_history_requires_receipts', dailyId };
+    }
     const [[ledger]] = await connection.query(`SELECT COALESCE(SUM(CASE WHEN transaction_type = 'increase' THEN points ELSE -points END), 0) AS total
       FROM student_point_transactions WHERE student_id = ? AND source_type IN ('quran_plan','quran_execution','quran_evaluation')
       AND source_id IN (?)`, [daily.studentId, tasks.length ? tasks.map(task => task.id) : [0]]);

@@ -109,7 +109,7 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
   }, [shouldLoad, studentId, toast, onReady]);
 
   useEffect(() => {
-    load();
+    void load();
     return () => { requestSequence.current += 1; };
   }, [load]);
 
@@ -423,7 +423,7 @@ const QuranExecutionContent = ({ studentId, open = false, onOpenChange, inline =
                 disabled={Boolean(savingTypes[group.type])}
                 onClick={() => {
                   const executed = ['done', 'partial', 'extra'].includes(group.status);
-                  updateTasks(group, executed ? 'not_done' : 'done', executed ? null : getSelectedEnd(group));
+                  void updateTasks(group, executed ? 'not_done' : 'done', executed ? null : getSelectedEnd(group));
                 }}
               >
                 {['done', 'partial', 'extra'].includes(group.status) && <CheckCircle2 className="h-4 w-4" />}

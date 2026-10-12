@@ -91,6 +91,25 @@ class ReleaseTests(unittest.TestCase):
                     receiver.run('preflight', release=root / release.name)
                 execute.assert_not_called()
 
+    def test_preflight_reports_only_allowlisted_diagnostics(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            control = root / 'shared' / 'github-deploy'
+            control.mkdir(parents=True)
+            (root / 'releases').mkdir()
+            release = root / 'releases' / 'github-20260924-120000-aaaaaaaaaaaa'
+            with patch.object(receiver, '__file__', str(control / 'receiver.py')), patch.object(receiver.shutil, 'which', return_value='/usr/bin/node'), patch.object(receiver.subprocess, 'run') as execute:
+                execute.return_value.returncode = 1
+                execute.return_value.stderr = 'private credentials'
+                execute.return_value.stdout = json.dumps({'event': 'WEB_PREFLIGHT_FAILED', 'phase': 'database', 'code': 'PENDING_MIGRATIONS', 'secret': 'private credentials'})
+                with self.assertRaisesRegex(RuntimeError, 'database / PENDING_MIGRATIONS') as raised:
+                    receiver.run('preflight', release=release)
+                self.assertNotIn('private credentials', str(raised.exception))
+                execute.return_value.stdout = json.dumps({'event': 'WEB_PREFLIGHT_FAILED', 'phase': 'database', 'code': 'private credentials'})
+                with self.assertRaises(RuntimeError) as raised:
+                    receiver.run('preflight', release=release)
+                self.assertNotIn('private credentials', str(raised.exception))
+
     def test_dependency_operation_preserves_script_blocking(self):
         with patch.object(receiver.shutil, 'which', return_value='/usr/bin/npm'), patch.object(receiver.subprocess, 'run') as execute:
             execute.return_value.returncode = 0

@@ -257,6 +257,7 @@ export const studentsApi = {
     method: 'POST',
     body: JSON.stringify({}),
   }),
+  getNarrationSetup: (startDate) => request(`/narration-events/setup?startDate=${encodeURIComponent(startDate)}`),
   getNarrationEvents: () => request('/narration-events'),
   getNarrationEvent: (eventId) => request(`/narration-events/${eventId}`),
   getNarrationPartAyahs: (eventId, partId) => request(`/narration-events/${eventId}/parts/${partId}/ayahs`),

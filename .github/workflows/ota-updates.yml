@@ -8,7 +8,7 @@ on:
       action:
         description: Publish tested web files, pause updates, or roll back
         type: choice
-        options: [publish, pause, rollback]
+        options: [publish, pause, rollback, validate]
         default: publish
       bundle_id:
         description: For rollback only, a previous bundle hash or builtin
@@ -24,9 +24,9 @@ concurrency:
 
 jobs:
   ota:
-    # OTA_ENABLED is set only after the first signed native releases pass device testing.
-    # Manual pause/rollback still work when automatic publishing has been disabled.
-    if: github.ref == 'refs/heads/main' && (vars.OTA_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
+    # Check disabled/missing configuration explicitly instead of silently skipping pushes.
+    # Validation still blocks publishing until the matching native release is approved.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -37,6 +37,7 @@ jobs:
       OTA_BASE_URL: ${{ vars.OTA_BASE_URL }}
       OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
       OTA_NATIVE_RUNTIME: ${{ vars.OTA_NATIVE_RUNTIME }}
+      OTA_ENABLED: ${{ vars.OTA_ENABLED }}
       OTA_ACTION: ${{ inputs.action || 'publish' }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -48,11 +49,32 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - name: Validate public configuration
+        run: node scripts/ota/validate-ci-config.mjs
+      - name: Validate signing key and R2 access without publishing
+        if: env.OTA_ACTION == 'validate'
+        env:
+          OTA_SIGNING_PRIVATE_KEY: ${{ secrets.OTA_SIGNING_PRIVATE_KEY }}
+          OTA_R2_ACCESS_KEY_ID: ${{ secrets.OTA_R2_ACCESS_KEY_ID }}
+          OTA_R2_SECRET_ACCESS_KEY: ${{ secrets.OTA_R2_SECRET_ACCESS_KEY }}
+          OTA_R2_ACCOUNT_ID: ${{ vars.OTA_R2_ACCOUNT_ID }}
+          OTA_R2_BUCKET: ${{ vars.OTA_R2_BUCKET }}
         run: |
           node --input-type=module <<'JS'
-          for (const name of ['VITE_API_BASE', 'VITE_API_BASE_URL', 'OTA_BASE_URL', 'OTA_PUBLIC_KEY', 'OTA_NATIVE_RUNTIME']) {
-            if (!process.env[name]) throw new Error(`Missing repository variable: ${name}`);
+          import { S3Client, HeadBucketCommand } from '@aws-sdk/client-s3';
+          import { getOtaBuildConfig } from './scripts/ota/config.mjs';
+          import { checkSigningKey } from './scripts/ota/release.mjs';
+          const env = process.env;
+          for (const name of ['OTA_SIGNING_PRIVATE_KEY', 'OTA_R2_ACCESS_KEY_ID', 'OTA_R2_SECRET_ACCESS_KEY', 'OTA_R2_ACCOUNT_ID', 'OTA_R2_BUCKET']) {
+            if (!env[name]) throw new Error(`Missing ${name}`);
           }
+          if (!/^[a-f0-9]{32}$/.test(env.OTA_R2_ACCOUNT_ID)) throw new Error('Invalid R2 account ID');
+          const config = getOtaBuildConfig(process.cwd(), env);
+          checkSigningKey(env.OTA_SIGNING_PRIVATE_KEY.replaceAll('\\n', '\n'), config.publicKey);
+          const client = new S3Client({ region: 'auto', endpoint: `https://${env.OTA_R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+            credentials: { accessKeyId: env.OTA_R2_ACCESS_KEY_ID, secretAccessKey: env.OTA_R2_SECRET_ACCESS_KEY } });
+          await client.send(new HeadBucketCommand({ Bucket: env.OTA_R2_BUCKET }));
+          console.info('Signing key matches the native public key; R2 authentication passed. No objects were written.');
+          console.info(`OTA candidate runtime: ${config.runtime}`);
           JS
       - name: Quality gate
         if: env.OTA_ACTION == 'publish'
@@ -65,9 +87,10 @@ jobs:
       - name: Verify startup readiness in Chromium
         if: env.OTA_ACTION == 'publish'
         run: |
-          npx playwright install --with-deps chromium
+          node node_modules/playwright/cli.js install --with-deps chromium
           npm run test:ota:browser
       - name: Publish signed OTA channel
+        if: env.OTA_ACTION != 'validate'
         env:
           OTA_SIGNING_PRIVATE_KEY: ${{ secrets.OTA_SIGNING_PRIVATE_KEY }}
           OTA_R2_ACCESS_KEY_ID: ${{ secrets.OTA_R2_ACCESS_KEY_ID }}

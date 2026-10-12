@@ -1,4 +1,5 @@
 import { getBusinessDate } from '../../../shared/business-date.js';
+import { nazemTaskRangeSql } from './taskRange.js';
 
 export function buildNazemLateTaskExistsSql(taskAlias = 't', { includePending = true } = {}) {
   if (!/^[a-zA-Z]\w*$/.test(taskAlias)) throw new Error('Invalid task alias');
@@ -9,6 +10,7 @@ export function buildNazemLateTaskExistsSql(taskAlias = 't', { includePending = 
       AND lateDay.follow_up_date = ${taskAlias}.task_date
       AND lateDay.track = IF(${taskAlias}.task_type = 'memorization', ${taskAlias}.track, 'memorization')
       AND lateDay.task_type = CASE WHEN ${taskAlias}.task_type = 'link' THEN 'memorization' ELSE ${taskAlias}.task_type END
+      AND ${nazemTaskRangeSql(taskAlias)}
       AND (LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(lateDay.remote_snapshot, '$.nazemLate')), 'false')) = 'true'
         ${includePending ? "OR LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(lateDay.remote_snapshot, '$.nazemPendingDay')), 'false')) = 'true'" : ''})
       AND JSON_UNQUOTE(JSON_EXTRACT(lateDay.remote_snapshot, '$.nazemLateAvailableOn')) = '${getBusinessDate()}'

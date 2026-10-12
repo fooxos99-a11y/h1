@@ -114,8 +114,10 @@ test('Nazem settings expose a complete sync log for accepted, active, and failed
   assert.match(settings, /<NazemLogDialog/);
   const card = readFileSync(new URL('../src/components/dashboard/NazemSessionLogCard.jsx', import.meta.url), 'utf8');
   assert.match(dialog, /groupNazemLogEntries\(entries\)/);
-  assert.match(card, /synced: 'أُرسل إلى ناظم'/);
-  assert.match(card, /blocked: 'معلّق'/);
+  const status = readFileSync(new URL('../src/lib/nazemLogStatus.js', import.meta.url), 'utf8');
+  assert.match(card, /nazemLogStatus\(entry\)/);
+  assert.match(status, /return 'أُرسل إلى ناظم'/);
+  assert.match(status, /blocked: 'معلّق'/);
   assert.match(card, /entry\.message \|\| entry\.errorCode/);
   assert.match(dialog, /nazemIntegrationApi\.retryJob\(jobId\)/);
   assert.match(card, /entry\.jobId && canRetryNazemIssue\(entry\)/);
@@ -932,7 +934,7 @@ test('Nazem full refresh is manual while outgoing recitations refresh only their
   assert.match(queueSource, /nextAttemptAt: null/);
   assert.match(queueSource, /status IN \('failed','blocked','requires_review','conflict','dismissed'\)/);
   assert.doesNotMatch(serverSource, /req\.query\.refreshNazem|enqueueImmediateNazemReconciliation/);
-  assert.match(serverSource, /operation_type = 'recitation\.submit'[\s\S]*student_id IS NOT NULL/);
+  assert.match(serverSource, /operation_type = 'recitation\.submit'[\s\S]*student_id IN \(\$\{studentSlots\}\)/);
   assert.match(apiSource, /getSupervisorQuranEvaluation: loadTeacherEvaluation/);
   assert.match(apiSource, /const loadTeacherEvaluation = refreshableSingleFlight\([\s\S]*quran-evaluation`/);
   assert.doesNotMatch(apiSource, /refreshNazem/);
@@ -1232,7 +1234,11 @@ test('Nazem browser access remains server-side and isolated in one adapter', () 
   assert.match(queue, /idempotencyKey: `nazem:recitation-day:\$\{dailyFollowUpId\}:\$\{barrier\.attemptSignature\}`/);
   assert.match(queue, /idempotencyKey: `nazem:recitation-day:[\s\S]*maxAttempts: 2/);
   assert.match(worker, /recoverTenantRecitations/);
-  assert.match(worker, /operation_type = 'recitation\.submit' AND status = 'failed'/);
+  assert.match(worker, /recoverFailedNazemRecitations\(connection, RECITATION_RECOVERY_MINUTES\)/);
+  const recovery = readFileSync(new URL('../server/integrations/nazem/recitationQueueRecovery.js', import.meta.url), 'utf8');
+  assert.match(recovery, /job\.operation_type = 'recitation\.submit' AND job\.status = 'failed'/);
+  assert.match(recovery, /job\.attempt_count < job\.max_attempts/);
+  assert.doesNotMatch(recovery, /attempt_count = 0/);
   assert.match(worker, /NAZEM_ATTENDANCE_SKIPPED/);
   assert.match(worker, /NAZEM_REVISION_RANGE_DISCONNECTED/);
   assert.match(service, /throw reviewNazemError\([\s\S]*NAZEM_REVISION_RANGE_DISCONNECTED/);

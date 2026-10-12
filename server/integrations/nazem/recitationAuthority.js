@@ -2,6 +2,7 @@ import { blockedNazemError, reviewNazemError } from './errors.js';
 
 // Read the remote day before deciding whether a local attempt still needs sending.
 export async function submitWithNazemAuthority({ adapter, studentLink, planLink, mapped, applyAttendance, importDay, platformWroteDay = async () => false, beforeSubmit = async () => {} }) {
+  if (mapped.acceptedIncompleteDayId) return adapter.verifySubmittedRecitation(studentLink, planLink, mapped);
   const adopt = async (state) => {
     if (state.attendanceStatus != null) {
       mapped.attendanceStatus = state.attendanceStatus;
@@ -12,7 +13,10 @@ export async function submitWithNazemAuthority({ adapter, studentLink, planLink,
     // is replaced by it. When the platform saved that day itself, the difference is a later local
     // change (such as a pass after a failed attempt) and stays a conflict instead of being erased.
     try {
-      adapter.verifyRecitationResult(state.day, mapped);
+      const receipt = adapter.verifyRecitationResult(state.day, mapped);
+      // Confirmation of the original evaluation must not import a second graded attempt.
+      return { ...receipt, externalId: String(state.day.id), alreadyRecorded: true,
+        attendanceStatus: state.attendanceStatus };
     } catch (error) {
       if (error?.syncStatus !== 'conflict' || await platformWroteDay(state.day.id)) throw error;
     }
@@ -28,6 +32,11 @@ export async function submitWithNazemAuthority({ adapter, studentLink, planLink,
   if (mapped.taskType === 'link' && state.linkAlreadyRecorded) {
     return { externalId: `link:${state.linkRecordId}`, alreadyRecorded: true,
       status: Number(mapped.linkCount) > 0 ? 'completed' : 'not_completed', metrics: { link: Number(mapped.linkCount) } };
+  }
+  // A historical session cannot establish presence on the day Nazem executes the write.
+  if (state.attendanceStatus == null && state.attendanceDate
+    && (mapped.sessionDate || mapped.date) !== state.attendanceDate) {
+    mapped.attendanceStatus = null;
   }
   if (mapped.attendanceStatus == null) {
     throw reviewNazemError('حضور الطالب غير مسجل لهذا اليوم في ناظم أو المنصة.', 'RUWASI_ATTENDANCE_MISSING');

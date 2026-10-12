@@ -2,7 +2,7 @@ import { includeNazemPlanStudents } from './planStudents.js';
 import { nazemWriteFailure } from './writeFailure.js';
 import { readNazemStudentActivity } from './studentActivity.js';
 import { selectNazemFollowUpItem } from './followUpCycles.js';
-import { findMatchingNazemLate, matchesNazemTarget, findRegeneratedPendingDay } from './recitationTarget.js';
+import { findMatchingNazemLate, matchesNazemRange, matchesNazemTarget, findRegeneratedPendingDay } from './recitationTarget.js';
 import {
   blockedNazemError,
   conflictNazemError,
@@ -23,6 +23,11 @@ import {
 } from './planApi.js';
 
 const NAZEM_BASE_URL = 'https://nazem-plus.com';
+const nazemApiHeaders = requestHeaders => ({
+  ...Object.fromEntries(['authorization', 'x-company-id', 'x-tenant-id', 'x-xsrf-token', 'x-csrf-token', 'accept-language']
+    .filter(name => requestHeaders[name]).map(name => [name, requestHeaders[name]])),
+  origin: NAZEM_BASE_URL, referer: `${NAZEM_BASE_URL}/`,
+});
 const SELECTORS = Object.freeze({
   loginUsername: 'input[name="username"], input[autocomplete="username"], input[type="text"]',
   loginPassword: 'input[name="password"], input[autocomplete="current-password"], input[type="password"]',
@@ -465,6 +470,7 @@ export class NazemAdapter {
       });
       await secureNazemBrowserContext(this.context);
       this.page = await this.context.newPage();
+      this.page.on('response', response => this.captureAuthenticatedApiResponse(response));
       this.page.setDefaultTimeout(Number(process.env.NAZEM_ACTION_TIMEOUT_MS || 15_000));
       this.page.setDefaultNavigationTimeout(Number(process.env.NAZEM_NAVIGATION_TIMEOUT_MS || 30_000));
       return this;
@@ -581,6 +587,20 @@ export class NazemAdapter {
     }
   }
 
+  captureAuthenticatedApiResponse(response) {
+    const url = new URL(response.url());
+    if (url.protocol !== 'https:' || url.hostname !== 'api.nazem-plus.com'
+      || !['/api/user', '/api/teacher-dashboard'].includes(url.pathname)
+      || response.status() !== 200 || response.request().method() !== 'GET'
+      || !String(response.headers()['content-type'] || '').includes('json')) return false;
+    const headers = response.request().headers();
+    // Context requests share the verified session cookies; Nazem does not
+    // always send an Authorization header for a successful account read.
+    this.planApiBase = url.origin;
+    this.planApiHeaders = nazemApiHeaders(headers);
+    return true;
+  }
+
   async capturePlanApiSession({ forceFresh = false } = {}) {
     if (forceFresh) await this.login({ forceFresh: true });
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -614,13 +634,7 @@ export class NazemAdapter {
       const marker = '/api/educational-plans';
       this.planApiBase = response.url().slice(0, response.url().indexOf(marker));
       const requestHeaders = await response.request().allHeaders();
-      this.planApiHeaders = Object.fromEntries(
-        ['authorization', 'x-company-id', 'x-tenant-id', 'x-xsrf-token', 'x-csrf-token', 'accept-language']
-          .filter((name) => requestHeaders[name])
-          .map((name) => [name, requestHeaders[name]]),
-      );
-      this.planApiHeaders.origin = NAZEM_BASE_URL;
-      this.planApiHeaders.referer = `${NAZEM_BASE_URL}/`;
+      this.planApiHeaders = nazemApiHeaders(requestHeaders);
       this.planApiFirstPage = payload;
       return payload;
     }
@@ -631,7 +645,14 @@ export class NazemAdapter {
   }
 
   async getPlanApi(path, { retryAuthentication = true } = {}) {
-    if (!this.planApiBase) await this.capturePlanApiSession();
+    if (!this.planApiBase) {
+      try {
+        await this.capturePlanApiSession();
+      } catch (cause) {
+        if (cause?.code) throw cause;
+        throw transientNazemError('تعذر تهيئة جلسة القراءة من ناظم.', 'NAZEM_PLAN_API_TIMEOUT', cause);
+      }
+    }
     let response;
     try {
       response = await this.context.request.get(`${this.planApiBase}${path}`, {
@@ -729,10 +750,13 @@ export class NazemAdapter {
     await this.page.getByRole('heading', { name: 'إنشاء خطة تعليمية', exact: true }).waitFor();
   }
 
-  async readOpenOptions(input) {
+  async readOpenOptions(input, { allowEmpty = false } = {}) {
     await input.click();
     const options = this.page.getByRole('option').filter({ visible: true });
-    await options.first().waitFor();
+    const empty = this.page.locator(
+      '.p-multiselect-overlay:visible, .p-select-overlay:visible, .p-dropdown-panel:visible, .p-multiselect-panel:visible, .p-autocomplete-panel:visible, [role="listbox"]:visible',
+    ).getByText('لا يوجد', { exact: true });
+    await (allowEmpty ? options.or(empty).first() : options.first()).waitFor();
     const rows = [];
     const count = await options.count();
     for (let index = 0; index < count; index += 1) {
@@ -815,23 +839,30 @@ export class NazemAdapter {
   }
 
   async getStudentProfiles() {
-    const matchesStudentsResponse = (response) => {
-      try {
-        return new URL(response.url()).pathname === '/api/students'
-          && String(response.headers()['content-type'] || '').includes('json');
-      } catch {
-        return false;
-      }
-    };
     const profiles = [];
+    let requestedPage = 1;
+    let expectedTotal = null;
+    let expectedLastPage = null;
     try {
-      let responsePromise = this.page.waitForResponse(matchesStudentsResponse);
-      await this.page.goto(`${NAZEM_BASE_URL}${SELECTORS.studentsPath}`, { waitUntil: 'domcontentloaded' });
-      let response = await responsePromise;
       for (let pageNumber = 0; pageNumber < 50; pageNumber += 1) {
-        const payload = await response.json();
+        requestedPage = pageNumber + 1;
+        // Read through the authenticated API; no dependency on a rendered pagination button.
+        let payload;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            payload = await this.getPlanApi(`/api/students?page=${requestedPage}`);
+            break;
+          } catch (cause) {
+            if (attempt || !['NAZEM_PLAN_API_TIMEOUT', 'NAZEM_PLAN_API_LOAD_FAILED'].includes(cause?.code)) throw cause;
+          }
+        }
         const page = payload?.data || {};
-        if (!Array.isArray(page.data) || Number(page.current_page) !== pageNumber + 1) {
+        expectedTotal ??= Number(page.total);
+        expectedLastPage ??= Number(page.last_page);
+        if (!Array.isArray(page.data) || Number(page.current_page) !== requestedPage
+          || !Number.isInteger(expectedTotal) || expectedTotal < 0
+          || !Number.isInteger(expectedLastPage) || expectedLastPage < 1 || expectedLastPage > 50
+          || Number(page.total) !== expectedTotal || Number(page.last_page) !== expectedLastPage) {
           throw new Error('صفحات طلاب ناظم غير مكتملة أو مكررة.');
         }
         const rows = page.data;
@@ -848,17 +879,16 @@ export class NazemAdapter {
           return profiles;
         }
         if (!page.next_page_url) throw new Error('تعذر الوصول إلى بقية صفحات طلاب ناظم.');
-        responsePromise = this.page.waitForResponse(matchesStudentsResponse);
-        await this.page.getByRole('button', { name: 'Next page', exact: true }).click();
-        response = await responsePromise;
       }
       throw new Error('تجاوز جلب طلاب ناظم الحد الأقصى للصفحات.');
     } catch (cause) {
-      throw transientNazemError(
+      const error = transientNazemError(
         'تعذر تحميل بيانات الطلاب التفصيلية من ناظم.',
         'NAZEM_STUDENT_PROFILES_FAILED',
         cause,
       );
+      error.details = { stage: 'student-profiles', pageNumber: requestedPage, causeCode: cause?.code || 'NAZEM_ROSTER_INVALID' };
+      throw error;
     }
   }
 
@@ -897,7 +927,7 @@ export class NazemAdapter {
             name: SELECTORS.studentsPlaceholder,
             exact: true,
           }).first();
-          const remoteStudents = await this.readOpenOptions(studentsInput);
+          const remoteStudents = await this.readOpenOptions(studentsInput, { allowEmpty: true });
           remoteStudents.forEach((student) => students.push({
             externalId: student.id,
             name: student.name,
@@ -1714,6 +1744,17 @@ export class NazemAdapter {
   }
 
   async verifyResolvedRecitation(target, studentLink, mapped) {
+    const acceptedDayId = mapped.acceptedIncompleteDayId || (this.recitationJournal?.isAccepted?.(
+      `/educational-plans/item-days/${mapped.nazemSourceDayId}/not-completed`) ? mapped.nazemSourceDayId : null);
+    if (mapped.completed === false && acceptedDayId
+      && String(target.late?.source_day_id) === String(acceptedDayId)
+      && target.late?.status === 'pending' && matchesNazemRange(target.late, mapped)
+      && String(target.late.date || target.late.follow_up_date || mapped.nazemSavedTarget?.date || '').slice(0, 10) === mapped.date) {
+      // Nazem moved the accepted not-completed day to its late queue. Verify the
+      // original identity rather than posting it again to a different record.
+      return { externalId: String(acceptedDayId), status: 'not_completed',
+        latePending: true, alreadyRecorded: true, verifiedAcceptedWrite: true, metrics: {} };
+    }
     // Historical reads verify the saved amount only. Today's attendance was
     // read separately and must never be compared with the original day's status.
     const verification = target.executionDate
@@ -1818,6 +1859,11 @@ export class NazemAdapter {
       if (!initial.item) throw reviewNazemError('خطة الطالب في ناظم لا تحتوي نوع الورد المرتبط.', 'NAZEM_PLAN_TRACK_MISSING');
       const matchingLate = initial.late;
       if (matchingLate) {
+        if (mapped.acceptedIncompleteDayId) {
+          const verified = await this.verifyResolvedRecitation(initial, studentLink, mapped);
+          if (verified) return verified;
+          throw reviewNazemError('تعذر إثبات نتيجة الطلب المقبول في سجل المتأخر الأصلي.', 'NAZEM_DELIVERY_UNVERIFIED');
+        }
         return await submitOldestLateRecitation(this, initial, studentLink, planLink, mapped);
       }
 

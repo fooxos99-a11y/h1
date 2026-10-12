@@ -113,7 +113,7 @@ test('retry source stays available across dates while completed local actions le
   assert.doesNotMatch(server, /quran-evaluation\/:taskId\/nazem-retry|nazemRetryAvailable/);
   assert.match(mushaf, /requestId: `\$\{saveRequestId\}:\$\{task\.id\}`/);
   assert.doesNotMatch(evaluation, /RecitationRetryConfirmationDialog|retryCandidate|تأكيد إعادة التسميع/);
-  assert.match(evaluation, /const openRecitation = \(student\) => \{\s*prepareRecitation\(student\);\s*\}/);
+  assert.match(evaluation, /const openRecitation = \(student\) => \{\s*(?:void\s+)?prepareRecitation\(student\);\s*\}/);
   assert.doesNotMatch(evaluation, /setInterval\(refreshLocal, 10_000\)/);
   // Amount refresh is automatic; full plan discovery remains a manual operation.
   assert.doesNotMatch(evaluation, /refreshNazem/);

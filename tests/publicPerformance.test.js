@@ -29,7 +29,7 @@ test('initial public load defers non-critical work and uses compact responsive a
   assert.match(styles, /font-weight: 400 900/);
 });
 
-test('rankings and dashboard bootstrap avoid unnecessary initial requests and rows', async () => {
+test('rankings preserve stable order and dashboard bootstrap avoids unnecessary initial requests', async () => {
   const [server, dashboard, api] = await Promise.all([
     read('../server/index.js'),
     read('../src/pages/WajehDashboard.jsx'),
@@ -37,8 +37,8 @@ test('rankings and dashboard bootstrap avoid unnecessary initial requests and ro
   ]);
 
   assert.match(server, /app\.get\('\/api\/dashboard-bootstrap'/);
-  assert.match(server, /ORDER BY s\.points DESC, s\.name ASC\s+LIMIT 8/);
-  assert.match(server, /ORDER BY averagePoints DESC, studentsCount DESC, c\.name ASC\s+LIMIT 8/);
+  assert.match(server, /ORDER BY s\.points DESC, s\.name ASC, s\.id ASC\s+`/);
+  assert.match(server, /ORDER BY averagePoints DESC, studentsCount DESC, c\.name ASC, c\.id ASC`/);
   assert.match(api, /getDashboardBootstrap: \(\) => request\('\/dashboard-bootstrap'\)/);
   assert.match(dashboard, /studentsApi\.getDashboardBootstrap\(\)/);
   assert.doesNotMatch(dashboard, /Promise\.all\(\[\s*studentsApi\.getPublicSettings/);

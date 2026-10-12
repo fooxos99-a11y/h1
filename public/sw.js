@@ -34,6 +34,11 @@ const fallbackResponse = () => new Response('', {
   status: 503, statusText: 'Offline', headers: { 'X-Madarij-Offline': '1' },
 });
 
+async function cachedFallback(request) {
+  const response = await caches.match(request);
+  return response || fallbackResponse();
+}
+
 async function fetchAndCache(request, cacheKey = request) {
   const response = await fetch(request);
   if (response && response.ok && request.method === 'GET') {
@@ -89,7 +94,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetchAndCache(event.request, withBase('index.html'))
-        .catch(() => caches.match(withBase('index.html')).then((response) => response || fallbackResponse()))
+        .catch(() => cachedFallback(withBase('index.html')))
     );
     return;
   }
@@ -105,7 +110,7 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     fetchAndCache(event.request)
-      .catch(() => caches.match(event.request).then((response) => response || fallbackResponse()))
+      .catch(() => cachedFallback(event.request))
   );
 });
 

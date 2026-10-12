@@ -60,15 +60,34 @@ test('choosing a student in the points details opens the points log of that stud
   const all = pointsOf({});
   assert.equal(all.student, ALL_STUDENTS);
   assert.deepEqual(all.studentOptions.map((option) => option.label), ['أحمد', 'خالد']);
-  assert.deepEqual(all.records.map((group) => group.title), ['الطلاب', 'الحركات']);
+  assert.deepEqual(all.records.map((group) => group.title), ['الطلاب']);
   const log = pointsOf({ student: '1' });
   assert.equal(log.student, '1');
   assert.deepEqual(log.tiles.map((tile) => [tile.label, tile.display]), [['صافي الفترة', '7'], ['الإضافات', '10'], ['الخصومات', '3'], ['الرصيد الكلي', '120']]);
   assert.deepEqual(log.bars[0].rows.map((row) => row.label), ['التسميع', 'الحضور']);
-  assert.equal(log.records[0].title, 'سجل النقاط');
-  assert.deepEqual(log.records[0].rows.map((row) => row.label), ['الحضور', 'التسميع']);
-  assert.match(log.records[0].rows[0].note, /تأخر · .*2026-09-03.* · بواسطة: المشرف/);
+  assert.deepEqual(log.records, []);
+  assert.deepEqual(log.bars[0].rows[0].records.map(row => row.label), ['التسميع']);
+  assert.match(log.bars[0].rows[1].records[0].note, /تأخر · .*2026-09-03.* · بواسطة: المشرف/);
   assert.equal(pointsOf({ student: '1', committee: 'الفجر' }).student, ALL_STUDENTS, 'A student outside the chosen circle falls back to all students');
+});
+
+test('source logs isolate unknown sources and preserve oldest-first order and totals', async () => {
+  const { buildReportMetrics } = await import('../src/components/dashboard/reports/reportMetrics.js');
+  const transactions = [
+    { id: 3, date: '2026-09-03', source: '', points: 7, type: 'increase' },
+    { id: 2, date: '2026-09-02', source: 'التسميع', points: 10, type: 'increase' },
+    { id: 1, date: '2026-09-01', source: null, points: 3, type: 'deduction' },
+  ];
+  const metric = buildReportMetrics({ totals: {}, committeeIndicators: [] }, {
+    showStudentPoints: true, student: '1', lists: { studentPoints: { rows: [{ studentId: 1, studentName: 'طالب', total: 14, balance: 14, transactions }] } },
+  }).find(row => row.id === 'studentPoints');
+  const unknown = metric.bars[0].rows.find(row => row.label === 'مصدر غير محدد');
+  assert.equal(unknown.records.length, 2);
+  assert.match(unknown.records[0].note, /2026-09-01/);
+  assert.match(unknown.records[1].note, /2026-09-03/);
+  assert.equal(metric.bars[0].rows.find(row => row.label === 'التسميع').records.length, 1);
+  assert.deepEqual(transactions.map(row => row.id), [3, 2, 1]);
+  assert.equal(metric.records.length, 0);
 });
 
 test('rankings order students and circles by earned points and weight teacher achievement by students', async () => {

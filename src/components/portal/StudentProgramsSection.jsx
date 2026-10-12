@@ -7,6 +7,7 @@ import ProgramRichText from '@/components/programs/ProgramRichText';
 import { useToast } from '@/components/ui/use-toast';
 import { studentsApi } from '@/services/studentsApi';
 import useProgramNavigation from '@/hooks/useProgramNavigation';
+import ProgramAttachment from '@/components/programs/ProgramAttachment';
 
 export default function StudentProgramsSection() {
   const { toast } = useToast();
@@ -49,6 +50,7 @@ export default function StudentProgramsSection() {
       {selected && <>
         <h1 className="break-words text-2xl font-black">{selected.title}</h1>
         <ProgramRichText>{selected.contents?.find(item => item.type === 'text')?.value}</ProgramRichText>
+        <ProgramAttachment attachment={selected.contents?.find(item => item.type !== 'text')} />
       </>}
       {!error && !programs.length && <p className="py-10 text-center text-muted-foreground">لا توجد برامج متاحة حاليًا.</p>}
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">

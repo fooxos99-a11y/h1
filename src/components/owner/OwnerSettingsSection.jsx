@@ -38,7 +38,7 @@ const OwnerSettingsSection = ({ complexes }) => {
     }
   };
 
-  useEffect(() => { load(); }, [complexId]);
+  useEffect(() => { void load(); }, [complexId]);
 
   const updatePolicy = (definition, policy) => {
     setPolicies((current) => ({ ...current, [definition.key]: policy }));

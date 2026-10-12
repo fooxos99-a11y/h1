@@ -221,10 +221,12 @@ const AudioCallRoom = ({ roomInfo, isOwner, minimized = false, onRestore, onLeav
         if (mounted) setIsConnecting(false);
       }
     };
-    connect();
+    void connect();
     return () => {
       mounted = false;
-      room.disconnect();
+      void room.disconnect().catch(() => {
+        toast({ title: 'تعذر إنهاء الاتصال بالمكالمة', variant: 'destructive' });
+      });
       livekitRoomRef.current = null;
       activeScreenIdentityRef.current = '';
       audioContainer?.replaceChildren();

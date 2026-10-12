@@ -7,6 +7,9 @@ export const nazemSyncStatusLabel = (code, needsRecheck = false) => needsRecheck
   NAZEM_REVIEW_IDENTITY_CONFLICT: 'تحتاج المراجعة مطابقة مع ناظم',
   NAZEM_LINK_WAITING_FOR_MEMORIZATION: 'الربط ينتظر تسجيل الحفظ في ناظم',
   NAZEM_MEMORIZATION_WAITING_FOR_LINK: 'الحفظ بانتظار تسجيل نتيجة الربط',
+  NAZEM_STARTED_TASK_RANGE_CHANGED: 'تغيّر مقدار ورد سبق تقييمه',
+  NAZEM_REMOTE_DAILY_RANGE_UNMATCHED: 'مقدار ناظم يحتاج مطابقة',
+  NAZEM_DELIVERY_UNVERIFIED: 'الطلب ينتظر التحقق من وصوله',
 }[code] || 'تعذرت المزامنة');
 const nonRetryableErrorCodes = new Set([
   'NAZEM_REVISION_RANGE_DISCONNECTED',
@@ -18,7 +21,8 @@ const nonRetryableErrorCodes = new Set([
 export const canRetryNazemIssue = (issue) => retryableStatuses.has(issue?.status || 'requires_review')
   && !nonRetryableErrorCodes.has(issue?.errorCode);
 
-export const nazemRetryLabel = issue => issue?.errorCode === 'NAZEM_STUDENT_INACTIVE' ? 'إعادة التحقق من الحالة' : 'إعادة المحاولة';
+export const nazemRetryLabel = issue => issue?.errorCode === 'NAZEM_STUDENT_INACTIVE' ? 'إعادة التحقق من الحالة'
+  : issue?.errorCode === 'NAZEM_DELIVERY_UNVERIFIED' ? 'التحقق من النتيجة' : 'إعادة المحاولة';
 
 export const nazemIssueMessage = (issue) => {
   const saved = issue?.operationType === 'attendance.submit' ? 'الحضور محفوظ محليًا' : 'النتيجة محفوظة محليًا';

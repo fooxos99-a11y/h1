@@ -3,27 +3,22 @@ import React from 'react';
 import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getQuranTaskLabel } from '@/lib/quranTaskLabels';
-import { canRetryNazemIssue, nazemIssueMessage, nazemRetryLabel } from '@/lib/nazemSyncIssues';
+import { canRetryNazemIssue, nazemIssueMessage, nazemRetryLabel, nazemSyncStatusLabel } from '@/lib/nazemSyncIssues';
+import { nazemLogConfirmed, nazemLogStatus } from '@/lib/nazemLogStatus';
 
-const labels = {
-  synced: 'أُرسل إلى ناظم', pending: 'قيد الانتظار', syncing: 'جارٍ الإرسال',
-  retrying: 'إعادة المحاولة', blocked: 'معلّق', failed: 'تعذر الإرسال',
-  requires_review: 'يحتاج مراجعة', conflict: 'تعارض', dismissed: 'مغلق',
-};
 const operations = {
   'attendance.submit': 'الحضور', 'account.verify': 'ربط الحساب',
   'account.discover_plans': 'قراءة الخطط', 'account.reconcile': 'تحديث الطلاب والخطط',
+  'account.refresh_followups': 'تحديث مقادير الطلاب',
   'plan.upsert': 'حفظ الخطة', 'plan.delete': 'حذف الخطة', 'recitation.submit': 'التسميع',
 };
 const entryLabel = entry => entry.taskType ? getQuranTaskLabel(entry) : operations[entry.operationType] || entry.operationType;
-const statusLabel = entry => entry?.status === 'synced' && (entry.authoritative || entry.alreadyRecorded)
-  ? 'مؤكد في ناظم' : labels[entry?.status] || 'يحتاج مراجعة';
 
 export default function NazemSessionLogCard({ group, retryJob, retryingJobId }) {
   return <article className="rounded-xl border border-primary/15 bg-card p-3 [font-family:var(--font-ui)]" dir="rtl">
     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
       <time dateTime={group.latestAt?.replace(' ', 'T')} dir="ltr" className="font-bold tabular-nums text-muted-foreground">{group.latestAt}</time>
-      <span className={group.latestEntry?.status === 'synced' ? 'font-bold text-emerald-700' : 'font-bold text-amber-700'}>{statusLabel(group.latestEntry)}</span>
+      <span className={nazemLogConfirmed(group.latestEntry) ? 'font-bold text-emerald-700' : 'font-bold text-amber-700'}>{nazemLogStatus(group.latestEntry)}</span>
     </div>
     <div className="mt-1 break-words font-black text-foreground">{group.studentName || group.teacherName}</div>
     {group.studentName && <div className="text-xs text-muted-foreground">{group.teacherName}</div>}
@@ -31,14 +26,19 @@ export default function NazemSessionLogCard({ group, retryJob, retryingJobId }) 
       {group.entries.map(entry => <div key={entry.jobId || entry.id} className="py-2">
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-bold">
           <span>{entryLabel(entry)}</span>
-          <span className={entry.status === 'synced' ? 'text-emerald-700' : 'text-amber-700'}>{statusLabel(entry)}</span>
+          <span className={nazemLogConfirmed(entry) ? 'text-emerald-700' : 'text-amber-700'}>{nazemLogStatus(entry)}</span>
         </div>
         {(entry.message || entry.errorCode) && <p className="mt-1 break-words text-xs leading-6">{nazemIssueMessage(entry)}</p>}
+        {entry.latePending && <p className="mt-1 text-xs leading-6">التقييم محفوظ «لم يحفظ». يبقى المتأخر حتى تسجيل إكماله.</p>}
+        {entry.diagnostics?.issues?.map((issue, index) => <p key={`${issue.studentId}-${issue.taskDate}-${index}`} className="mt-1 break-words text-xs leading-6">
+          {issue.studentName || `الطالب ${issue.studentId}`} · {issue.taskDate} · {getQuranTaskLabel(issue)} · {nazemSyncStatusLabel(issue.code)}
+        </p>)}
         <details className="mt-1 text-xs text-muted-foreground">
           <summary className="min-h-11 cursor-pointer content-center">التفاصيل</summary>
           <p>{entry.createdAt} · المحاولة {entry.attemptNumber || 0}</p>
           {group.date && <p>تاريخ الجلسة: {group.date}</p>}
           {entry.errorCode && <p className="break-all" dir="ltr">{entry.errorCode}</p>}
+          {entry.diagnostics?.pageNumber && <p>صفحة الطلاب: {entry.diagnostics.pageNumber}</p>}
         </details>
         {entry.jobId && canRetryNazemIssue(entry) && <Button type="button" variant="outline" size="sm" className="min-h-11 gap-2" disabled={retryingJobId != null} onClick={() => retryJob(entry.jobId)}>
           {retryingJobId === entry.jobId ? <LoadingSpinner /> : <RefreshCw aria-hidden="true" className="h-4 w-4" />}{nazemRetryLabel(entry)}
@@ -47,7 +47,7 @@ export default function NazemSessionLogCard({ group, retryJob, retryingJobId }) 
     </div>
     {group.history.length > 0 && <details className="text-xs text-muted-foreground">
       <summary className="min-h-11 cursor-pointer content-center">السجل السابق ({group.history.length})</summary>
-      {group.history.map(entry => <p key={entry.id} className="break-words py-2 leading-5">{entryLabel(entry)} · {labels[entry.status] || entry.status} · {entry.createdAt}{entry.message ? ` — ${entry.message}` : ''}</p>)}
+      {group.history.map(entry => <p key={entry.id} className="break-words py-2 leading-5">{entryLabel(entry)} · {nazemLogStatus(entry)} · {entry.createdAt}{entry.message ? `، ${entry.message}` : ''}</p>)}
     </details>}
   </article>;
 }

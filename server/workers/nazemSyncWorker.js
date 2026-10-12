@@ -24,6 +24,7 @@ import { getNazemRuntimeReadiness } from '../integrations/nazem/runtime.js';
 import { buildNazemTenantScope } from '../integrations/nazem/tenantScope.js';
 import { createIdlePollBackoff } from '../services/idlePollBackoff.js';
 import { startRuntimeDiagnostics } from '../services/requestDiagnostics.js';
+import { dismissSupersededNazemRecitations, recoverFailedNazemRecitations } from '../integrations/nazem/recitationQueueRecovery.js';
 
 const POLL_INTERVAL_MS = Math.max(500, Number(process.env.NAZEM_WORKER_POLL_MS || 1_000));
 const WORKER_CONCURRENCY = Math.min(4, Math.max(
@@ -103,6 +104,7 @@ async function recoverTenantRecitations(connection, databaseName) {
   const intervalMs = RECITATION_RECOVERY_MINUTES * 60 * 1_000;
   const bucket = Math.floor(Date.now() / intervalMs);
   if (lastRecitationRecoveryBuckets.get(databaseName) === bucket) return;
+  await dismissSupersededNazemRecitations(connection);
 
   const [accounts] = await connection.query(
     "SELECT teacher_id AS teacherId FROM nazem_accounts WHERE status = 'connected'",
@@ -111,34 +113,7 @@ async function recoverTenantRecitations(connection, databaseName) {
     await enqueueMissingNazemRecitations(connection, Number(account.teacherId));
   }
 
-  await connection.query(
-    `UPDATE nazem_daily_follow_up_links daily
-     JOIN nazem_sync_jobs job ON job.operation_type = 'recitation.submit'
-       AND job.entity_type = 'recitation_day' AND job.entity_id = daily.id
-     SET daily.sync_status = 'pending', daily.last_error_code = NULL, daily.last_error = NULL
-     WHERE job.status = 'failed'
-       AND job.updated_at <= DATE_SUB(NOW(3), INTERVAL ? MINUTE)`,
-    [RECITATION_RECOVERY_MINUTES],
-  );
-  await connection.query(
-    `UPDATE nazem_recitation_links recitation
-     JOIN nazem_sync_jobs job ON job.operation_type = 'recitation.submit'
-       AND job.entity_type = 'recitation_day'
-       AND job.entity_id = recitation.daily_follow_up_id
-     SET recitation.sync_status = 'pending', recitation.last_error_code = NULL,
-       recitation.last_error = NULL
-     WHERE job.status = 'failed'
-       AND job.updated_at <= DATE_SUB(NOW(3), INTERVAL ? MINUTE)`,
-    [RECITATION_RECOVERY_MINUTES],
-  );
-  await connection.query(
-    `UPDATE nazem_sync_jobs SET status = 'pending', attempt_count = 0,
-      next_attempt_at = NOW(3), lease_owner = NULL, lease_expires_at = NULL,
-      last_error_code = NULL, last_error = NULL
-     WHERE operation_type = 'recitation.submit' AND status = 'failed'
-       AND updated_at <= DATE_SUB(NOW(3), INTERVAL ? MINUTE)`,
-    [RECITATION_RECOVERY_MINUTES],
-  );
+  await recoverFailedNazemRecitations(connection, RECITATION_RECOVERY_MINUTES);
   lastRecitationRecoveryBuckets.set(databaseName, bucket);
 }
 

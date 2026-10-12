@@ -33,7 +33,12 @@ export function createStationPointsRouter({ loadSettings, applyStudentPointDelta
       const result = await saveStationPointsBatch(connection, { stationId: req.params.id, grades: req.body?.grades, actor: req.auth, settings, date: getToday() }, { applyStudentPointDelta, logStudentPointTransaction });
       await connection.commit();
       res.json(result);
-    } catch (error) { if (connection) await connection.rollback(); next(error); }
+    } catch (error) {
+      if (connection) {
+        await connection.rollback();
+      }
+      next(error);
+    }
     finally { connection?.release(); }
   });
   return router;

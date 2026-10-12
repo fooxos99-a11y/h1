@@ -87,12 +87,12 @@ const runServiceWorkerSetup = () => {
   }
 
   navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js?brand=${encodeURIComponent(initialSite.key)}`)
-    .then((registration) => {
+    .then(async (registration) => {
       const versionStorageKey = `${initialSite.key}_pwa_version`;
       if (localStorage.getItem(versionStorageKey) !== pwaVersion) {
         localStorage.setItem(versionStorageKey, pwaVersion);
       }
-      registration.update().catch(() => {});
+      await registration.update();
     })
     .catch(() => {});
 };
