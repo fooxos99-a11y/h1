@@ -28,5 +28,7 @@ test('iOS installs npm packages without lifecycle scripts and enforces Swift pin
   }
   const manifest = await readFile(new URL('../ios/App/CapApp-SPM/Package.swift', import.meta.url), 'utf8');
   const capacitorPin = packageLock.pins.find((pin) => pin.identity === 'capacitor-swift-pm');
+  const npmLock = JSON.parse(await readFile(new URL('../package-lock.json', import.meta.url), 'utf8'));
+  assert.equal(capacitorPin.state.version, npmLock.packages['node_modules/@capacitor/ios'].version, 'Swift Capacitor must match the npm iOS runtime before native sync');
   assert.ok(manifest.includes(`exact: "${capacitorPin.state.version}"`));
 });
