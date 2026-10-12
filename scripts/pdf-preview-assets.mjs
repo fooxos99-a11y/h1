@@ -2,6 +2,10 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+export function pdfPreviewAssetFileNames(asset) {
+  return asset.names.includes('pdf.worker.min.mjs') ? 'assets/[name]-[hash].js' : 'assets/[name]-[hash][extname]';
+}
+
 export function pdfPreviewAssets() {
   const root = fileURLToPath(new URL('../node_modules/pdfjs-dist/', import.meta.url));
   const version = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version;

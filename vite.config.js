@@ -5,7 +5,7 @@ import { defineConfig, loadEnv } from 'vite';
 import { getSiteConfig } from './src/site/siteConfigs.js';
 import { renderSiteMetadata } from './src/site/siteMetadata.js';
 import { getOtaBuildConfig } from './scripts/ota/config.mjs';
-import { pdfPreviewAssets } from './scripts/pdf-preview-assets.mjs';
+import { pdfPreviewAssets, pdfPreviewAssetFileNames } from './scripts/pdf-preview-assets.mjs';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -93,6 +93,7 @@ export default defineConfig(({ mode }) => {
     },
   },
   build: {
+    rollupOptions: { output: { assetFileNames: pdfPreviewAssetFileNames } },
     // LiveKit is isolated behind a lazy route; it does not affect initial dashboard loading.
     chunkSizeWarningLimit: 600,
   },

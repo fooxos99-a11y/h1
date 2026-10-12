@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { prepareProgramAttachment } from '../src/lib/programAttachment.js';
 import { normalizePayload } from '../server/routes/programRoutes.js';
-import { pdfPreviewAssets } from '../scripts/pdf-preview-assets.mjs';
+import { pdfPreviewAssets, pdfPreviewAssetFileNames } from '../scripts/pdf-preview-assets.mjs';
 import { securityHeaders } from '../server/middleware/security.js';
 
 const data = (mime, text) => `data:${mime};base64,${Buffer.from(text, 'binary').toString('base64')}`;
@@ -36,6 +36,8 @@ test('untrusted files never become executable previews and unsafe URLs are rejec
 });
 
 test('PDF codecs and fonts ship locally and their development route rejects traversal', () => {
+  assert.equal(pdfPreviewAssetFileNames({ names: ['pdf.worker.min.mjs'] }), 'assets/[name]-[hash].js');
+  assert.equal(pdfPreviewAssetFileNames({ names: ['logo.png'] }), 'assets/[name]-[hash][extname]');
   const plugin = pdfPreviewAssets();
   const emitted = [];
   plugin.generateBundle.call({ emitFile: item => emitted.push(item) });
