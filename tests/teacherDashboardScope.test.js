@@ -170,7 +170,8 @@ test('teacher recitation attendance reveals grouped actions without a page reloa
   assert.match(taskList, /recitation-reference-card/);
   assert.match(taskList, /RecitationAmountVisibility/);
   assert.match(taskList, /TeacherRecitationAction/);
-  assert.match(evaluation, /\[showAmounts, setShowAmounts\] = useState\(false\)/);
+  assert.match(evaluation, /\[showAmounts, setShowAmounts\] = useRecitationAmountsPreference\(supervisorId\)/);
+  assert.doesNotMatch(evaluation, /setShowAmounts\(false\)/);
   assert.doesNotMatch(evaluation, /OfflineRecitationStatus/);
   assert.match(evaluation, /RecitationAmountsToggle/);
   assert.match(evaluation, /DashboardMobileHeaderActions/);

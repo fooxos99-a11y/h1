@@ -10,6 +10,7 @@ import RecitationAmountsToggle from '@/components/portal/RecitationAmountsToggle
 import TeacherRecitationTaskList from '@/components/portal/TeacherRecitationTaskList';
 import ErrorState from '@/components/ui/error-state';
 import useTeacherEvaluationData from '@/hooks/useTeacherEvaluationData';
+import useRecitationAmountsPreference from '@/hooks/useRecitationAmountsPreference';
 import { useToast } from '@/components/ui/use-toast';
 import { studentsApi } from '@/services/studentsApi';
 import {
@@ -80,7 +81,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
   const preparationVersion = useRef(0);
   const [isSavingCount, setIsSavingCount] = useState(false);
   const [attendancePendingIds, setAttendancePendingIds] = useState([]);
-  const [showAmounts, setShowAmounts] = useState(false);
+  const [showAmounts, setShowAmounts] = useRecitationAmountsPreference(supervisorId);
   const [quranChapters, setQuranChapters] = useState([]);
   const shouldLoad = inline || open;
   const onEvaluationLoaded = useCallback((evaluation) => {
@@ -97,9 +98,11 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
     supervisorId, shouldLoad, onEvaluationLoaded,
   );
 
-  useEffect(() => {
-    setShowAmounts(false);
-  }, [shouldLoad, supervisorId]);
+  const toggleAmounts = () => {
+    if (!setShowAmounts(!showAmounts)) {
+      toast({ title: 'تعذر حفظ خيار إظهار المقادير', variant: 'destructive' });
+    }
+  };
 
   useEffect(() => {
     if (!shouldLoad || quranChapters.length) return undefined;
@@ -433,7 +436,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
         <DashboardMobileHeaderActions>
           <RecitationAmountsToggle
             visible={showAmounts}
-            onToggle={() => setShowAmounts((current) => !current)}
+            onToggle={toggleAmounts}
             compact
           />
         </DashboardMobileHeaderActions>
@@ -451,7 +454,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
             <DialogTitle className="text-primary neon-text">جلسات التسميع</DialogTitle>
             <RecitationAmountsToggle
               visible={showAmounts}
-              onToggle={() => setShowAmounts((current) => !current)}
+              onToggle={toggleAmounts}
             />
           </DialogHeader>
           <div className="max-h-[72dvh] overflow-auto pr-1">{content}</div>
