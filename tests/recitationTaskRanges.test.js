@@ -70,6 +70,13 @@ test('recitation pieces preserve reverse plan direction', () => {
   assert.deepEqual(sortRecitationTasks(tasks).map((task) => task.id), [1, 2]);
 });
 
+test('reverse linking keeps verses forwards within each surah and merges its continuous pieces', () => {
+  const tasks = [4, 2, 3].map(ayah => ({ id: ayah, planId: 1, taskDate: '2026-10-13', taskType: 'link', planDirection: -1,
+    fromPage: 604, toPage: 604, fromSurah: 114, toSurah: 114, fromAyah: ayah, toAyah: ayah, fromSurahName: 'الناس', toSurahName: 'الناس' }));
+  assert.deepEqual(sortRecitationTasks(tasks).map(task => task.fromAyah), [2, 3, 4]);
+  assert.equal(formatContinuousRecitationRange(tasks), 'من الناس\u00a02 إلى 4');
+});
+
 test('report recitation ranges use page numbers in page display mode', () => {
   const tasks = [
     { id: 1, fromPage: 1, toPage: 57 },

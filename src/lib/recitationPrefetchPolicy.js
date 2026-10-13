@@ -3,6 +3,7 @@ import { isNazemLinkTask } from '../../shared/nazem-recitation-policy.js';
 export function recitationTaskCacheVersion(task) {
   return JSON.stringify([task.planVersion, task.taskDate, task.taskType, task.track,
     task.fromPage, task.toPage, task.fromSurah, task.fromAyah, task.toSurah, task.toAyah,
+    task.actualToPage, task.actualToSurah, task.actualToAyah, task.reviewExecution,
     task.teacherCompleted, task.evaluatedAt]);
 }
 

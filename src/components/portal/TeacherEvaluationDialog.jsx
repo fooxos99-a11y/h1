@@ -1,7 +1,7 @@
 import { recitationErrorMessage } from '@/lib/recitationErrorMessage';
 import { mergeRecitationDeliveryReceipts } from '@/lib/recitationDeliveryReceipts';
 import { Button } from '@/components/ui/button';
-import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import DashboardMobileHeaderActions from '@/components/dashboard/DashboardMobileHeaderActions';
 import DashboardLoader from '@/components/dashboard/DashboardLoader';
@@ -16,16 +16,19 @@ import {
   commitOfflineAttendance,
   commitOfflineRecitation,
   loadCachedTaskData,
-  mergeLocalTeacherEvaluation,
   prefetchRecitationTasks,
   syncOfflineRecitations,
 } from '@/services/offlineRecitationService';
 import { sortRecitationTasks } from '@/lib/recitationTaskRanges';
 import { advanceRecitationTaskQueue, canAdvanceRecitationSession } from '@/lib/recitationTaskQueue';
 import { calculateRecitationScore } from '../../../shared/evaluation-settings.js';
+import { calculateGroupRecitationOutcome, countRecitationPayload, isLocalRecitationGroup, mushafRecitationGroup } from '../../../shared/recitation-group-evaluation.js';
+import { mergePreparedRecitationTasks, needsRecitationPreparation } from '@/lib/recitationPreparation';
+import { preloadMushafFonts } from '@/lib/quranFonts';
 import { canMarkNazemNotCompleted, nazemNotCompletedLabel, countEvaluationItems, hasNazemFixedRange, isNazemLinkTask, isNazemMasteryTask, resolveTaskRecitationMode } from '../../../shared/nazem-recitation-policy.js';
 
-const MushafRecitationDialog = lazy(() => import('@/components/portal/MushafRecitationDialog'));
+const loadMushafDialog = () => import('@/components/portal/MushafRecitationDialog');
+const MushafRecitationDialog = lazy(loadMushafDialog);
 
 const assertSessionAccepted = (session) => {
   if (!session || !['rejected_duplicate', 'rejected_permission', 'conflict', 'failed', 'invalid_sequence'].includes(session.status)) return;
@@ -38,7 +41,7 @@ const evaluationTypeForTask = (task) => (
   task.taskType === 'memorization' && task.track === 'mastery' ? 'mastery' : task.taskType
 );
 
-const offlineOutcome = (task, payload, policies) => {
+const offlineOutcome = (task, payload, policies, tasks = [task]) => {
   const type = task.taskType === 'memorization' && task.track === 'mastery' ? 'mastery' : task.taskType;
   const policy = policies?.[type];
   if (!policy) return null;
@@ -50,6 +53,15 @@ const offlineOutcome = (task, payload, policies) => {
   );
   if (payload.notMemorized) {
     return { warningCount: 0, mistakeCount: 0, evaluatedFaces, score: 0, completed: false, notMemorized: true };
+  }
+  if (payload.groupEvaluation) {
+    const groupTasks = tasks.filter(item => payload.groupEvaluation.taskIds.includes(Number(item.id)));
+    const expectedFaces = groupTasks.reduce((sum, item) => sum + Number(item.targetPages || 0), 0);
+    const actualFaces = groupTasks.some(item => item.reviewGroupMember)
+      ? groupTasks.reduce((sum, item) => sum + Number(item.reviewExecution?.faces || 0), 0) : expectedFaces;
+    return { ...calculateGroupRecitationOutcome({ policy, taskType: task.taskType, evaluatedFaces: actualFaces, expectedFaces,
+      warningCount: payload.groupEvaluation.warningCount, mistakeCount: payload.groupEvaluation.mistakeCount }),
+    warningCount, mistakeCount, evaluatedFaces: actualFaces };
   }
   const score = calculateRecitationScore(policy, evaluatedFaces, warningCount, mistakeCount);
   const completed = task.nazemManaged
@@ -65,13 +77,21 @@ import { subscribeRecitationResume } from '@/lib/recitationResume';
 const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inline = false }) => {
   const { toast } = useToast();
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const preparationVersion = useRef(0);
   const [isSavingCount, setIsSavingCount] = useState(false);
   const [attendancePendingIds, setAttendancePendingIds] = useState([]);
   const [showAmounts, setShowAmounts] = useState(false);
   const [quranChapters, setQuranChapters] = useState([]);
   const shouldLoad = inline || open;
   const onEvaluationLoaded = useCallback((evaluation) => {
-    void prefetchRecitationTasks(supervisorId, evaluation.taskQueue || evaluation.tasks || [], { automatic: true, date: evaluation.date });
+    const mushafTasks = (evaluation.taskQueue || evaluation.tasks || []).filter(task => (
+      resolveTaskRecitationMode(task, evaluation.evaluationModes?.[evaluationTypeForTask(task)] || 'mushaf') === 'mushaf'
+    ));
+    if (mushafTasks.length) {
+      void loadMushafDialog();
+      void preloadMushafFonts(mushafTasks.slice(0, 4).map(task => task.fromPage));
+    }
+    void prefetchRecitationTasks(supervisorId, mushafTasks, { automatic: true, date: evaluation.generationEndDate || evaluation.date });
   }, [supervisorId]);
   const { data, setData, isLoading, loadError, retryAt, load } = useTeacherEvaluationData(
     supervisorId, shouldLoad, onEvaluationLoaded,
@@ -168,41 +188,37 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
   };
 
   const prepareRecitation = async (student) => {
-    const selectStudent = (selection) => setSelectedStudent({
-      ...selection,
-      tasks: selection.tasks.map((task) => ({ ...task })),
-      evaluationMode: resolveTaskRecitationMode(selection.tasks[0], data?.evaluationModes?.[evaluationTypeForTask(selection.tasks[0])] || 'mushaf'),
-    });
     const firstTask = student.tasks?.[0];
-    const lastTask = student.tasks?.[student.tasks.length - 1];
     const taskExecutionSource = data?.executionSources?.[firstTask?.taskType] || 'teacher';
-    const selectedEndMatchesTasks = student.actualEnd
-      && Number(student.actualEnd.page) === Number(lastTask?.toPage)
-      && Number(student.actualEnd.surah) === Number(lastTask?.toSurah)
-      && Number(student.actualEnd.ayah) === Number(lastTask?.toAyah);
-    if (hasNazemFixedRange(firstTask)
-      || navigator.onLine === false
-      || !['teacher', 'both'].includes(taskExecutionSource)
-      || !['memorization', 'review'].includes(firstTask?.taskType)
-      || !student.actualEnd
-      || selectedEndMatchesTasks) {
-      selectStudent(student);
+    const requiresPreparation = !hasNazemFixedRange(firstTask) && ['teacher', 'both'].includes(taskExecutionSource)
+      && needsRecitationPreparation(student);
+    if (requiresPreparation && navigator.onLine === false) {
+      toast({ title: 'تعذر تعديل المقدار', description: 'اتصل بالإنترنت لتجهيز المقدار الجديد.', variant: 'destructive' });
       return;
     }
+    const version = ++preparationVersion.current;
+    const selection = { ...student, tasks: student.tasks.map(task => ({ ...task })), preparationVersion: version,
+      preparing: requiresPreparation,
+      evaluationMode: resolveTaskRecitationMode(firstTask, data?.evaluationModes?.[evaluationTypeForTask(firstTask)] || 'mushaf') };
+    setSelectedStudent(selection);
+    if (!requiresPreparation) return;
     try {
       const prepared = await studentsApi.prepareSupervisorQuranRange(supervisorId, firstTask.id, {
         actualEnd: student.actualEnd,
+        compensation: student.compensation,
         date: data?.date,
         taskIds: (student.tasks || []).map((task) => task.id),
       });
-      const selectedIds = new Set((prepared.taskIds || []).map(Number));
-      const refreshed = await studentsApi.getSupervisorQuranEvaluation(supervisorId);
-      setData(await mergeLocalTeacherEvaluation(supervisorId, refreshed));
-      selectStudent({
-        ...student,
-        tasks: sortRecitationTasks((refreshed.tasks || []).filter((task) => selectedIds.has(Number(task.id)))),
-      });
+      const preparedTasks = mergePreparedRecitationTasks(student.tasks, prepared, quranChapters);
+      const preparedById = new Map(preparedTasks.map(task => [Number(task.id), task]));
+      setData(current => current ? { ...current,
+        tasks: [...(current.tasks || []).filter(task => !preparedById.has(Number(task.id))), ...preparedTasks],
+        taskQueue: [...(current.taskQueue || []).filter(task => !preparedById.has(Number(task.id))), ...preparedTasks],
+      } : current);
+      setSelectedStudent(current => current?.preparationVersion === version
+        ? { ...selection, preparing: false, tasks: sortRecitationTasks(preparedTasks) } : current);
     } catch (error) {
+      setSelectedStudent(current => current?.preparationVersion === version ? null : current);
       toast({ title: 'تعذر تعديل مقدار التسميع', description: error.message, variant: 'destructive' });
     }
   };
@@ -213,6 +229,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
 
   const selectedTask = selectedStudent?.tasks?.[0];
   const selectedEvaluationMode = selectedStudent?.evaluationMode || 'mushaf';
+  const countItems = useMemo(() => countEvaluationItems(selectedStudent?.tasks), [selectedStudent?.tasks]);
 
   const markRecitationPending = useCallback((studentId, tasks, session) => {
     setData((current) => {
@@ -257,11 +274,11 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
     setIsSavingCount(true);
     try {
       const taskPayloads = sortRecitationTasks(selectedStudent.tasks).map((task) => {
-        const counts = itemCounts[String(task.id)] || { warningCount: 0, mistakeCount: 0 };
+        const counts = countRecitationPayload(task, selectedStudent.tasks, itemCounts);
         const payload = {
+          compensation: selectedStudent.compensation,
           evaluationMode: 'count',
-          warningCount: counts.warningCount,
-          mistakeCount: counts.mistakeCount,
+          ...counts,
           ...(isNazemLinkTask(task) ? { expectedNazemLinkCount: task.expectedLinkCount } : {}),
           ...(task.taskType === 'memorization' && selectedStudent.repeatCount !== undefined
             ? { repeatCount: selectedStudent.repeatCount }
@@ -270,7 +287,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
             ? { listeningCount: selectedStudent.listeningCount }
             : {}),
         };
-        return { task, payload: { ...payload, offlineOutcome: offlineOutcome(task, payload, data?.evaluationPolicies) } };
+        return { task, payload: { ...payload, offlineOutcome: offlineOutcome(task, payload, data?.evaluationPolicies, selectedStudent.tasks) } };
       });
       const session = await commitOfflineRecitation({
         supervisorId,
@@ -332,6 +349,9 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
         onRefresh={() => void load()}
         tasks={data?.tasks || []}
         taskQueue={data?.taskQueue || []}
+        compensationTasks={data?.compensationTasks || []}
+        date={data?.generationEndDate || data?.date}
+        allowCompensation={Boolean(data?.allowQuranCompensation)}
         students={data?.students || []}
         quranChapters={quranChapters}
         isLoading={isLoading}
@@ -359,18 +379,25 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
   let recitationDialog;
   if (!selectedStudent) {
     recitationDialog = null;
+  } else if (selectedStudent.preparing) {
+    recitationDialog = <Dialog open onOpenChange={nextOpen => !nextOpen && setSelectedStudent(null)}>
+      <DialogContent dir="rtl" className="max-w-sm [font-family:var(--font-ui)]">
+        <DialogHeader><DialogTitle>{`تسميع ${selectedStudent.studentName || ''}`}</DialogTitle></DialogHeader>
+        <DashboardLoader />
+      </DialogContent>
+    </Dialog>;
   } else if (selectedEvaluationMode === 'count') {
       recitationDialog = <CountOnlyEvaluationDialog
       secondaryAction={notCompletedAction}
       open={Boolean(selectedStudent)}
       onOpenChange={(nextOpen) => !nextOpen && setSelectedStudent(null)}
-      title={`تسميع ${selectedStudent?.studentName || ''}`}
+      title={`${selectedStudent?.compensation ? 'تعويض' : 'تسميع'} ${selectedStudent?.studentName || ''}`}
       onSubmit={saveCountOnlyRecitation}
       isSaving={isSavingCount}
       supervisorId={supervisorId}
       studentId={selectedStudent?.studentId}
-      items={countEvaluationItems(selectedStudent?.tasks)}
-      showItemLabels={!isNazemLinkTask(selectedTask) && !isNazemMasteryTask(selectedTask)}
+      items={countItems}
+      showItemLabels={!isLocalRecitationGroup(selectedTask) && !isNazemLinkTask(selectedTask) && !isNazemMasteryTask(selectedTask)}
       submitLabel={isNazemMasteryTask(selectedTask) ? 'متقن' : 'إنهاء'}
     />;
     } else {
@@ -387,19 +414,21 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
           supervisorId,
           studentId: selectedStudent.studentId,
           sessionDate: data?.date,
-          tasks: items.map(({ task, payload }) => ({
-            task,
-            payload: {
+          tasks: items.map(({ task, payload }) => {
+            const groupedPayload = { ...payload, groupEvaluation: mushafRecitationGroup(task, items) };
+            return { task, payload: {
+              compensation: selectedStudent.compensation,
               ...payload,
-              offlineOutcome: offlineOutcome(task, payload, data?.evaluationPolicies),
+              ...groupedPayload,
+              offlineOutcome: offlineOutcome(task, groupedPayload, data?.evaluationPolicies, items.map(item => item.task)),
               ...(task.taskType === 'memorization' && selectedStudent?.repeatCount !== undefined
                 ? { repeatCount: selectedStudent.repeatCount }
                 : {}),
               ...(task.taskType === 'memorization' && selectedStudent?.listeningCount !== undefined
                 ? { listeningCount: selectedStudent.listeningCount }
                 : {}),
-            },
-          })),
+            } };
+          }),
         });
         markRecitationPending(selectedStudent.studentId, items.map(({ task }) => task), session);
         syncRecitationInBackground(session.sessionId);

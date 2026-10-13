@@ -1,4 +1,5 @@
 import { isValidNazemLinkCount } from './nazem-link-count.js';
+import { isLocalRecitationGroup, localRecitationGroups } from './recitation-group-evaluation.js';
 
 export const isNazemLinkTask = (task) => Boolean(Number(task?.nazemManaged)) && task.taskType === 'link';
 
@@ -20,7 +21,9 @@ export const readNazemLinkCount = (value) => (
 export const countEvaluationItems = (tasks = []) => (
   isNazemLinkTask(tasks[0])
     ? [{ id: tasks[0].id }]
-    : tasks.map((task, index) => ({ id: task.id, label: task.amount || task.rangeLabel || `المقطع ${index + 1}` }))
+    : isLocalRecitationGroup(tasks[0])
+      ? localRecitationGroups(tasks).map(group => ({ id: group[0].id }))
+      : tasks.map((task, index) => ({ id: task.id, label: task.amount || task.rangeLabel || `المقطع ${index + 1}` }))
 );
 
 export const canMarkNazemNotCompleted = (task) => Boolean(Number(task?.nazemManaged))

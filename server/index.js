@@ -2,7 +2,11 @@ import { selectNarrationStudents, manualNarrationRange } from './services/narrat
 import { loadReciterNazemScope } from './services/reciterNazemScope.js';
 import { getStudentPointSourceLabel } from '../shared/student-point-sources.js';
 import { loadReviewCycle, saveReviewCycle, selectAuthorizedReview } from './services/quranReviewCycle.js';
-import { parseReviewExecution, reviewRangeLabel } from '../shared/quran-review-cycle.js';
+import { parseReviewExecution, reviewRangeLabel, reviewEndOptions, selectReviewFaces } from '../shared/quran-review-cycle.js';
+import { prepareTeacherReviewRange, loadPreparedRecitationTasks } from './services/teacherReviewRange.js';
+import { loadRecitationGroupEvaluation } from './services/recitationGroupEvaluation.js';
+import { assertLocalRecitationScope, managedRecitationIdentitySql } from './services/recitationSessionScope.js';
+import { isDailyRecitationTask, isRecitationCompensationTask } from '../shared/recitation-session-scope.js';
 import { normalizeEventNotifications } from '../shared/event-notifications.js';
 import { notifyStudentsOfEvent } from './services/eventNotifications.js';
 import { extendReviewEnd } from '../shared/quran-review-extension.js';
@@ -3669,6 +3673,7 @@ async function ensureStudentPlanTasks(connection, plan, date, settings) {
         SELECT 1
         FROM student_quran_tasks newer
         WHERE newer.plan_id = student_quran_tasks.plan_id
+             AND ${managedRecitationIdentitySql('student_quran_tasks')}
           AND newer.task_date < ?
           AND newer.task_date > student_quran_tasks.task_date
           AND newer.from_page = student_quran_tasks.from_page
@@ -12928,6 +12933,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
           WHERE attempted_task.plan_id = t.plan_id
             AND attempted_task.task_type = t.task_type
             AND (t.task_type <> 'link' OR attempted_task.task_date = t.task_date)
+            AND (${managedRecitationIdentitySql('t')} OR attempted_task.task_date = t.task_date)
             AND attempted_task.track = t.track
             AND attempted_task.from_page = t.from_page
             AND attempted_task.to_page = t.to_page
@@ -12943,6 +12949,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
           SELECT 1
           FROM student_quran_tasks newer
           WHERE newer.plan_id = t.plan_id
+            AND ${managedRecitationIdentitySql('t')}
             AND NOT ${buildNazemLateTaskExistsSql('t')}
             AND newer.task_date <= ${nazemEvaluationEndDateSql}
             AND newer.task_date > t.task_date
@@ -12966,6 +12973,8 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
     const allRows = candidateRows.filter((row) => {
       if (!visibleStudentIds.has(Number(row.studentId))) return false;
       if (Number(row.nazemManaged)) return true;
+      if (row.taskType === 'link' && row.taskDate !== generationEndDate) return false;
+      if (!isDailyRecitationTask(row, generationEndDate) && !settings.allowQuranCompensation) return false;
       if (!canTeacherExecuteQuranTask(settings, row.taskType)) return false;
       return getQuranTaskExecutionSource(settings, 'memorization') !== 'student'
         || row.taskType !== 'memorization'
@@ -13085,8 +13094,8 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
         nazemLate: Boolean(Number(row.nazemManaged) && Number(row.nazemLate)),
         nazemSubmissionLocked: Boolean(row.nazemManaged
           && Number(row.attemptCount || 0) > 0),
-        allowQuranCompensation: !row.nazemManaged && Boolean(settings.allowQuranCompensation),
-        allowQuranExtra: !row.nazemManaged && Boolean(settings.allowQuranExtra),
+        allowQuranCompensation: row.taskType !== 'link' && !row.nazemManaged && Boolean(settings.allowQuranCompensation),
+        allowQuranExtra: row.taskType === 'memorization' && !row.nazemManaged && Boolean(settings.allowQuranExtra),
         expectedRepeatCount: row.taskType === 'memorization'
           ? normalizeRepeatCount(_resolveExpectedRepeatCount(), 1)
           : 0,
@@ -13197,6 +13206,11 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
         masteryThreePlusFacesWarnings: settings.masteryEvaluationThreePlusFacesWarnings,
       },
       tasks: rows
+        .filter(row => isDailyRecitationTask(row, generationEndDate))
+        .filter((row) => isRecitationAttendanceVisible(attendanceByStudent.get(Number(row.studentId)) || '', teacherAttendanceMode))
+        .map(serializeEvaluationTask),
+      compensationTasks: rows
+        .filter(row => isRecitationCompensationTask(row, generationEndDate, settings.allowQuranCompensation))
         .filter((row) => isRecitationAttendanceVisible(attendanceByStudent.get(Number(row.studentId)) || '', teacherAttendanceMode))
         .map(serializeEvaluationTask),
       taskQueue: allRows
@@ -13261,19 +13275,21 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
       return res.status(404).json({ message: 'مهمة التسميع غير موجودة.' });
     }
     const plan = { ...anchor, id: anchor.planId };
+    assertLocalRecitationScope(anchor, generationEndDate, req.body.compensation, settings.allowQuranCompensation);
     const direction = getRecitationRangeDirection(anchor, plan);
     const { taskScopeSql, taskScopeParams } = buildRequestedRecitationTaskScope(req, taskId, anchor);
     let [tasks] = await connection.query(
       `SELECT id, plan_id AS planId, student_id AS studentId, DATE_FORMAT(task_date, '%Y-%m-%d') AS taskDate,
         task_type AS taskType, track, from_page AS fromPage, to_page AS toPage,
         from_surah AS fromSurah, from_ayah AS fromAyah, to_surah AS toSurah, to_ayah AS toAyah,
-        target_pages AS targetPages
+        target_pages AS targetPages, review_execution_json AS reviewExecution
        FROM student_quran_tasks
        WHERE plan_id = ? AND student_id = ? AND ${taskScopeSql} AND task_type = ? AND track = ? AND nazem_remainder_key = ?
          AND NOT EXISTS (
            SELECT 1
            FROM student_quran_tasks newer
            WHERE newer.plan_id = student_quran_tasks.plan_id
+             AND ${managedRecitationIdentitySql('student_quran_tasks')}
              AND newer.task_date <= ?
              AND newer.task_date > student_quran_tasks.task_date
              AND newer.task_type = student_quran_tasks.task_type
@@ -13313,6 +13329,9 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
       if (rejectOutOfRangeNazemRecitationResult) { return rejectOutOfRangeNazemRecitationResult; }
 
       await persistNazemRecitationRange(tasks, requestedEnd, direction, connection);
+      const preparedTasks = await loadPreparedRecitationTasks(connection, tasks
+        .filter((currentTask) => compareQuranPositionInDirection(requestedEnd, taskStartPosition(currentTask), direction) >= 0)
+        .map((currentTask) => Number(currentTask.id)));
       await connection.commit();
       return res.json({
         ok: true,
@@ -13320,11 +13339,24 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
           .filter((currentTask) => compareQuranPositionInDirection(requestedEnd, taskStartPosition(currentTask), direction) >= 0)
           .map((currentTask) => Number(currentTask.id)),
         actualEnd: requestedEnd,
+        tasks: preparedTasks,
       });
     }
-    if (anchor.taskType !== 'memorization') {
+    if (!canTeacherExecuteQuranTask(settings, anchor.taskType)) {
       await connection.rollback();
-      return res.status(422).json({ message: 'تعديل مقدار المراجعة متاح للخطة المرتبطة بناظم فقط.' });
+      return res.status(403).json({ message: 'تعديل المقدار غير متاح لهذا المعلم.' });
+    }
+    if (anchor.taskType === 'review') {
+      const groupRows = tasks.filter(row => row.taskDate === anchor.taskDate);
+      if (groupRows.length !== tasks.length) {
+        await connection.rollback();
+        return res.status(422).json({ message: 'اختر مقدار مراجعة يوم واحد.' });
+      }
+      const cycle = await getStudentReviewCycle(connection, plan, anchor.taskDate, groupRows);
+      const prepared = await prepareTeacherReviewRange(connection, tasks, cycle, req.body.actualEnd);
+      const preparedTasks = await loadPreparedRecitationTasks(connection, prepared.tasks.map(row => Number(row.id)));
+      await connection.commit();
+      return res.json({ ok: true, taskIds: preparedTasks.map(row => Number(row.id)), tasks: preparedTasks, actualEnd: prepared.actualEnd });
     }
     const actualStart = taskStartPosition(tasks[0]);
     const context = await getPlanProgressContext(connection, plan, executionDate, settings, actualStart);
@@ -13341,11 +13373,12 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
     tasks = await extendRecitationTaskRange({ actualEnd, currentEnd, direction, tasks, connection, context, plan, anchor, generationEndDate, actualStart });
 
     await persistLocalRecitationRange(tasks, actualEnd, direction, context, connection);
-    await connection.commit();
     const selectedIds = tasks
       .filter((task) => compareQuranPositionInDirection(actualEnd, taskStartPosition(task), direction) >= 0)
       .map((task) => Number(task.id));
-    res.json({ ok: true, taskIds: selectedIds, actualEnd });
+    const preparedTasks = await loadPreparedRecitationTasks(connection, selectedIds);
+    await connection.commit();
+    res.json({ ok: true, taskIds: selectedIds, tasks: preparedTasks, actualEnd });
   } catch (error) {
     await connection.rollback();
     next(error);
@@ -13653,6 +13686,7 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
           SELECT 1
           FROM student_quran_tasks newer
           WHERE newer.plan_id = t.plan_id
+            AND ${managedRecitationIdentitySql('t')}
             AND NOT ${buildNazemLateTaskExistsSql('t')}
             AND newer.task_date <= ?
             AND newer.task_date > t.task_date
@@ -13671,6 +13705,11 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
     );
     const rejectInvalidRecitationTaskResult = await rejectInvalidRecitationTask({ task, settings, connection, res, req, notMemorized });
     if (rejectInvalidRecitationTaskResult) { return rejectInvalidRecitationTaskResult; }
+    if (!Number(task.nazemManaged) && task.taskType === 'link' && task.taskDate !== generationEndDate) {
+      await connection.rollback();
+      return res.status(422).json({ message: 'الربط خاص بمقدار اليوم ولا يقبل التعويض.' });
+    }
+    assertLocalRecitationScope(task, generationEndDate, req.body.compensation, settings.allowQuranCompensation);
     if (await rejectOutOfSequenceRecitation({ task, req, connection, date, taskId, supervisorId, res })) return;
     if (notMemorized) {
       warningCount = 0;
@@ -13705,7 +13744,7 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
     let normalizedAyahMarks = null;
     let normalizedWordMarks = null;
     ({ mistakeCount, warningCount } = await saveValidatedRecitationMarks({ ayahMarksPayload, wordMarksPayload, connection, task, normalizedWordMarks, markLimit, normalizedAyahMarks, mistakeCount, warningCount, taskId, supervisorId }));
-    const { ratingLabel, score, policy, completed, evaluatedFaces } = await calculateTaskEvaluationOutcome({ task, connection, settings, notMemorized, warningCount, mistakeCount });
+    const { ratingLabel, score, policy, completed, evaluatedFaces } = await calculateTaskEvaluationOutcome({ task, connection, settings, notMemorized, warningCount, mistakeCount, groupEvaluation: req.body.groupEvaluation, evaluationMode });
     await connection.query(
       `
       UPDATE student_quran_tasks
@@ -14895,7 +14934,7 @@ function notifyChangedStudentAbsence(status, previous, settings, req, date) {
 /** Build each recitation group once and retain the fixed Nazem and local plan limits. */
 async function buildTeacherExecutionChoices(allRows, executionOptionsByGroup, connection, date, settings) {
   for (const row of allRows.filter((item) => (
-    item.taskType === 'memorization' || (item.taskType === 'review' && Number(item.nazemManaged))
+    item.taskType === 'memorization' || item.taskType === 'review'
   ))) {
     const groupKey = `${row.planId}:${row.taskDate}:${row.taskType}:${row.track}${nazemRemainderSuffix(row)}`;
     if (executionOptionsByGroup.has(groupKey)) continue;
@@ -14919,6 +14958,20 @@ async function buildTeacherExecutionChoices(allRows, executionOptionsByGroup, co
       scheduleAnchorAyah: row.planScheduleAnchorAyah,
     };
     const groupRows = allRows.filter((item) => `${item.planId}:${item.taskDate}:${item.taskType}:${item.track}${nazemRemainderSuffix(item)}` === groupKey);
+    if (row.taskType === 'review' && !Number(row.nazemManaged)) {
+      const cycle = await getStudentReviewCycle(connection, plan, row.taskDate, groupRows);
+      if (!cycle?.ayahs.length) continue;
+      const recorded = groupRows.map(item => parseReviewExecution(item.reviewExecution)).find(Boolean);
+      const selection = recorded || selectReviewFaces(cycle, cycle.expectedFaces);
+      executionOptionsByGroup.set(groupKey, {
+        normalEnd: selection.ranges.at(-1).end,
+        reviewStart: selection.ranges[0].start,
+        reviewExpectedFaces: cycle.expectedFaces,
+        reviewActualFaces: selection.faces,
+        options: reviewEndOptions(cycle),
+      });
+      continue;
+    }
     const direction = row.taskType === 'review' || row.track !== row.planTrack
       ? getQuranRangeDirection(taskStartPosition(row), taskEndPosition(row))
       : getQuranRangeDirection(
@@ -14970,7 +15023,21 @@ async function buildTeacherExecutionChoices(allRows, executionOptionsByGroup, co
 }
 
 /** Calculate bounded evaluation scores from the actual range and the current task policy. */
-async function calculateTaskEvaluationOutcome({ task, connection, settings, notMemorized, warningCount, mistakeCount }) {
+async function calculateTaskEvaluationOutcome({ task, connection, settings, notMemorized, warningCount, mistakeCount, groupEvaluation, evaluationMode }) {
+  const group = await loadRecitationGroupEvaluation(connection, task, groupEvaluation,
+    row => getTeacherTaskEvaluationPolicy(settings, row), calculateQuranRangeFaces, evaluationMode,
+    async (row, marks) => {
+      const ayahs = await getQuranAyahsForTask(connection, row);
+      const allowedByKey = new Map(ayahs.map(ayah => [`${Number(ayah.surah)}:${Number(ayah.ayah)}`, ayah]));
+      const pages = await Promise.all((await getQcfTaskPageNumbers(row)).map(getQcfMushafPage));
+      const words = pages.flatMap(page => page?.words || []);
+      const normalizedWordMarks = [];
+      normalizeSelectedWordMarks({ wordMarksPayload: marks, words, allowedByKey, normalizedWordMarks,
+        wordIndexByLocation: new Map(words.map((word, index) => [word.location, index])), marksByKey: new Map() });
+      return { warningCount: normalizedWordMarks.filter(mark => mark.markType === 'warning').length,
+        mistakeCount: normalizedWordMarks.filter(mark => mark.markType === 'mistake').length };
+    }, { warningCount, mistakeCount });
+  if (group) return { ...group, ratingLabel: group.completed ? 'متقن' : 'يحتاج إعادة' };
   const evaluatedRange = {
     startPage: task.fromPage,
     startSurah: task.fromSurah,
@@ -15120,6 +15187,7 @@ async function extendRecitationTaskRange({ actualEnd, currentEnd, direction, tas
              SELECT 1
              FROM student_quran_tasks newer
              WHERE newer.plan_id = student_quran_tasks.plan_id
+             AND ${managedRecitationIdentitySql('student_quran_tasks')}
                AND newer.task_date <= ?
                AND newer.task_date > student_quran_tasks.task_date
                AND newer.task_type = student_quran_tasks.task_type

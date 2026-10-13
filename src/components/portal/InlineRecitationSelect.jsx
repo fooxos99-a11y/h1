@@ -7,7 +7,7 @@ const itemClassName = 'h-9 justify-center px-2 text-center text-xs font-black da
 
 const InlineRecitationSelect = ({ value, options = [], onValueChange, ariaLabel, disabled = false }) => (
   <Select value={String(value)} onValueChange={onValueChange} disabled={disabled}>
-    <SelectTrigger aria-label={ariaLabel} appearance="inline" className={triggerClassName} disabled={disabled}>
+    <SelectTrigger aria-label={ariaLabel} appearance="inline" className={`${triggerClassName} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`} disabled={disabled}>
       <SelectValue />
     </SelectTrigger>
     <SelectContent align="center" sideOffset={2} className={contentClassName}>

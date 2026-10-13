@@ -103,7 +103,7 @@ test('retry source stays available across dates while completed local actions le
   assert.match(server, /AND a\.teacher_completed = 1\s*\) AS successfulAttemptCount/);
   assert.match(server, /nazemSubmissionLocked: Boolean\(row\.nazemManaged\s*&& Number\(row\.attemptCount \|\| 0\) > 0\)/);
   assert.match(server.slice(server.indexOf('const nazemTeacherActionFilter'), server.indexOf('const [candidateRows]')), /buildNazemLateTaskExistsSql[\s\S]*actionAttempt\.teacher_completed = 1/);
-  assert.match(taskList, /pendingTasks = student\.tasks\.filter\(isRecitationActionPending\)/);
+  assert.match(taskList, /pendingTasks = student\.tasks\.filter\(task => isRecitationActionPending\(task\) && isDailyRecitationTask\(task, date\)\)/);
   assert.match(taskList, /tasks: pendingTasks\.filter\(\(task\) => evaluationTypeForTask\(task\) === 'memorization'\)/);
   assert.match(taskList, /tasks: pendingTasks\.filter\(\(task\) => evaluationTypeForTask\(task\) === 'mastery'\)/);
   assert.match(taskList, /اكتمل التسميع/);
@@ -131,7 +131,8 @@ test('a combined memorization session evaluates each face independently and defe
   const rewindEnd = server.indexOf('function countUniquePagesWithinPlan', rewindStart);
   const rewindImplementation = server.slice(rewindStart, rewindEnd);
 
-  assert.match(evaluation, /items=\{countEvaluationItems\(selectedStudent\?\.tasks\)\}/);
+  assert.match(evaluation, /useMemo\(\(\) => countEvaluationItems\(selectedStudent\?\.tasks\), \[selectedStudent\?\.tasks\]\)/);
+  assert.match(evaluation, /items=\{countItems\}/);
   assert.match(countDialog, /itemCounts\[String\(item\.id\)\]/);
   assert.match(mushaf, /marksByTask\[String\(activeEntry\.task\.id\)\]/);
   assert.match(server, /same_day_attempt\.session_date = \?/);

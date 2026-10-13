@@ -11,11 +11,11 @@ try {
     const second = await cards.nth(1).boundingBox();
     assert.ok(second.y - first.y - first.height <= 11);
     assert.ok(first.height < 70);
-    const sizes = await page.locator('.recitation-amount-text, .recitation-range-trigger').evaluateAll((nodes) => nodes.map((node) => globalThis.getComputedStyle(node).fontSize));
+    const sizes = await page.locator('.recitation-amount-text, .recitation-range-controls').evaluateAll((nodes) => nodes.map((node) => globalThis.getComputedStyle(node).fontSize));
     assert.equal(new Set(sizes).size, 1);
-    assert.equal(await page.getByRole('combobox').count(), 0);
-    await page.getByRole('button', { name: 'تعديل المقدار: المجادلة 9–11' }).first().click();
-    await page.getByRole('combobox', { name: 'آية النهاية' }).waitFor();
+    await page.getByRole('combobox', { name: 'آية النهاية' }).first().click();
+    await page.getByRole('option', { name: '12', exact: true }).click();
+    assert.equal(await page.getByRole('combobox', { name: 'آية النهاية' }).first().innerText(), '12');
     await page.keyboard.press('Escape');
     assert.ok(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth));
     await page.screenshot({ path: `outputs/recitation-amounts-${width}.png` });

@@ -43,5 +43,8 @@ export function advanceRecitationTaskQueue(evaluation, completedTasks = [], { pr
     })),
     tasks: tasks.sort(compareQueuedTasks),
     taskQueue,
+    ...(evaluation.compensationTasks ? {
+      compensationTasks: evaluation.compensationTasks.filter(task => !completedIds.has(Number(task.id))),
+    } : {}),
   };
 }

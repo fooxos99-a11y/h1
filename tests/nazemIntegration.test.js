@@ -975,7 +975,9 @@ test('Nazem plans stay managed remotely while ordinary review permits an endpoin
   const evaluationSource = readFileSync(new URL('../src/components/portal/TeacherEvaluationDialog.jsx', import.meta.url), 'utf8');
   assert.match(evaluationSource, /studentsApi\.getQuranChapters\(\)/);
   assert.match(evaluationSource, /quranChapters=\{quranChapters\}/);
-  assert.match(serverSource, /item\.taskType === 'review' && Number\(item\.nazemManaged\)/);
+  assert.match(serverSource, /item\.taskType === 'memorization' \|\| item\.taskType === 'review'/);
+  assert.match(serverSource, /row\.taskType === 'review' && !Number\(row\.nazemManaged\)[\s\S]*getStudentReviewCycle/);
+  assert.match(serverSource, /prepareTeacherReviewRange\(connection, tasks, cycle, req\.body\.actualEnd\)/);
   assert.match(serverSource, /const allowedEnd = fixedRange \|\| anchor\.taskType === 'review'/);
 });
 

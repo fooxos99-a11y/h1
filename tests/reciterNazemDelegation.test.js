@@ -1,4 +1,6 @@
 import test from 'node:test';
+import { managedRecitationIdentitySql } from '../server/services/recitationSessionScope.js';
+import { isDailyRecitationTask, isRecitationCompensationTask } from '../shared/recitation-session-scope.js';
 import assert from 'node:assert/strict';
 import { loadReciterNazemScope } from '../server/services/reciterNazemScope.js';
 import { enqueueNazemRecitation, resolveNazemTeacherForStudent } from '../server/integrations/nazem/queue.js';
@@ -89,6 +91,7 @@ test('actual evaluation handler refreshes plan teachers, exposes unexecuted Naze
   } };
   const refreshes = [];
   const dependencies = {
+    managedRecitationIdentitySql, isDailyRecitationTask, isRecitationCompensationTask,
     siteConfig: { features: {} },
     nazemEvaluationEndDateSql,
     quranTaskMarkVerseKey: (mark) => `${mark.surah}:${mark.ayah}`,

@@ -266,13 +266,16 @@ function resolveOfflineCarry({ unresolvedDates, history, usableSessions, student
 export async function loadCachedTaskData(supervisorId, task, { preferCache = false } = {}) {
   const actorKey = recitationActorKey(supervisorId);
   const cached = await offlineRecitationStore.getTask(actorKey, task.id);
-  if (cached && (!isOnline() || preferCache)) return cached;
+  const version = recitationTaskCacheVersion(task);
+  const currentCache = cached && (cached._prefetchVersion ? cached._prefetchVersion === version
+    : !task.actualToSurah && !task.actualToAyah && !task.reviewGroupMember);
+  if (currentCache && (!isOnline() || preferCache)) return cached;
   try {
     const payload = await studentsApi.getSupervisorQuranTaskAyahs(supervisorId, task.id);
-    await offlineRecitationStore.cacheTask(actorKey, task.id, payload);
+    await offlineRecitationStore.cacheTask(actorKey, task.id, { ...payload, _prefetchVersion: version, _prefetchedAt: Date.now() });
     return payload;
   } catch (error) {
-    if (cached) return cached;
+    if (currentCache) return cached;
     throw error;
   }
 }

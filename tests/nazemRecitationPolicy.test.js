@@ -23,8 +23,8 @@ test('Nazem link always opens one count form; other tasks keep their preferred m
   assert.equal(resolveTaskRecitationMode(link, 'mushaf'), 'count');
   assert.deepEqual(countEvaluationItems([link, { ...link, id: 11 }]), [{ id: 10 }]);
   assert.deepEqual(countEvaluationItems([
-    { id: 1, taskType: 'memorization', amount: 'الوجه الأول' },
-    { id: 2, taskType: 'memorization', amount: 'الوجه الثاني' },
+    { id: 1, taskType: 'memorization', nazemManaged: true, amount: 'الوجه الأول' },
+    { id: 2, taskType: 'memorization', nazemManaged: true, amount: 'الوجه الثاني' },
   ]), [{ id: 1, label: 'الوجه الأول' }, { id: 2, label: 'الوجه الثاني' }]);
   for (const task of [{ ...link, nazemManaged: false }, { ...link, taskType: 'review' }]) {
     assert.equal(resolveTaskRecitationMode(task, 'mushaf'), 'mushaf');

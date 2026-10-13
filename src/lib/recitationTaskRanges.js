@@ -1,3 +1,5 @@
+import { compareQuranPositionInDirection } from '../../shared/quran-execution-policy.js';
+
 const numberText = (value) => Number(value || 0).toLocaleString('ar-SA-u-nu-latn');
 
 const cleanSurahName = (name, surah) => String(name || `سورة ${surah || ''}`)
@@ -19,11 +21,9 @@ const compareTaskPosition = (first, second) => {
     if (dates) return dates;
   }
   const direction = Number(first?.planDirection || second?.planDirection || 1) < 0 ? -1 : 1;
-  const firstPosition = [Number(first?.fromPage || 0), Number(first?.fromSurah || 0), Number(first?.fromAyah || 0)];
-  const secondPosition = [Number(second?.fromPage || 0), Number(second?.fromSurah || 0), Number(second?.fromAyah || 0)];
-  for (let index = 0; index < firstPosition.length; index += 1) {
-    if (firstPosition[index] !== secondPosition[index]) return (firstPosition[index] - secondPosition[index]) * direction;
-  }
+  const position = task => ({ page: Number(task?.fromPage || 0), surah: Number(task?.fromSurah || 0), ayah: Number(task?.fromAyah || 0) });
+  const compared = compareQuranPositionInDirection(position(first), position(second), direction);
+  if (compared) return compared;
   return String(first?.taskDate || '').localeCompare(String(second?.taskDate || ''));
 };
 

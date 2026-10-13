@@ -189,6 +189,9 @@ test('teacher recitation attendance reveals grouped actions without a page reloa
   assert.match(taskList, /<TeacherRecitationPractice repeatControl=/);
   assert.match(recitationDetails, /amountControl \|\| <RecitationAmountVisibility/);
   assert.doesNotMatch(taskList, /label: 'التعويض'|key: 'compensation'/);
+  assert.match(taskList, /RecitationIdentity[\s\S]*recitation-compensation[\s\S]*>التعويض<\/Button>/);
+  assert.match(taskList, /isDailyRecitationTask\(task, date\)/);
+  assert.match(taskList, /TeacherCompensationDialog/);
   assert.match(taskList, /listeningControl=\{memorizationView\?\.listeningControl\}/);
   assert.match(taskList, /actionOrder = \['saved', 'link', 'review', 'mastery'\]/);
   assert.match(taskList, /if \(!action\.tasks\.length\) return false/);

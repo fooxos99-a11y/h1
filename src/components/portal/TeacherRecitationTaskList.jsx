@@ -18,6 +18,8 @@ import { getRecitationStatusLabel } from '@/lib/recitationEvaluation';
 import { hasNazemFixedRange, isNazemLinkTask, readNazemLinkCount } from '../../../shared/nazem-recitation-policy.js';
 import { Button } from '@/components/ui/button';
 import { nazemLateOptions, selectNazemLatePrefix } from '../../../shared/nazem-late-selection.js';
+import { groupRecitationCompensations, isDailyRecitationTask, isRecitationCompensationTask } from '../../../shared/recitation-session-scope.js';
+import TeacherCompensationDialog from '@/components/portal/TeacherCompensationDialog';
 
 const evaluationTypeForTask = (task) => (
   task.taskType === 'memorization' && task.track === 'mastery'
@@ -36,6 +38,9 @@ const TeacherRecitationTaskList = ({
   tasks = [],
   taskQueue = [],
   students = [],
+  compensationTasks = [],
+  date,
+  allowCompensation = false,
   quranChapters = [],
   isLoading = false,
   onRecite,
@@ -53,6 +58,7 @@ const TeacherRecitationTaskList = ({
   emptyText = 'لا توجد مهام للتقييم.',
 }) => {
   const [selectedEnds, setSelectedEnds] = useState({});
+  const [compensationStudentId, setCompensationStudentId] = useState(null);
   const [selectedRepeatCounts, setSelectedRepeatCounts] = useState({});
   const [selectedListeningCounts, setSelectedListeningCounts] = useState({});
   const updateSelectedEnd = (key, value) => setSelectedEnds((current) => ({ ...current, [key]: value }));
@@ -80,8 +86,10 @@ const TeacherRecitationTaskList = ({
     });
     return [...map.values()]
       .filter((student) => !onRecite || isRecitationAttendanceVisible(student.attendanceStatus, recitationAttendanceSource === 'teacher' && student.canSetAttendance))
-      .filter((student) => !onRecite || shouldShowRecitationStudent(student, student.tasks, taskQueue)).map((student) => ({ ...student, tasks: sortRecitationTasks(student.tasks) }));
-  }, [students, tasks, taskQueue, teacherAttendanceMode, recitationAttendanceSource, onRecite]);
+      .filter((student) => !onRecite || shouldShowRecitationStudent(student, student.tasks, taskQueue,
+        [...compensationTasks, ...taskQueue.filter(task => isRecitationCompensationTask(task, date, allowCompensation))]))
+      .map((student) => ({ ...student, tasks: sortRecitationTasks(student.tasks) }));
+  }, [students, tasks, taskQueue, compensationTasks, date, allowCompensation, teacherAttendanceMode, recitationAttendanceSource, onRecite]);
 
   if (isLoading) return <DashboardLoader />;
   if (grouped.length === 0) {
@@ -99,7 +107,10 @@ const TeacherRecitationTaskList = ({
         const canRecite = !student.offlineSequenceBlocked
           && !attendanceBlocksRecitation
           && (!attendanceControlled || ['present', 'late'].includes(student.attendanceStatus));
-        const pendingTasks = student.tasks.filter(isRecitationActionPending);
+        const pendingTasks = student.tasks.filter(task => isRecitationActionPending(task) && isDailyRecitationTask(task, date));
+        const compensationById = new Map([...student.tasks, ...taskQueue, ...compensationTasks]
+          .filter(task => Number(task.studentId) === Number(student.studentId)).map(task => [Number(task.id), task]));
+        const compensationGroups = groupRecitationCompensations([...compensationById.values()], date, allowCompensation);
         const recitationActions = [
           {
             key: 'saved',
@@ -218,7 +229,9 @@ const TeacherRecitationTaskList = ({
         return (
           <div key={student.studentId} className="recitation-reference-card">
             <div className="min-w-0">
-              <RecitationIdentity name={student.studentName}>
+              <RecitationIdentity name={student.studentName} actions={onRecite && compensationGroups.length > 0 ?
+                <Button type="button" variant="ghost" className="recitation-compensation"
+                  disabled={!canRecite} onClick={() => setCompensationStudentId(student.studentId)}>التعويض</Button> : null}>
                 {attendanceEditable && (
                   <Select
                     value={student.attendanceStatus || ''}
@@ -242,6 +255,8 @@ const TeacherRecitationTaskList = ({
                   </Select>
                 )}
               </RecitationIdentity>
+              {Number(compensationStudentId) === Number(student.studentId) && <TeacherCompensationDialog
+                student={student} groups={compensationGroups} onClose={() => setCompensationStudentId(null)} onRecite={onRecite} />}
 
               {onRecite && hasRecitationTasks && canRecite && (
                 <div className="recitation-actions" data-has-both-tracks={hasBothTracks}>
@@ -272,6 +287,8 @@ const TeacherRecitationTaskList = ({
                           const selectedStudent = {
                             ...student,
                             tasks: action.tasks,
+                            compensation: false,
+                            rangeChanged: Boolean(selectedEnds[actionKey]),
                             actualEnd: hasNazemFixedRange(action.tasks[0]) || nazemLate
                               ? action.tasks[0]?.normalEnd || null
                               : selectedEnds[actionKey] || action.tasks[0]?.normalEnd || null,
@@ -409,10 +426,10 @@ function renderRecitationAmountControl({ lateOptions, action, actionKey, selecte
   return (
     <RecitationEndSelector
       start={{
-        page: firstTask.fromPage,
-        surah: firstTask.fromSurah,
-        ayah: firstTask.fromAyah,
-        surahName: firstTask.fromSurahName,
+        page: firstTask.reviewStart?.page || firstTask.fromPage,
+        surah: firstTask.reviewStart?.surah || firstTask.fromSurah,
+        ayah: firstTask.reviewStart?.ayah || firstTask.fromAyah,
+        surahName: firstTask.reviewStart?.surahName || firstTask.fromSurahName,
       }}
       options={firstTask.options}
       value={selected}

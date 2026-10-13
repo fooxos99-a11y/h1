@@ -38,6 +38,22 @@ export function selectReviewFaces(cycle, faces) {
     ranges, next: position(ayahs[index % ayahs.length]), direction: cycle.direction };
 }
 
+export function reviewEndOptions(cycle) {
+  let faces = 0;
+  return (cycle?.ayahs || []).flatMap(ayah => {
+    faces += ayah.weight;
+    return faces + 1e-8 >= 0.25 && faces <= MAX_REVIEW_FACES
+      ? [{ ...position(ayah), reviewFaces: Number(faces.toFixed(8)) }] : [];
+  });
+}
+
+// Resolve the endpoint within the ordered cycle, including its wrap and gaps.
+export function selectReviewEnd(cycle, end) {
+  const option = reviewEndOptions(cycle).find(item => key(item) === key(end));
+  if (!option) throw new RangeError('نهاية المراجعة خارج المحفوظ المتاح.');
+  return selectReviewFaces(cycle, option.reviewFaces);
+}
+
 export function reviewRangeLabel(range) {
   const label = value => `${value.surahName || 'سورة ' + value.surah} آية ${value.ayah}`;
   return `${label(range.start)} إلى ${label(range.end)}`;

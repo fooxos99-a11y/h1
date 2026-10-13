@@ -1,7 +1,5 @@
 import React from 'react';
 import InlineRecitationSelect from '@/components/portal/InlineRecitationSelect';
-import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 const keyOf = (position = {}) => `${Number(position.surah || 0)}:${Number(position.ayah || 0)}`;
 
@@ -75,8 +73,8 @@ const RecitationEndSelector = ({
     onChange?.(sameAyah || sameSurah[0]);
   };
 
-  const controls = (
-    <div className="flex min-w-0 flex-wrap items-center justify-center gap-x-1 gap-y-0 text-xs font-black leading-4 text-muted-foreground [font-family:var(--font-ui)] [&_[role=combobox]]:!min-h-11 [&_[role=combobox]]:!min-w-11 sm:text-sm sm:leading-5">
+  return (
+    <div className={`recitation-range-controls flex min-w-0 flex-wrap items-center justify-center gap-x-1 gap-y-0 text-xs font-black leading-4 text-muted-foreground [font-family:var(--font-ui)] [&_[role=combobox]]:!min-h-11 [&_[role=combobox]]:!min-w-11 sm:text-sm sm:leading-5${compact ? ' recitation-range-compact' : ''}`}>
       <span className="whitespace-nowrap">من {surahLabel(start)} {start.ayah}</span>
       <span>إلى</span>
       <InlineRecitationSelect
@@ -102,23 +100,6 @@ const RecitationEndSelector = ({
         }}
       />
     </div>
-  );
-  if (!compact) return controls;
-  // Same wording as the read-only amount so every card reads alike.
-  const range = Number(start.surah) === Number(selected.surah)
-    ? `من ${surahLabel(start)} ${start.ayah} إلى ${selected.ayah}`
-    : `من ${surahLabel(start)} ${start.ayah} إلى ${surahLabel(selected)} ${selected.ayah}`;
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" className="recitation-range-trigger" aria-label={`تعديل المقدار: ${range}`}>
-          {range}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent dir="rtl" className="max-w-[calc(100vw-24px)] [font-family:var(--font-ui)] [&_[role=combobox]]:!min-h-11 [&_[role=combobox]]:!min-w-11">
-        {controls}
-      </PopoverContent>
-    </Popover>
   );
 };
 

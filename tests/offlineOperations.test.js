@@ -100,9 +100,10 @@ test('teacher Mushaf opens from the prepared cache without waiting for unrelated
   ]);
   assert.match(service, /preferCache/);
   assert.match(service, /Promise\.allSettled\(uniqueTasks\.map/);
-  assert.match(evaluation, /selectedEndMatchesTasks/);
+  assert.match(evaluation, /needsRecitationPreparation\(student\)/);
+  assert.match(evaluation, /setSelectedStudent\(selection\)[\s\S]*if \(!requiresPreparation\) return/);
   assert.match(evaluation, /preferCache: true/);
-  assert.match(dialog, /setEntries\(nextEntries\)[\s\S]+setIsLoading\(false\)[\s\S]+void preloadMushafFonts/);
+  assert.match(dialog, /setEntries\(nextEntries\)[\s\S]+setIsLoading\(false\)[\s\S]+void Promise\.all[\s\S]+preloadMushafFonts/);
   assert.doesNotMatch(fonts, /document\.fonts\?\.ready/);
 });
 
