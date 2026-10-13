@@ -4,7 +4,7 @@ import time
 import urllib.parse
 
 from app_store_auth import create_app_token, find_app_id
-from app_store_review_state import wait_for_review_cancellation
+from app_store_review_state import verified_review_submission, wait_for_review_cancellation
 from app_store_http import request_json
 
 
@@ -81,6 +81,13 @@ def main():
     print(f"App Store status for {bundle_id}:")
     versions = payload.get("data", [])
     print_version_status(versions, builds)
+
+    if os.environ.get("VERIFY_REVIEW_SUBMISSION") == "true":
+        result = verified_review_submission(
+            versions, builds, os.environ["APP_VERSION"], os.environ["TARGET_BUILD_NUMBER"]
+        )
+        print(json.dumps({**result, "appId": app_id, "bundleId": bundle_id}))
+        return
 
     if os.environ.get("REPLACE_READY_FOR_REVIEW_BUILD") != "true":
         return
@@ -230,6 +237,7 @@ def print_version_status(versions, builds):
                     "state": attributes.get("appStoreState"),
                     "build": build.get("version"),
                     "buildProcessingState": build.get("processingState"),
+                    "releaseType": attributes.get("releaseType"),
                 },
                 ensure_ascii=False,
             )

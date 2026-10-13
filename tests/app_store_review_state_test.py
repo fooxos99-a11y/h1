@@ -3,7 +3,41 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from app_store_review_state import wait_for_review_cancellation
+from app_store_review_state import verified_review_submission, wait_for_review_cancellation
+
+
+class SubmissionVerificationTests(unittest.TestCase):
+    def setUp(self):
+        self.versions = [{"attributes": {"versionString": "1.0.20", "appStoreState": "WAITING_FOR_REVIEW",
+                                         "releaseType": "AFTER_APPROVAL"},
+                          "relationships": {"build": {"data": {"id": "selected"}}}}]
+        self.builds = {"selected": {"version": "85", "processingState": "VALID"}}
+
+    def test_verifies_selected_build_review_and_automatic_release(self):
+        result = verified_review_submission(self.versions, self.builds, "1.0.20", "85")
+        self.assertTrue(result["verified"])
+        self.assertEqual(result["build"], "85")
+        self.assertEqual(result["releaseType"], "AFTER_APPROVAL")
+
+    def test_rejects_missing_version_and_wrong_build(self):
+        for version, build in [("1.0.19", "85"), ("1.0.20", "77")]:
+            with self.assertRaises(RuntimeError):
+                verified_review_submission(self.versions, self.builds, version, build)
+
+    def test_rejects_unprocessed_build(self):
+        self.builds["selected"]["processingState"] = "PROCESSING"
+        with self.assertRaises(RuntimeError):
+            verified_review_submission(self.versions, self.builds, "1.0.20", "85")
+
+    def test_rejects_draft_without_review_submission(self):
+        self.versions[0]["attributes"]["appStoreState"] = "PREPARE_FOR_SUBMISSION"
+        with self.assertRaises(RuntimeError):
+            verified_review_submission(self.versions, self.builds, "1.0.20", "85")
+
+    def test_rejects_manual_release(self):
+        self.versions[0]["attributes"]["releaseType"] = "MANUAL"
+        with self.assertRaises(RuntimeError):
+            verified_review_submission(self.versions, self.builds, "1.0.20", "85")
 
 
 class ReviewCancellationTests(unittest.TestCase):

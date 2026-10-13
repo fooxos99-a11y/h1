@@ -375,11 +375,12 @@ test('App Store build number is passed through environment variables, never shel
   const workflow = await readFile(new URL('../.github/workflows/ios-app-store-release.yml', import.meta.url), 'utf8');
   const buildInputLines = workflow.split(/\r?\n/).filter((line) => line.includes('inputs.build_number'));
 
-  assert.equal(buildInputLines.length, 2);
+  assert.equal(buildInputLines.length, 3);
   for (const line of buildInputLines) {
     assert.match(line, /^ {10}(?:TARGET_BUILD_NUMBER|BUILD_NUMBER): \$\{\{ inputs\.build_number \}\}$/);
   }
-  const submission = workflow.slice(workflow.indexOf('      - name: Select processed build and submit for review'));
+  const submission = workflow.slice(workflow.indexOf('      - name: Select processed build and submit for review'),
+    workflow.indexOf('      - name: Verify App Review submission and automatic release'));
   assert.match(submission, /env:\r?\n {10}BUILD_NUMBER: \$\{\{ inputs\.build_number \}\}\r?\n {8}run:/);
   assert.doesNotMatch(submission.slice(submission.indexOf('        run:')), /\$\{\{\s*inputs\./);
   assert.match(submission, /build_number\(ENV\.fetch\("BUILD_NUMBER"\)\)/);
