@@ -1459,7 +1459,7 @@ async function initializeDatabase(databaseName, { seedDefaultData } = {}) {
       ('reviewExecutionSource', 'both'),
       ('linkExecutionSource', 'both'),
       ('repeatExecutionSource', 'both'),
-      ('recitationAmountDay', 'previous_day'),
+      ('recitationAmountDay', 'same_day'),
       ('studentTaskAmountEditable', 'true'),
       ('studentReviewAmountEditable', 'true'),
       ('studentLinkAmountEditable', 'true'),

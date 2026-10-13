@@ -8,6 +8,7 @@ export function isRecitationActionPending(task) {
 
 export function shouldShowRecitationStudent(student, tasks = [], taskQueue = [], compensationTasks = []) {
   if (student.nazemRecitationCompleted) return true;
+  if (student.recitationOutcomes?.some(outcome => !outcome.teacherCompleted)) return true;
   if (!['present', 'late'].includes(student.attendanceStatus)) return true;
   const remaining = [...tasks, ...compensationTasks].some((task) => (
     Number(task.studentId) === Number(student.studentId) && isRecitationActionPending(task)

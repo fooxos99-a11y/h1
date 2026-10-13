@@ -36,7 +36,7 @@ export const platformSettingsGroups = [
       text('quranPlanEndDate', 'النهاية', '', 'date'),
       { key: 'weeklyHolidayDays', label: 'أيام الإجازة', type: 'weekDays', defaultValue: [5, 6] },
       { key: 'holidayTaskTypes', label: 'مهام الإجازة', type: 'taskTypes', defaultValue: [] },
-      select('recitationAmountDay', 'المقادير التي تظهر في جلسة التسميع', 'previous_day', [
+      select('recitationAmountDay', 'المقادير التي تظهر في جلسة التسميع', 'same_day', [
         { value: 'previous_day', label: 'المقادير المقررة حتى اليوم السابق للجلسة' },
         { value: 'same_day', label: 'المقادير المقررة حتى يوم الجلسة' },
       ]),

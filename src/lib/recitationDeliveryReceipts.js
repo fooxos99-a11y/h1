@@ -59,6 +59,11 @@ function mergeSessionDeliveryReceipts(session, receipts, tasks, students) {
       taskId: item.taskId, studentId: session.studentId, studentName: student?.studentName || 'الطالب',
       taskType: item.taskType || task?.taskType, taskDate: item.taskDate || task?.taskDate || session.sessionDate,
       track: item.track || task?.track,
+      ...(accepted && [true, false, 0, 1].includes(item.result?.teacherCompleted)
+        ? { teacherCompleted: item.result.teacherCompleted, evaluationScore: item.result.evaluationScore }
+        : item.payload?.notMemorized && !['conflict', 'invalid_sequence', 'rejected_permission', 'rejected_duplicate'].includes(session.status)
+          ? { teacherCompleted: false, evaluationScore: 0 } : {}),
+      evaluatedAt: session.committedAtLocal || session.createdAtLocal || '',
       status: _resolveStatus(),
       error: accepted ? '' : session.lastError || '',
     });

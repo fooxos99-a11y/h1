@@ -255,18 +255,11 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
   }, [load, supervisorId, toast]);
 
   const finishRecitationSave = useCallback(async (studentId, tasks, session) => {
-    if (navigator.onLine !== false && tasks.every(task => !Number(task.nazemManaged))) {
-      const approved = await syncCommittedRecitation(supervisorId, session.sessionId);
-      assertSessionAccepted(approved);
-      if (approved?.status !== 'synced') throw new Error('تعذر اعتماد هذا التسميع. بقي محفوظًا على الجهاز.');
-      markRecitationPending(studentId, tasks, approved);
-      void load({ fresh: true });
-      return { session: approved, results: approved.tasks.map(item => item.result), pending: false };
-    }
+    // The durable device save is complete; network approval must not hold the dialog open.
     markRecitationPending(studentId, tasks, session);
     syncRecitationInBackground(session.sessionId);
     return { session, results: [], pending: true };
-  }, [load, markRecitationPending, supervisorId, syncRecitationInBackground]);
+  }, [markRecitationPending, syncRecitationInBackground]);
 
   const saveCountOnlyRecitation = async ({ itemCounts }) => {
     if (!selectedStudent?.tasks?.length) return;

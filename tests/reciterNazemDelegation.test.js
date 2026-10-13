@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { loadReciterNazemScope } from '../server/services/reciterNazemScope.js';
 import { enqueueNazemRecitation, resolveNazemTeacherForStudent } from '../server/integrations/nazem/queue.js';
 import { loadRecitationDeliveryReceipts } from '../server/services/recitationDeliveryReceipts.js';
+import { attachRecitationOutcomes } from '../shared/recitation-outcomes.js';
 import { readFile } from 'node:fs/promises';
 import { nazemStudentRefreshState } from '../server/integrations/nazem/refreshState.js';
 import { canTeacherExecuteQuranTask, getQuranTaskExecutionSource } from '../shared/quran-execution-policy.js';
@@ -109,7 +110,7 @@ test('actual evaluation handler refreshes plan teachers, exposes unexecuted Naze
     loadNazemCompletedStudentIds: async () => new Set([999]), loadRecitationDeliveryReceipts: async (_connection, id) => { assert.equal(id, 99); return []; },
     normalizeTaskRow: (row) => row, normalizeRepeatCount: (value, fallback) => value || fallback, readNazemLinkCount: () => 0,
     getQuranRangeDirection: () => 1, nazemRemainderSuffix: () => '', getTeacherTaskEvaluationPolicy: () => ({}), getRecitationEvaluationMode: () => 'count',
-    nazemStudentRefreshState,
+    nazemStudentRefreshState, attachRecitationOutcomes,
   };
   const handler = new Function(...Object.keys(dependencies), `return ${handlerSource}`)(...Object.values(dependencies));
   let response;

@@ -6,7 +6,10 @@ const hasRemoteReceipt = (value) => {
 };
 
 export async function loadRecitationDeliveryReceipts(connection, teacherId, date) {
-  const [rows] = await connection.query(`SELECT a.task_id AS taskId, t.student_id AS studentId,
+  const [rows] = await connection.query(`SELECT a.task_id AS taskId, a.id AS attemptId,
+      a.teacher_completed AS teacherCompleted, a.evaluation_score AS evaluationScore,
+      DATE_FORMAT(a.evaluated_at, '%Y-%m-%d %H:%i:%s') AS evaluatedAt,
+      t.student_id AS studentId,
       s.name AS studentName, t.task_type AS taskType, t.track,
       EXISTS (SELECT 1 FROM nazem_plan_links p
         JOIN nazem_accounts account ON account.teacher_id = p.teacher_id AND account.status = 'connected'

@@ -46,7 +46,7 @@ const defaultSettings = {
   reviewExecutionSource: 'both',
   linkExecutionSource: 'both',
   nazemIntegrationEnabled: false,
-  recitationAmountDay: 'previous_day',
+  recitationAmountDay: 'same_day',
   hideStudentAmounts: false,
   hideStudentMemorizationAmount: true,
   hideStudentReviewAmount: true,
@@ -400,7 +400,7 @@ const SettingsSection = ({
               <div className="space-y-2">
                 <Label>المقادير التي تظهر في جلسة التسميع</Label>
                 <Select
-                  value={settings.recitationAmountDay || 'previous_day'}
+                  value={settings.recitationAmountDay || 'same_day'}
                   onValueChange={(value) => setSettings({ ...settings, recitationAmountDay: value })}
                 >
                   <SelectTrigger aria-label="المقادير التي تظهر في جلسة التسميع" className="border-primary/30 bg-card"><SelectValue /></SelectTrigger>

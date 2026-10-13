@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import TeacherEvaluationDialog from '../../src/components/portal/TeacherEvaluationDialog';
 import { studentsApi } from '../../src/services/studentsApi';
 import { offlineRecitationStore } from '../../src/services/offlineRecitationStore';
+import { isDailyRecitationTask, isRecitationCompensationTask } from '../../shared/recitation-session-scope';
 import '../../src/index.css';
 if (!import.meta.env.DEV || !['localhost', '127.0.0.1'].includes(location.hostname)) throw new Error('Local only');
 const date = '2026-10-13';
@@ -26,9 +27,13 @@ studentsApi.getSupervisorQuranEvaluation = async () => {
   state.evaluationCalls++;
   const recordedIds = new Set(state.commits.filter(session => session.status === 'synced')
     .flatMap(session => session.tasks.filter(item => item.result?.teacherCompleted === true).map(item => item.taskId)));
-  const pendingTasks = tasks.filter(task => !recordedIds.has(task.id));
-  return { ...evaluation, tasks: pendingTasks.filter(task => task.taskDate === date),
-    compensationTasks: pendingTasks.filter(task => task.taskDate < date && task.taskType !== 'link'), taskQueue: pendingTasks };
+  const finishedDaily = new URLSearchParams(location.search).has('finishedDaily');
+  const pendingTasks = tasks.filter(task => !recordedIds.has(task.id) && !(finishedDaily && task.taskDate === date));
+  const dailyTasks = pendingTasks.filter(task => isDailyRecitationTask(task, date));
+  const scope = { dailyTasks, compensationTasks: pendingTasks.filter(task => isRecitationCompensationTask(task, date, true)), dailyStudentIds: new Set(dailyTasks.map(task => task.studentId)) };
+  return { ...evaluation, students: evaluation.students.map(student => ({ ...student,
+    recitationFinished: finishedDaily && !scope.dailyStudentIds.has(student.studentId),
+  })), tasks: scope.dailyTasks, compensationTasks: scope.compensationTasks, taskQueue: pendingTasks };
 };
 studentsApi.getQuranChapters = async () => [{ number: 95, name: 'التين', ayahCount: 8 }];
 studentsApi.getSupervisorQuranTaskAyahs = async () => { state.ayahCalls++; return {}; };
@@ -48,7 +53,10 @@ offlineRecitationStore.setMeta = async () => {};
 offlineRecitationStore.getDeviceContext = async () => ({ deviceId: 'qa' });
 offlineRecitationStore.getDraft = async () => null;
 offlineRecitationStore.saveDraft = async () => {};
-offlineRecitationStore.commitSession = async (_actor, session) => { const saved = { ...session, status: 'pending' }; state.commits.push(saved); return saved; };
+offlineRecitationStore.commitSession = async (_actor, session) => {
+  if (state.failCommit) throw new Error('تعذر الحفظ على الجهاز.');
+  const saved = { ...session, status: 'pending' }; state.commits.push(saved); return saved;
+};
 offlineRecitationStore.updateSession = async (_actor, id, changes) => {
   const session = state.commits.find(item => item.sessionId === id);
   Object.assign(session, changes);
@@ -56,6 +64,7 @@ offlineRecitationStore.updateSession = async (_actor, id, changes) => {
 };
 studentsApi.syncOfflineRecitationBatch = async sessions => {
   if (state.delaySync) await new Promise(resolve => { state.releaseSync = resolve; });
+  if (state.failSync) throw new Error('تعذر الاتصال بالخادم.');
   return { results: sessions.map(session => ({ sessionId: session.sessionId,
     result: state.rejectSync ? 'conflict' : 'accepted',
     tasks: session.tasks.map(item => ({ taskId: item.taskId, result: state.rejectSync ? 'conflict' : 'accepted',

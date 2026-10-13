@@ -5,9 +5,9 @@ import {
   normalizeRecitationAmountDay,
 } from '../shared/recitation-amount-day.js';
 
-test('recitation amounts default to the previous day', () => {
-  assert.equal(normalizeRecitationAmountDay(undefined), 'previous_day');
-  assert.equal(normalizeRecitationAmountDay('invalid'), 'previous_day');
+test('recitation amounts default to today and respect an explicit previous-day setting', () => {
+  assert.equal(normalizeRecitationAmountDay(undefined), 'same_day');
+  assert.equal(normalizeRecitationAmountDay('invalid'), 'same_day');
   assert.equal(getRecitationAmountDayOffset('previous_day'), -1);
 });
 

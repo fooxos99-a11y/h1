@@ -48,6 +48,7 @@ import { buildRecitationSegmentDetails } from './services/recitationSegments.js'
 import { calculateEvaluatedGroupReward } from './services/recitationRewards.js';
 import { normalizeRecitationRewardSettings } from '../shared/recitation-reward-settings.js';
 import { loadRecitationDeliveryReceipts } from './services/recitationDeliveryReceipts.js';
+import { attachRecitationOutcomes } from '../shared/recitation-outcomes.js';
 import { buildStudentPointsReport } from './services/studentPointsReport.js';
 import { setQuranTaskGroupReward } from './services/quranTaskRewards.js';
 import { buildNazemLateTaskExistsSql } from './integrations/nazem/lateTaskScope.js';
@@ -13018,10 +13019,11 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
         ayahMarks: marksByTask.get(Number(row.id)) || [],
       });
     };
+    const deliveryReceipts = await loadRecitationDeliveryReceipts(connection, supervisorId, date);
     res.json({
       date,
       previousSessionDate,
-      deliveryReceipts: await loadRecitationDeliveryReceipts(connection, supervisorId, date),
+      deliveryReceipts,
       attendanceSnapshotAt,
       generationEndDate,
       quranTaskExecutionSource: getQuranTaskExecutionSource(settings, 'memorization'),
@@ -13039,7 +13041,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
       allowListeningCountEditing: canTeacherExecuteQuranTask(settings, 'repeat'),
       allowQuranCompensation: Boolean(settings.allowQuranCompensation),
       allowQuranExtra: Boolean(settings.allowQuranExtra),
-      students: students
+      students: attachRecitationOutcomes(students
         .filter((student) => {
           const attendanceStatus = attendanceByStudent.get(Number(student.id)) || '';
           if (['absent', 'excused'].includes(attendanceStatus)) return false;
@@ -13079,7 +13081,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
             && !(Number(student.nazemManaged)
               && (nazemPendingStudentIds.has(Number(student.id))
                 || nazemDueStudentIds.has(Number(student.id)))),
-        })),
+        })), deliveryReceipts),
       evaluationPolicies: Object.fromEntries(['memorization', 'mastery', 'review', 'link'].map((type) => [
         type,
         getTeacherTaskEvaluationPolicy(settings, {

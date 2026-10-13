@@ -1,5 +1,6 @@
 import { hasAcceptedRecitationTask } from './recitationTaskResults.js';
 import { mergeRecitationDeliveryReceipts } from './recitationDeliveryReceipts.js';
+import { attachRecitationOutcomes } from '../../shared/recitation-outcomes.js';
 import { advanceRecitationTaskQueue, canAdvanceRecitationSession } from './recitationTaskQueue.js';
 
 const UNSYNCED_RECITATION_STATUSES = new Set(['pending', 'syncing', 'invalid_sequence', 'failed']);
@@ -66,12 +67,13 @@ export function mergeCommittedOfflineEvaluation(evaluation, sessions = [], actio
     ['absent', 'excused'].includes(latestAttendanceByStudent.get(Number(student.studentId)) || student.attendanceStatus)
   )).map((student) => Number(student.studentId)));
   const remainingTasks = (mergedEvaluation.tasks || []).filter((task) => !absentStudentIds.has(Number(task.studentId)));
+  const deliveryReceipts = mergeRecitationDeliveryReceipts(evaluation, sessions);
   return {
     ...mergedEvaluation,
-    deliveryReceipts: mergeRecitationDeliveryReceipts(evaluation, sessions),
+    deliveryReceipts,
     tasks: remainingTasks,
     taskQueue: (mergedEvaluation.taskQueue || []).filter((task) => !absentStudentIds.has(Number(task.studentId))),
-    students: (mergedEvaluation.students || [])
+    students: attachRecitationOutcomes((mergedEvaluation.students || [])
       .map((student) => ({
         ...student,
         ...(latestAttendanceByStudent.has(Number(student.studentId))
@@ -88,6 +90,6 @@ export function mergeCommittedOfflineEvaluation(evaluation, sessions = [], actio
       }))
       // Missing tasks may mean Nazem has not supplied the amount yet, not completion.
       // The task list decides visibility using actual completion and remaining work.
-      .filter((student) => !['absent', 'excused'].includes(student.attendanceStatus)),
+      .filter((student) => !['absent', 'excused'].includes(student.attendanceStatus)), deliveryReceipts),
   };
 }

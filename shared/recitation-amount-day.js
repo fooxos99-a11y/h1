@@ -4,9 +4,9 @@ const RECITATION_AMOUNT_DAYS = Object.freeze({
 });
 
 export function normalizeRecitationAmountDay(value) {
-  return value === RECITATION_AMOUNT_DAYS.sameDay
-    ? RECITATION_AMOUNT_DAYS.sameDay
-    : RECITATION_AMOUNT_DAYS.previousDay;
+  return value === RECITATION_AMOUNT_DAYS.previousDay
+    ? RECITATION_AMOUNT_DAYS.previousDay
+    : RECITATION_AMOUNT_DAYS.sameDay;
 }
 
 export function getRecitationAmountDayOffset(value) {
