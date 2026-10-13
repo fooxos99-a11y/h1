@@ -2,10 +2,17 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
+import { Capacitor } from '@capacitor/core';
+import { loadProgramAttachment } from '@/services/programAttachmentService';
+import { assertPdfAttachment } from '@/lib/programAttachment';
+import NativePdfPreview from './NativePdfPreview';
 import { resolveAssetUrl } from '@/lib/assetUrl';
 
 export default function ProgramPdfPreview({ source, name }) {
+  return Capacitor.isNativePlatform() ? <NativePdfPreview source={source} name={name} /> : <BrowserPdfPreview source={source} name={name} />;
+}
+
+function BrowserPdfPreview({ source, name }) {
   const host = useRef(null);
   const [pdf, setPdf] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -16,20 +23,33 @@ export default function ProgramPdfPreview({ source, name }) {
   useEffect(() => {
     let cancelled = false;
     let task;
+    let worker;
+    let port;
     const load = async () => {
-      const { getDocument, GlobalWorkerOptions, version } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      const [{ getDocument, PDFWorker, version }, { default: PdfWorker }] = await Promise.all([
+        import('pdfjs-dist/legacy/build/pdf.mjs'),
+        import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&inline'),
+      ]);
       if (cancelled) return;
-      GlobalWorkerOptions.workerSrc = workerUrl;
-      const input = source.blob ? { data: new Uint8Array(await source.blob.arrayBuffer()) } : { url: source.url };
+      const blob = await loadProgramAttachment(source);
+      await assertPdfAttachment(blob);
+      const data = new Uint8Array(await blob.arrayBuffer());
       if (cancelled) return;
+      port = new PdfWorker();
+      worker = new PDFWorker({ port });
       const assets = new URL(resolveAssetUrl(`pdfjs/${version}/`), document.baseURI).href;
-      task = getDocument({ ...input, isEvalSupported: false, enableScripting: false,
+      task = getDocument({ data, worker, isEvalSupported: false, enableScripting: false,
         cMapUrl: `${assets}cmaps/`, standardFontDataUrl: `${assets}standard_fonts/`, wasmUrl: `${assets}wasm/`, iccUrl: `${assets}iccs/` });
       const loadedPdf = await task.promise;
       if (!cancelled) setPdf(loadedPdf);
     };
     load().catch(() => { if (!cancelled) { setError('تعذر عرض PDF. يمكنك تحميل الملف.'); setBusy(false); } });
-    return () => { cancelled = true; void task?.destroy(); };
+    return () => {
+      cancelled = true;
+      const release = () => { worker?.destroy(); port?.terminate(); };
+      if (task) void task.destroy().then(release, release);
+      else release();
+    };
   }, [source]);
   useEffect(() => {
     const element = host.current;

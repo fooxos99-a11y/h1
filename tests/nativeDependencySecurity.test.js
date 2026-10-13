@@ -21,7 +21,7 @@ test('iOS installs npm packages without lifecycle scripts and enforces Swift pin
   ].map(async (path) => JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8'))));
   assert.deepEqual(packageLock, xcodeLock);
   assert.equal(packageLock.version, 2);
-  assert.deepEqual(packageLock.pins.map((pin) => pin.identity), ['alamofire', 'capacitor-swift-pm', 'keychain-swift', 'sqlcipher.swift', 'zipfoundation']);
+  assert.deepEqual(packageLock.pins.map((pin) => pin.identity), ['alamofire', 'capacitor-swift-pm', 'ion-ios-filesystem', 'ion-ios-fileviewer', 'keychain-swift', 'sqlcipher.swift', 'zipfoundation']);
   for (const pin of packageLock.pins) {
     assert.match(pin.state.revision, /^[a-f0-9]{40}$/);
     assert.match(pin.state.version, /^\d+\.\d+\.\d+$/);

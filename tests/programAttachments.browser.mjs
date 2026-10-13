@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import process from 'node:process';
 import console from 'node:console';
 import { Buffer } from 'node:buffer';
-import { mkdir } from 'node:fs/promises';
-import { chromium } from 'playwright';
+import { mkdir, readFile } from 'node:fs/promises';
+import { chromium, webkit } from 'playwright';
 import PDFDocument from 'pdfkit';
 import sharp from 'sharp';
 
@@ -21,12 +21,22 @@ const program = { id: 1, title: 'برنامج المرفقات', pointsReward: 1
   sections: [{ id: 2, title: 'درس المرفقات', pointsReward: 10, status: 'open', contents: [attachment('original.pdf', 'application/pdf', pdf)],
     questions: [{ id: 1, text: 'سؤال', options: [{ id: 1, text: 'صحيح', isCorrect: true }, { id: 2, text: 'خطأ', isCorrect: false }] }] }] };
 await mkdir('outputs', { recursive: true });
-const browser = await chromium.launch({ headless: true });
+const browserType = process.env.PROGRAM_ATTACHMENT_BROWSER === 'webkit' ? webkit : chromium;
+const browser = await browserType.launch({ headless: true });
 try {
   for (const width of [360, 768, 1440]) {
     const context = await browser.newContext({ viewport: { width, height: 900 } });
     const page = await context.newPage(); const errors = [];
     page.on('pageerror', error => errors.push(error.message));
+    const downloadFile = async (dialog, name, bytes) => {
+      const event = page.waitForEvent('download');
+      await dialog.getByRole('button', { name: 'تحميل الملف', exact: true }).click();
+      const downloaded = await event;
+      assert.equal(downloaded.suggestedFilename(), name);
+      assert.equal(await downloaded.failure(), null);
+      assert.deepEqual(await readFile(await downloaded.path()), bytes);
+      assert.equal(context.pages().length, 1, 'Downloading must not open an unusable tab');
+    };
     await page.addInitScript(({ program }) => {
       if (!globalThis.localStorage.getItem('program_attachment_fixture')) globalThis.localStorage.setItem('program_attachment_fixture', JSON.stringify(program));
       const Reader = globalThis.FileReader;
@@ -74,6 +84,7 @@ try {
     await page.getByRole('button', { name: 'parent.pdf', exact: true }).click();
     const parentPreview = page.getByRole('dialog', { name: 'parent.pdf', exact: true });
     await parentPreview.locator('canvas').waitFor();
+    await downloadFile(parentPreview, 'parent.pdf', pdf);
     await page.keyboard.press('Escape');
     await parentPreview.waitFor({ state: 'hidden' });
     await page.getByRole('button', { name: 'ابدأ', exact: true }).click();
@@ -84,6 +95,7 @@ try {
     const imageBounds = await imageDialog.boundingBox();
     assert.ok(imageBounds.x >= 0 && imageBounds.y >= 0 && imageBounds.x + imageBounds.width <= width + 1 && imageBounds.y + imageBounds.height <= 901);
     assert.ok(await imageDialog.evaluate(el => el.scrollWidth <= el.clientWidth));
+    await downloadFile(imageDialog, 'replacement.png', png);
     await page.screenshot({ path: `outputs/program-attachment-image-${width}.png` });
     await page.keyboard.press('Escape');
     await imageDialog.waitFor({ state: 'hidden' });
@@ -118,6 +130,7 @@ try {
     await pdfDialog.getByRole('button', { name: 'الصفحة التالية', exact: true }).click();
     await pdfDialog.getByText('SECOND PAGE', { exact: true }).waitFor({ state: 'attached' });
     assert.equal(await pdfDialog.getByRole('alert').count(), 0);
+    await downloadFile(pdfDialog, 'replacement.pdf', pdf);
     await pdfDialog.evaluate(async el => { await Promise.all(el.getAnimations().map(animation => animation.finished)); });
     const pdfBounds = await pdfDialog.boundingBox();
     assert.ok(pdfBounds.x >= 0 && pdfBounds.y >= 0 && pdfBounds.x + pdfBounds.width <= width + 1 && pdfBounds.y + pdfBounds.height <= 901);
@@ -138,11 +151,37 @@ try {
       await page.getByRole('button', { name: 'invalid.pdf', exact: true }).click();
       const invalid = page.getByRole('dialog', { name: 'invalid.pdf', exact: true });
       await invalid.getByRole('alert').waitFor();
-      assert.equal(await invalid.getByRole('link', { name: 'تحميل الملف', exact: true }).count(), 1);
+      await downloadFile(invalid, 'invalid.pdf', Buffer.from('invalid'));
       await page.keyboard.press('Escape');
+      let requests = 0;
+      await page.route('**/api/program-attachment-test', route => {
+        requests++;
+        return route.fulfill(requests <= 2 ? { status: 401, body: 'Unauthorized' } : { status: 200, contentType: 'application/pdf', body: pdf });
+      });
+      await page.evaluate(() => {
+        const program = JSON.parse(globalThis.localStorage.getItem('program_attachment_fixture'));
+        program.sections[0].contents = [{ type: 'file', fileName: 'remote.pdf', mimeType: 'application/pdf', value: '/api/program-attachment-test' }];
+        globalThis.localStorage.setItem('program_attachment_fixture', JSON.stringify(program));
+      });
+      await page.goto(`${base}?mode=student`);
+      await page.getByRole('button', { name: 'ابدأ', exact: true }).click();
+      await page.getByRole('button', { name: 'ابدأ', exact: true }).click();
+      await page.getByRole('button', { name: 'remote.pdf', exact: true }).click();
+      const remote = page.getByRole('dialog', { name: 'remote.pdf', exact: true });
+      await remote.getByRole('alert').waitFor();
+      await remote.getByRole('button', { name: 'تحميل الملف', exact: true }).click();
+      await remote.getByText('تعذر تحميل الملف. حاول مرة أخرى.', { exact: true }).waitFor();
+      await downloadFile(remote, 'remote.pdf', pdf);
+      await page.keyboard.press('Escape');
+      await remote.waitFor({ state: 'hidden' });
+      await page.getByRole('button', { name: 'remote.pdf', exact: true }).click();
+      await remote.locator('canvas').waitFor();
+      assert.equal(requests, 3, 'A successful fetch is shared by preview and download, but failed requests can be retried');
+      await page.keyboard.press('Escape');
+      await remote.waitFor({ state: 'hidden' });
     }
     assert.deepEqual(errors, []);
     await context.close();
   }
-  console.log('Attachment replacement, retained admin state, student image/PDF preview, reader failures and races passed at 360/768/1440px.');
+  console.log(`${browserType.name()}: parent / first-section PDF preview and byte-for-byte downloads, images, file replacement and failure recovery passed at 360/768/1440px.`);
 } finally { await browser.close(); }

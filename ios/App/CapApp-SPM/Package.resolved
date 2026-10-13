@@ -19,6 +19,24 @@
       }
     },
     {
+      "identity": "ion-ios-filesystem",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/ionic-team/ion-ios-filesystem.git",
+      "state": {
+        "revision": "13848aab4f3447ff98dfdbe72ff8ef31bf333db0",
+        "version": "2.0.0"
+      }
+    },
+    {
+      "identity": "ion-ios-fileviewer",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/ionic-team/ion-ios-fileviewer.git",
+      "state": {
+        "revision": "61c77a99659c53326993ddfa4c0e263aa124b9b8",
+        "version": "2.0.0"
+      }
+    },
+    {
       "identity": "keychain-swift",
       "kind": "remoteSourceControl",
       "location": "https://github.com/evgenyneu/keychain-swift.git",
