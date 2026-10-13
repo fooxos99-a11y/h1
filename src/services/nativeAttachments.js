@@ -3,14 +3,18 @@ import { FileViewer } from '@capacitor/file-viewer';
 import { Share } from '@capacitor/share';
 import { attachmentFileName, MAX_ATTACHMENT_BYTES, assertPdfAttachment } from '../lib/programAttachment.js';
 
+const cacheIds = new WeakMap();
+const cacheSession = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+let cacheSequence = 0;
+
 async function cacheAttachment(blob, name, filesystem) {
   if (!blob.size || blob.size > MAX_ATTACHMENT_BYTES) throw new Error('تعذر فتح الملف المرفق.');
   const bytes = new Uint8Array(await blob.arrayBuffer());
-  const hash = Array.from(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes)), byte => byte.toString(16).padStart(2, '0')).join('');
+  if (!cacheIds.has(blob)) cacheIds.set(blob, `${cacheSession}-${++cacheSequence}`);
   let binary = '';
   for (let index = 0; index < bytes.length; index += 8192) binary += String.fromCharCode(...bytes.subarray(index, index + 8192));
-  // Content-addressed cache files remain available while Quick Look / the share sheet uses them.
-  const result = await filesystem.writeFile({ path: `program-attachments/${hash}/${attachmentFileName(name, blob.type)}`,
+  // Reuse each file's private cache path without requiring WebCrypto in the native WebView.
+  const result = await filesystem.writeFile({ path: `program-attachments/${cacheIds.get(blob)}/${attachmentFileName(name, blob.type)}`,
     data: btoa(binary), directory: Directory.Cache, recursive: true });
   return result.uri;
 }

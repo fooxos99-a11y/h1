@@ -37,6 +37,18 @@ test('native cache and sheet failures are actionable, while cancellation is norm
   assert.equal(opened, false, 'A closed attachment must not present a late native viewer');
 });
 
+test('native view and save work when the WebView does not expose WebCrypto', async () => {
+  const cryptoProperty = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  const { filesystem, writes } = nativeFiles();
+  try {
+    Object.defineProperty(globalThis, 'crypto', { value: undefined, configurable: true });
+    await viewNativeAttachment(blob, 'درس.pdf', { filesystem, viewer: { openDocumentFromLocalPath: async () => {} } });
+    await saveNativeAttachment(blob, 'درس.pdf', { filesystem, share: { share: async () => {} } });
+    assert.equal(writes.length, 2);
+    assert.deepEqual(Buffer.from(writes[1].data, 'base64'), bytes);
+  } finally { Object.defineProperty(globalThis, 'crypto', cryptoProperty); }
+});
+
 test('PDF errors do not turn HTML/login responses into previews and downloads can be retried', async () => {
   await assert.rejects(assertPdfAttachment(new Blob(['<html>login</html>'])), /تعذر فتح/);
   await assert.rejects(readAttachmentBlob({ kind: 'pdf', url: 'https://example.test/file.pdf' }, {}, async () => new Response('<html>login</html>')), /تعذر فتح/);
