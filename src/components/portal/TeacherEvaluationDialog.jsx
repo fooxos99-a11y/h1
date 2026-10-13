@@ -98,8 +98,8 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
     supervisorId, shouldLoad, onEvaluationLoaded,
   );
 
-  const toggleAmounts = () => {
-    if (!setShowAmounts(!showAmounts)) {
+  const toggleAmounts = async () => {
+    if (!await setShowAmounts(!showAmounts)) {
       toast({ title: 'تعذر حفظ خيار إظهار المقادير', variant: 'destructive' });
     }
   };

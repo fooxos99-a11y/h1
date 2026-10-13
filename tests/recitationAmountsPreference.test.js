@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  readNativeRecitationAmountsPreference,
   readRecitationAmountsPreference,
   recitationAmountsPreferenceKey,
+  writeNativeRecitationAmountsPreference,
   writeRecitationAmountsPreference,
 } from '../src/lib/recitationAmountsPreference.js';
 
@@ -53,4 +55,33 @@ test('blocked storage is reported without crashing recitation', () => {
   const key = recitationAmountsPreferenceKey('', 11);
   assert.equal(readRecitationAmountsPreference(key, storage), false);
   assert.equal(writeRecitationAmountsPreference(key, true, storage), false);
+});
+
+test('native choices wait for a durable commit and survive a fresh store instance', async () => {
+  const key = recitationAmountsPreferenceKey('', 11);
+  const values = new Map();
+  let release;
+  const committing = { setMeta: (name, value) => new Promise(resolve => {
+    release = () => { values.set(name, value); resolve(); };
+  }) };
+  let finished = false;
+  const write = writeNativeRecitationAmountsPreference(key, true, committing).then(result => {
+    finished = true;
+    return result;
+  });
+  await Promise.resolve();
+  assert.equal(finished, false);
+  release();
+  assert.equal(await write, true);
+  const freshStore = () => ({ getMeta: async name => values.get(name), setMeta: async (name, value) => values.set(name, value) });
+  assert.equal(await readNativeRecitationAmountsPreference(key, freshStore()), true);
+  assert.equal(await writeNativeRecitationAmountsPreference(key, false, freshStore()), true);
+  assert.equal(await readNativeRecitationAmountsPreference(key, freshStore()), false);
+});
+
+test('a failed native commit is reported rather than claimed as persistent', async () => {
+  const key = recitationAmountsPreferenceKey('', 11);
+  const store = { setMeta: async () => { throw new Error('Disk unavailable'); } };
+  assert.equal(await writeNativeRecitationAmountsPreference(key, true, store), false);
+  assert.equal(await writeNativeRecitationAmountsPreference(null, true, store), false);
 });

@@ -128,6 +128,32 @@ test('a failed logout request remains observable while local access stays cleare
   assert.equal(env.localStorage.getItem('madarij_web_session'), null);
 });
 
+test('native session initialization loads one plugin instance before configuring keychain access', async () => {
+  let implementation;
+  let factoryCalls = 0;
+  const loadImplementation = async () => {
+    if (implementation) return implementation;
+    const instance = { prefix: 'default.' };
+    factoryCalls += 1;
+    await Promise.resolve();
+    implementation = instance;
+    return instance;
+  };
+  const stored = new Map([['test.wajeh_token', 'persisted-native-session']]);
+  const auth = await loadModule('../src/lib/authSession.js', {
+    Capacitor: { isNativePlatform: () => true }, localStorage: storage(),
+    getSiteConfig: () => ({ secureStoragePrefix: 'test.' }),
+    KeychainAccess: { afterFirstUnlockThisDeviceOnly: 'test' },
+    SecureStorage: {
+      setKeyPrefix: async prefix => { (await loadImplementation()).prefix = prefix; },
+      setDefaultKeychainAccess: async () => { await loadImplementation(); },
+      get: async key => stored.get((await loadImplementation()).prefix + key),
+    },
+  }, ['getBearerToken']);
+  assert.equal(await auth.getBearerToken(), 'persisted-native-session');
+  assert.equal(factoryCalls, 1);
+});
+
 test('native logout captures the old token without restoring local access or caching it again', async () => {
   const localStorage = storage();
   localStorage.setItem('madarij_native_session', '1');

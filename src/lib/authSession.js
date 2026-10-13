@@ -13,10 +13,10 @@ export const getAuthSessionVersion = () => sessionVersion;
 
 const prepareSecureStorage = () => {
   if (!secureStorageReady) {
-    secureStorageReady = Promise.all([
-      SecureStorage.setKeyPrefix(getSiteConfig().secureStoragePrefix),
-      SecureStorage.setDefaultKeychainAccess(KeychainAccess.afterFirstUnlockThisDeviceOnly),
-    ]);
+    secureStorageReady = (async () => {
+      await SecureStorage.setKeyPrefix(getSiteConfig().secureStoragePrefix);
+      await SecureStorage.setDefaultKeychainAccess(KeychainAccess.afterFirstUnlockThisDeviceOnly);
+    })();
   }
   return secureStorageReady;
 };

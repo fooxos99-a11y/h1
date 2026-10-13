@@ -23,3 +23,24 @@ export const writeRecitationAmountsPreference = (key, visible, storage) => {
     return false;
   }
 };
+
+export const readNativeRecitationAmountsPreference = async (key, store) => {
+  if (!key) return false;
+  try {
+    const value = await store.getMeta(key);
+    return typeof value === 'boolean' ? value : readRecitationAmountsPreference(key);
+  } catch {
+    return readRecitationAmountsPreference(key);
+  }
+};
+
+export const writeNativeRecitationAmountsPreference = async (key, visible, store) => {
+  if (!key) return false;
+  try {
+    await store.setMeta(key, visible === true);
+    writeRecitationAmountsPreference(key, visible);
+    return true;
+  } catch {
+    return false;
+  }
+};
