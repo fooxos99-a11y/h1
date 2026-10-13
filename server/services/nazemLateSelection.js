@@ -26,7 +26,10 @@ export async function validateNazemLateSession(connection, session, teacherId) {
     `SELECT t.id, t.student_id AS studentId, t.plan_id AS planId, t.task_type AS taskType, t.track,
       DATE_FORMAT(t.task_date, '%Y-%m-%d') AS taskDate,
       t.from_surah AS fromSurah, t.from_ayah AS fromAyah, t.to_surah AS toSurah, t.to_ayah AS toAyah,
-      EXISTS (SELECT 1 FROM nazem_plan_links p WHERE p.ruwasi_plan_id = t.plan_id
+      EXISTS (SELECT 1 FROM nazem_plan_links p
+        JOIN nazem_accounts account ON account.teacher_id = p.teacher_id AND account.status = 'connected'
+        JOIN app_settings setting ON setting.setting_key = 'nazemIntegrationEnabled' AND setting.setting_value = 'true'
+        WHERE p.ruwasi_plan_id = t.plan_id
         AND p.ruwasi_student_id = t.student_id AND p.sync_status NOT IN ('deleted','detached')) AS nazemManaged,
       EXISTS (SELECT 1 FROM student_quran_recitation_attempts a WHERE a.task_id = t.id
         AND a.is_official = 1 AND a.request_id = CONCAT(?, ':', t.id)) AS sameSession
@@ -38,6 +41,8 @@ export async function validateNazemLateSession(connection, session, teacherId) {
     [session.sessionId || '', ...ids, teacherId],
   );
   if (owned.length !== ids.length || owned.some(row => Number(row.studentId) !== Number(session.studentId))) return false;
+  // Unlinking retains daily history. Those snapshots cannot impose remote ordering on local work.
+  if (owned.every(row => !Number(row.nazemManaged))) return true;
   const [rows] = await connection.query(
     `SELECT t.id, t.plan_id AS planId, t.student_id AS studentId,
       t.task_type AS taskType, t.track, DATE_FORMAT(t.task_date, '%Y-%m-%d') AS taskDate,

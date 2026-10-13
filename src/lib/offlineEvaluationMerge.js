@@ -24,6 +24,7 @@ export function mergeCommittedOfflineEvaluation(evaluation, sessions = [], actio
   ));
   let mergedEvaluation = evaluation;
   const pendingStudentIds = new Set();
+  const confirmedStudentIds = new Set();
   pendingSessions.forEach((session) => {
     const taskById = new Map(
       [...(mergedEvaluation.taskQueue || []), ...(mergedEvaluation.tasks || [])]
@@ -46,8 +47,11 @@ export function mergeCommittedOfflineEvaluation(evaluation, sessions = [], actio
       })
       .filter(Boolean);
     if (!sessionTasks.length) return;
-    if (Number(session.studentId)) pendingStudentIds.add(Number(session.studentId));
-    sessionTasks.forEach((task) => pendingStudentIds.add(Number(task.studentId)));
+    const needsApproval = sessionTasks.some(task => Number(task.nazemManaged)
+      || !hasAcceptedRecitationTask(session, session.tasks.find(item => Number(item.taskId) === Number(task.id))));
+    const affectedStudentIds = needsApproval ? pendingStudentIds : confirmedStudentIds;
+    if (Number(session.studentId)) affectedStudentIds.add(Number(session.studentId));
+    sessionTasks.forEach((task) => affectedStudentIds.add(Number(task.studentId)));
     mergedEvaluation = advanceRecitationTaskQueue(mergedEvaluation, sessionTasks, { promote: canAdvanceRecitationSession(session) });
   });
   const latestAttendanceByStudent = new Map();
@@ -73,10 +77,10 @@ export function mergeCommittedOfflineEvaluation(evaluation, sessions = [], actio
         ...(latestAttendanceByStudent.has(Number(student.studentId))
           ? { attendanceStatus: latestAttendanceByStudent.get(Number(student.studentId)) }
           : {}),
-        ...(pendingStudentIds.has(Number(student.studentId))
+        ...(pendingStudentIds.has(Number(student.studentId)) || confirmedStudentIds.has(Number(student.studentId))
           ? {
-              recitationFinished: false,
-              recitationPending: !remainingTasks.some((task) => (
+              recitationFinished: !pendingStudentIds.has(Number(student.studentId)) && !remainingTasks.some(task => Number(task.studentId) === Number(student.studentId)),
+              recitationPending: pendingStudentIds.has(Number(student.studentId)) && !remainingTasks.some((task) => (
                 Number(task.studentId) === Number(student.studentId)
               )),
             }

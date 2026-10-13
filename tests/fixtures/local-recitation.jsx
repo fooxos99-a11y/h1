@@ -24,7 +24,8 @@ const evaluation = { date, generationEndDate: date, students: [{ studentId: 7, s
 const state = { evaluationCalls: 0, ayahCalls: 0, rangeCalls: [], commits: [], releaseRange: null };
 studentsApi.getSupervisorQuranEvaluation = async () => {
   state.evaluationCalls++;
-  const recordedIds = new Set(state.commits.flatMap(session => session.tasks.map(item => item.taskId)));
+  const recordedIds = new Set(state.commits.filter(session => session.status === 'synced')
+    .flatMap(session => session.tasks.filter(item => item.result?.teacherCompleted === true).map(item => item.taskId)));
   const pendingTasks = tasks.filter(task => !recordedIds.has(task.id));
   return { ...evaluation, tasks: pendingTasks.filter(task => task.taskDate === date),
     compensationTasks: pendingTasks.filter(task => task.taskDate < date && task.taskType !== 'link'), taskQueue: pendingTasks };
@@ -40,12 +41,29 @@ studentsApi.prepareSupervisorQuranRange = async (_teacher, id, payload) => {
 };
 offlineRecitationStore.getSnapshot = async () => null;
 offlineRecitationStore.cacheSnapshot = async () => {};
-offlineRecitationStore.getSessions = async () => [];
+offlineRecitationStore.getSessions = async (_actor, statuses = []) => state.commits.filter(session => !statuses.length || statuses.includes(session.status));
 offlineRecitationStore.getActions = async () => [];
 offlineRecitationStore.getMeta = async () => null;
+offlineRecitationStore.setMeta = async () => {};
 offlineRecitationStore.getDeviceContext = async () => ({ deviceId: 'qa' });
 offlineRecitationStore.getDraft = async () => null;
 offlineRecitationStore.saveDraft = async () => {};
-offlineRecitationStore.commitSession = async (_actor, session) => { state.commits.push(session); return { ...session, status: 'pending' }; };
+offlineRecitationStore.commitSession = async (_actor, session) => { const saved = { ...session, status: 'pending' }; state.commits.push(saved); return saved; };
+offlineRecitationStore.updateSession = async (_actor, id, changes) => {
+  const session = state.commits.find(item => item.sessionId === id);
+  Object.assign(session, changes);
+  return session;
+};
+studentsApi.syncOfflineRecitationBatch = async sessions => {
+  if (state.delaySync) await new Promise(resolve => { state.releaseSync = resolve; });
+  return { results: sessions.map(session => ({ sessionId: session.sessionId,
+    result: state.rejectSync ? 'conflict' : 'accepted',
+    tasks: session.tasks.map(item => ({ taskId: item.taskId, result: state.rejectSync ? 'conflict' : 'accepted',
+      ...(state.rejectSync ? { message: 'تعذر اعتماد التقييم التجريبي.' } : { data: { ok: true,
+        teacherCompleted: !item.payload.notMemorized, evaluationScore: item.payload.notMemorized ? 0 : 20,
+        evaluationMaxScore: 20, syncStatus: 'synced' } }),
+    })),
+  })) };
+};
 globalThis.localRecitationFixture = state;
 createRoot(document.getElementById('root')).render(<><div id="dashboard-mobile-header-actions" /><TeacherEvaluationDialog supervisorId="990" inline /></>);

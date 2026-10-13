@@ -209,7 +209,9 @@ test('teacher recitation attendance reveals grouped actions without a page reloa
   assert.match(recitationAction, /className="recitation-action min-w-0 px-2/);
   assert.match(evaluation, /secondaryAction=\{notCompletedAction\}/);
   assert.match(evaluation, /shouldHideStudent = \['absent', 'excused'\]\.includes\(status\)/);
-  assert.match(evaluation, /recitationPending: !hasRemainingTasks/);
+  const offlineMerge = await readFile(new URL('../src/lib/offlineEvaluationMerge.js', import.meta.url), 'utf8');
+  assert.match(evaluation, /setData\(current => mergeCommittedOfflineEvaluation\(current, \[session\]\)\)/);
+  assert.match(offlineMerge, /recitationPending: pendingStudentIds\.has[\s\S]*!remainingTasks\.some/);
   assert.doesNotMatch(evaluation, /&& \['present', 'late'\]\.includes\(student\.attendanceStatus\)[\s\S]*&& !hasRemainingTasks/);
   assert.doesNotMatch(taskList, /اختر حاضر أو متأخر لفتح مهام التسميع/);
   assert.doesNotMatch(endSelector, /surahs\.length > 1/);

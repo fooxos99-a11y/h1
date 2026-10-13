@@ -24,7 +24,7 @@ test('completed students remain visible while unresolved Nazem delivery is never
     assert.deepEqual(mergeCommittedOfflineEvaluation(evaluation).students, evaluation.students);
   }
   const server = await read('../server/index.js');
-  const route = server.slice(server.indexOf('const [nazemPendingRows]'), server.indexOf('evaluationPolicies:', server.indexOf('const [nazemPendingRows]')));
+  const route = server.slice(server.indexOf('const [storedNazemPendingRows]'), server.indexOf('evaluationPolicies:', server.indexOf('const [storedNazemPendingRows]')));
   assert.match(route, /'pending','retrying','syncing','failed','blocked','requires_review','conflict'/);
   assert.match(route, /\|\| attemptedStudentIds\.has\(Number\(student\.id\)\)/);
   assert.match(route, /recitationPending: nazemPendingStudentIds\.has/);
@@ -260,7 +260,7 @@ test('client persists atomically, restores drafts, retries globally, and never b
   assert.doesNotMatch(evaluation, /promote: taskPayloads\.every/);
   assert.match(sync, /\[404, 409, 422\][\s\S]*return 'conflict'/);
   assert.match(sync, /status === 'conflict'[\s\S]*\? null/);
-  assert.match(evaluation, /description: 'حُفظت النتيجة.'/);
+  assert.match(evaluation, /saved.pending \? \{ description: 'النتيجة محفوظة على الجهاز.'/);
   assert.doesNotMatch(evaluation, /ستُرسل تلقائيًا|سيُرسل إلى ناظم/);
   assert.doesNotMatch(mushaf, /تعذر إرساله إلى ناظم|ستُرسل تلقائيًا|getNazemDeliveryFailure/);
   assert.match(evaluation, /nazemNotCompletedLabel/);

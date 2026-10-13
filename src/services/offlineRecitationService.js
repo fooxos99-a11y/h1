@@ -379,6 +379,21 @@ export async function commitOfflineAttendance({ supervisorId, studentId, date, s
   return action;
 }
 
+export async function syncCommittedRecitation(supervisorId, sessionId) {
+  const version = getAuthSessionVersion();
+  const actorKey = recitationActorKey(supervisorId);
+  await syncOfflineRecitations(supervisorId, { force: true });
+  const assertScope = () => {
+    if (version !== getAuthSessionVersion() || actorKey !== recitationActorKey(supervisorId)) {
+      throw new Error('تغير الحساب؛ أعد فتح جلسة التسميع.');
+    }
+  };
+  assertScope();
+  const sessions = await offlineRecitationStore.getSessions(actorKey);
+  assertScope();
+  return sessions.find(session => session.sessionId === sessionId);
+}
+
 async function syncSession(supervisorId, actorKey, session) {
   const now = Date.now();
   if (session.nextRetryAt && Date.parse(session.nextRetryAt) > now) return session;

@@ -81,7 +81,7 @@ test('amount refresh queues only linked accounts once per scheduled slot', async
 
 test('session failures are scoped to the actual recitation day and automatic imports never update remote plans', async () => {
   const server = await readFile(new URL('../server/index.js', import.meta.url), 'utf8');
-  const query = server.slice(server.indexOf('const [nazemPendingRows]'), server.indexOf('const nazemPendingStudentIds'));
+  const query = server.slice(server.indexOf('const [storedNazemPendingRows]'), server.indexOf('const nazemPendingStudentIds'));
   assert.match(query, /currentAttempt\.session_date = \?/);
   assert.match(query, /\[\.\.\.nazemTeacherIds, \.\.\.scopedStudentIds, date\]/);
   assert.match(query, /teacher_id IN \(\$\{teacherSlots\}\)/);

@@ -30,6 +30,10 @@ export const canMarkNazemNotCompleted = (task) => Boolean(Number(task?.nazemMana
   && ['memorization', 'review', 'link'].includes(task.taskType)
   && !task.nazemSubmissionLocked;
 
+export const canMarkRecitationNotCompleted = (task) => canMarkNazemNotCompleted(task)
+  || (!Number(task?.nazemManaged) && ['memorization', 'review'].includes(task?.taskType)
+    && !task.locallySaved && ![true, 1].includes(task.teacherCompleted));
+
 export const nazemNotCompletedLabel = (task) => {
   if (task?.taskType === 'review') {
     return 'لم تتم المراجعة';

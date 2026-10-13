@@ -8,7 +8,10 @@ const hasRemoteReceipt = (value) => {
 export async function loadRecitationDeliveryReceipts(connection, teacherId, date) {
   const [rows] = await connection.query(`SELECT a.task_id AS taskId, t.student_id AS studentId,
       s.name AS studentName, t.task_type AS taskType, t.track,
-      EXISTS (SELECT 1 FROM nazem_plan_links p WHERE p.ruwasi_plan_id = t.plan_id
+      EXISTS (SELECT 1 FROM nazem_plan_links p
+        JOIN nazem_accounts account ON account.teacher_id = p.teacher_id AND account.status = 'connected'
+        JOIN app_settings setting ON setting.setting_key = 'nazemIntegrationEnabled' AND setting.setting_value = 'true'
+        WHERE p.ruwasi_plan_id = t.plan_id
         AND p.ruwasi_student_id = t.student_id
         AND p.sync_status NOT IN ('deleted', 'detached')) AS nazemManaged,
       DATE_FORMAT(t.task_date, '%Y-%m-%d') AS taskDate,
@@ -25,6 +28,7 @@ export async function loadRecitationDeliveryReceipts(connection, teacherId, date
       AND EXISTS (SELECT 1 FROM supervisor_committees sc WHERE sc.supervisor_id = ? AND sc.committee_id = s.committee_id)
     ORDER BY s.name, t.task_date, a.id DESC`, [teacherId, date, teacherId]);
   return rows.map(({ remoteSnapshot, importedFromNazem, linkId, syncStatus, confirmedAt, nazemManaged, ...row }) => { const _resolveStatus = () => {
+                                                                                                                        if (!Number(nazemManaged)) return 'server_saved';
                                                                                                                         if (!linkId) {
                                                                                                                           if (Number(nazemManaged)) {
                                                                                                                             return 'nazem_pending';
@@ -44,6 +48,7 @@ export async function loadRecitationDeliveryReceipts(connection, teacherId, date
                                                                                                                       };
                                                                                                                       return ({
     ...row,
+    error: Number(nazemManaged) ? row.error : '',
     status: _resolveStatus(),
   }); });
 }

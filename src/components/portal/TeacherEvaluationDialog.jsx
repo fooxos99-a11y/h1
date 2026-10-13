@@ -1,5 +1,5 @@
 import { recitationErrorMessage } from '@/lib/recitationErrorMessage';
-import { mergeRecitationDeliveryReceipts } from '@/lib/recitationDeliveryReceipts';
+import { mergeCommittedOfflineEvaluation } from '@/lib/offlineEvaluationMerge';
 import { Button } from '@/components/ui/button';
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -18,14 +18,14 @@ import {
   loadCachedTaskData,
   prefetchRecitationTasks,
   syncOfflineRecitations,
+  syncCommittedRecitation,
 } from '@/services/offlineRecitationService';
 import { sortRecitationTasks } from '@/lib/recitationTaskRanges';
-import { advanceRecitationTaskQueue, canAdvanceRecitationSession } from '@/lib/recitationTaskQueue';
 import { calculateRecitationScore } from '../../../shared/evaluation-settings.js';
 import { calculateGroupRecitationOutcome, countRecitationPayload, isLocalRecitationGroup, mushafRecitationGroup } from '../../../shared/recitation-group-evaluation.js';
 import { mergePreparedRecitationTasks, needsRecitationPreparation } from '@/lib/recitationPreparation';
 import { preloadMushafFonts } from '@/lib/quranFonts';
-import { canMarkNazemNotCompleted, nazemNotCompletedLabel, countEvaluationItems, hasNazemFixedRange, isNazemLinkTask, isNazemMasteryTask, resolveTaskRecitationMode } from '../../../shared/nazem-recitation-policy.js';
+import { canMarkRecitationNotCompleted, nazemNotCompletedLabel, countEvaluationItems, hasNazemFixedRange, isNazemLinkTask, isNazemMasteryTask, resolveTaskRecitationMode } from '../../../shared/nazem-recitation-policy.js';
 
 const loadMushafDialog = () => import('@/components/portal/MushafRecitationDialog');
 const MushafRecitationDialog = lazy(loadMushafDialog);
@@ -232,23 +232,8 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
   const countItems = useMemo(() => countEvaluationItems(selectedStudent?.tasks), [selectedStudent?.tasks]);
 
   const markRecitationPending = useCallback((studentId, tasks, session) => {
-    setData((current) => {
-      if (!current) return current;
-      const advanced = advanceRecitationTaskQueue(current, tasks, { promote: canAdvanceRecitationSession(session) });
-      const remainingTasks = advanced.tasks || [];
-      const hasRemainingTasks = remainingTasks.some((task) => Number(task.studentId) === Number(studentId));
-      return {
-        ...advanced,
-        deliveryReceipts: mergeRecitationDeliveryReceipts(current, [session]),
-        tasks: remainingTasks,
-        students: (advanced.students || [])
-          .map((student) => (
-            Number(student.studentId) === Number(studentId)
-              ? { ...student, recitationFinished: false, recitationPending: !hasRemainingTasks }
-              : student
-          )),
-      };
-    });
+    if (Number(session.studentId) !== Number(studentId) || !tasks.length) return;
+    setData(current => mergeCommittedOfflineEvaluation(current, [session]));
   }, [setData]);
 
   const syncRecitationInBackground = useCallback((sessionId) => {
@@ -268,6 +253,20 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
         return load({ fresh: true });
       });
   }, [load, supervisorId, toast]);
+
+  const finishRecitationSave = useCallback(async (studentId, tasks, session) => {
+    if (navigator.onLine !== false && tasks.every(task => !Number(task.nazemManaged))) {
+      const approved = await syncCommittedRecitation(supervisorId, session.sessionId);
+      assertSessionAccepted(approved);
+      if (approved?.status !== 'synced') throw new Error('تعذر اعتماد هذا التسميع. بقي محفوظًا على الجهاز.');
+      markRecitationPending(studentId, tasks, approved);
+      void load({ fresh: true });
+      return { session: approved, results: approved.tasks.map(item => item.result), pending: false };
+    }
+    markRecitationPending(studentId, tasks, session);
+    syncRecitationInBackground(session.sessionId);
+    return { session, results: [], pending: true };
+  }, [load, markRecitationPending, supervisorId, syncRecitationInBackground]);
 
   const saveCountOnlyRecitation = async ({ itemCounts }) => {
     if (!selectedStudent?.tasks?.length) return;
@@ -295,9 +294,8 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
         sessionDate: data?.date,
         tasks: taskPayloads,
       });
-      markRecitationPending(selectedStudent.studentId, selectedStudent.tasks, session);
+      await finishRecitationSave(selectedStudent.studentId, selectedStudent.tasks, session);
       setSelectedStudent(null);
-      syncRecitationInBackground(session.sessionId);
     } catch (error) {
       toast({ title: 'تعذر إنهاء التسميع', description: error.message, variant: 'destructive' });
     } finally {
@@ -307,7 +305,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
 
   const markNotMemorized = async (student) => {
     const memorizationTasks = (student.tasks || []).filter((task) => (
-      canMarkNazemNotCompleted(task)
+      canMarkRecitationNotCompleted(task)
     ));
     if (!memorizationTasks.length || isSavingCount) return;
     setIsSavingCount(true);
@@ -326,16 +324,16 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
           return { task, payload: { ...payload, offlineOutcome: offlineOutcome(task, payload, data?.evaluationPolicies) } };
         }),
       });
-      markRecitationPending(student.studentId, memorizationTasks, session);
+      const saved = await finishRecitationSave(student.studentId, memorizationTasks, session);
       setSelectedStudent(null);
-      toast({ title: nazemNotCompletedLabel(memorizationTasks[0]), description: 'حُفظت النتيجة.' });
-      syncRecitationInBackground(session.sessionId);
+      toast({ title: nazemNotCompletedLabel(memorizationTasks[0]),
+        ...(saved.pending ? { description: 'النتيجة محفوظة على الجهاز.' } : {}) });
     } catch (error) {
       toast({ title: 'تعذر حفظ النتيجة محليًا', description: error.message, variant: 'destructive' });
     } finally { setIsSavingCount(false); }
   };
 
-  const canMarkNotCompleted = selectedStudent?.tasks?.length > 0 && selectedStudent.tasks.every((task) => canMarkNazemNotCompleted(task));
+  const canMarkNotCompleted = selectedStudent?.tasks?.length > 0 && selectedStudent.tasks.every((task) => canMarkRecitationNotCompleted(task));
   const notCompletedAction = canMarkNotCompleted ? (
     <Button type="button" variant="outline" className="min-h-11 [font-family:var(--font-ui)]" disabled={isSavingCount} onClick={() => void markNotMemorized(selectedStudent)}>
       {isNazemMasteryTask(selectedTask) ? 'لم يتقن' : nazemNotCompletedLabel(selectedStudent.tasks[0])}
@@ -430,9 +428,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
             } };
           }),
         });
-        markRecitationPending(selectedStudent.studentId, items.map(({ task }) => task), session);
-        syncRecitationInBackground(session.sessionId);
-        return { session, results: [], pending: true };
+        return finishRecitationSave(selectedStudent.studentId, items.map(({ task }) => task), session);
       }}
       onSaved={() => undefined}
     /></Suspense>;

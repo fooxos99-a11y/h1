@@ -43,9 +43,9 @@ test('server receipts require remote evidence and distinguish adoption from subm
     assert.match(sql, /a\.is_official = 1/);
     assert.match(sql, /sc\.supervisor_id = \? AND sc\.committee_id = s\.committee_id/);
     assert.deepEqual(params, [11, task.taskDate, 11]);
-    const base = { linkId: 1, syncStatus: 'synced', confirmedAt: '2026-09-08', remoteSnapshot: '{"id":9}' };
+    const base = { nazemManaged: 1, linkId: 1, syncStatus: 'synced', confirmedAt: '2026-09-08', remoteSnapshot: '{"id":9}' };
     return [[base, { ...base, importedFromNazem: 'true' }, { ...base, remoteSnapshot: '{}' },
-      { ...base, syncStatus: 'failed' }, { ...base, linkId: null }, { ...base, linkId: null, nazemManaged: 1 }]];
+      { ...base, syncStatus: 'failed' }, { ...base, linkId: null, nazemManaged: 0 }, { ...base, linkId: null, nazemManaged: 1 }]];
   } };
   assert.deepEqual((await loadRecitationDeliveryReceipts(connection, 11, task.taskDate)).map(row => row.status),
     ['nazem_confirmed', 'nazem_adopted', 'nazem_pending', 'nazem_failed', 'server_saved', 'nazem_pending']);

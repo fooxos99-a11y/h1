@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -7,9 +7,15 @@ import { loadProgramAttachment } from '@/services/programAttachmentService';
 import { assertPdfAttachment } from '@/lib/programAttachment';
 import NativePdfPreview from './NativePdfPreview';
 import { resolveAssetUrl } from '@/lib/assetUrl';
+import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 
 export default function ProgramPdfPreview({ source, name }) {
-  return Capacitor.isNativePlatform() ? <NativePdfPreview source={source} name={name} /> : <BrowserPdfPreview source={source} name={name} />;
+  const [nativeFailed, setNativeFailed] = useState(false);
+  const showInline = useCallback(() => setNativeFailed(true), []);
+  useEffect(() => setNativeFailed(false), [source]);
+  return Capacitor.isNativePlatform() && !nativeFailed
+    ? <NativePdfPreview source={source} name={name} onUnavailable={showInline} />
+    : <BrowserPdfPreview source={source} name={name} />;
 }
 
 function BrowserPdfPreview({ source, name }) {
@@ -24,19 +30,16 @@ function BrowserPdfPreview({ source, name }) {
     let cancelled = false;
     let task;
     let worker;
-    let port;
     const load = async () => {
-      const [{ getDocument, PDFWorker, version }, { default: PdfWorker }] = await Promise.all([
-        import('pdfjs-dist/legacy/build/pdf.mjs'),
-        import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&inline'),
-      ]);
+      const { getDocument, PDFWorker, GlobalWorkerOptions, version } = await import('pdfjs-dist/legacy/build/pdf.mjs');
       if (cancelled) return;
       const blob = await loadProgramAttachment(source);
       await assertPdfAttachment(blob);
       const data = new Uint8Array(await blob.arrayBuffer());
       if (cancelled) return;
-      port = new PdfWorker();
-      worker = new PDFWorker({ port });
+      // Let PDF.js initialize its worker and fall back to its bundled parser when WebKit blocks workers.
+      GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+      worker = new PDFWorker();
       const assets = new URL(resolveAssetUrl(`pdfjs/${version}/`), document.baseURI).href;
       task = getDocument({ data, worker, isEvalSupported: false, enableScripting: false,
         cMapUrl: `${assets}cmaps/`, standardFontDataUrl: `${assets}standard_fonts/`, wasmUrl: `${assets}wasm/`, iccUrl: `${assets}iccs/` });
@@ -46,7 +49,7 @@ function BrowserPdfPreview({ source, name }) {
     load().catch(() => { if (!cancelled) { setError('تعذر عرض PDF. يمكنك تحميل الملف.'); setBusy(false); } });
     return () => {
       cancelled = true;
-      const release = () => { worker?.destroy(); port?.terminate(); };
+      const release = () => { worker?.destroy(); };
       if (task) void task.destroy().then(release, release);
       else release();
     };

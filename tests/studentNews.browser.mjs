@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import process from 'node:process';
-import { chromium } from 'playwright';
+import { chromium, webkit } from 'playwright';
 import sharp from 'sharp';
 const red = await sharp({ create: { width: 800, height: 400, channels: 3, background: '#003d51' } }).png().toBuffer();
 const gold = await sharp({ create: { width: 300, height: 800, channels: 3, background: '#c49a47' } }).png().toBuffer();
 const baseUrl = process.env.NEWS_TEST_URL || 'http://127.0.0.1:3017';
-const browser = await chromium.launch({ headless: true });
+const browserType = process.env.NEWS_TEST_BROWSER === 'webkit' ? webkit : chromium;
+const browser = await browserType.launch({ headless: true });
 try {
   for (const width of [360, 768, 1440]) {
     const page = await browser.newPage({ viewport: { width, height: 800 } });
@@ -21,6 +22,13 @@ try {
     await image.waitFor();
     await page.waitForFunction(() => globalThis.getComputedStyle(globalThis.document.querySelector('img')).objectFit === 'cover');
     const pictureBounds = await image.boundingBox();
+    assert.equal(await image.evaluate(node => globalThis.getComputedStyle(node).filter), 'none');
+    const checkOriginalColor = async picture => {
+      const bounds = await picture.boundingBox();
+      const pixel = await sharp(await page.screenshot({ clip: { x: Math.ceil(bounds.x + bounds.width / 2), y: Math.ceil(bounds.y + 16), width: 1, height: 1 } })).removeAlpha().raw().toBuffer();
+      assert.deepEqual([...pixel], [0, 61, 81], 'The news image retains its original colors without a dark overlay');
+    };
+    await checkOriginalColor(image);
     const textBounds = await page.locator('[data-news-text]').boundingBox();
     assert.ok(pictureBounds.height > 0);
     assert.ok(textBounds.y >= pictureBounds.y && textBounds.y + textBounds.height <= pictureBounds.y + pictureBounds.height + 1, 'News text overlays the image');
@@ -35,6 +43,8 @@ try {
     await page.getByRole('button', { name: 'الصورة 1', exact: true }).click();
     await page.getByRole('button', { name: /عرض الخبر/ }).click();
     await page.getByRole('dialog').waitFor();
+    await page.getByRole('dialog').evaluate(async element => { await Promise.all(element.getAnimations().map(animation => animation.finished)); });
+    await checkOriginalColor(page.getByRole('dialog').locator('img'));
     await page.getByRole('button', { name: 'إغلاق', exact: true }).click();
     await page.getByRole('dialog').waitFor({ state: 'detached' });
     await page.screenshot({ path: `outputs/news-card-${width}.png`, fullPage: true });
@@ -58,6 +68,7 @@ try {
     await page.getByLabel('لون خلفية الخبر', { exact: true }).fill('#1d4ed8');
     const preview = page.getByRole('region', { name: 'معاينة الخبر', exact: true });
     await preview.getByRole('heading', { name: 'تكريم المتميزين', exact: true }).waitFor();
+    await page.getByRole('dialog').evaluate(async element => { await Promise.all(element.getAnimations().map(animation => animation.finished)); });
     assert.equal(await preview.getByText('نص محفوظ بدون صورة').isVisible(), true, 'Preview follows the draft');
     assert.equal(await preview.locator('[data-news-text] h3').evaluate(node => globalThis.getComputedStyle(node).color), 'rgb(255, 238, 170)');
     assert.equal(await preview.locator('[data-news-text]').evaluate(node => globalThis.getComputedStyle(node.parentElement).backgroundColor), 'rgb(29, 78, 216)');

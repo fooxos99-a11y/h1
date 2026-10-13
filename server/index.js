@@ -61,7 +61,7 @@ import { getManualAttendancePoints, applyStudentPointDelta, applyAttendancePoint
 import { saveAttendanceWithPoints } from './services/attendancePoints.js';
 import { ensureNazemAutomaticAttendance } from './services/nazemAutomaticAttendance.js';
 import { getReviewStartForDate, reviewPagesMatch } from './services/quranReviewSchedule.js';
-import { canMarkNazemNotCompleted, nazemNotCompletedLabel, isNazemLinkTask, isNazemMasteryTask, readNazemLinkCount } from '../shared/nazem-recitation-policy.js';
+import { canMarkRecitationNotCompleted, nazemNotCompletedLabel, isNazemLinkTask, isNazemMasteryTask, readNazemLinkCount } from '../shared/nazem-recitation-policy.js';
 import { notifyTeacherPointAdjustment } from './services/teacherPointNotification.js';
 import { loadNazemPlanLinkCount } from './integrations/nazem/planLinkCount.js';
 import { loadAdjacentQuranPosition, loadQuranPagePositions } from './services/quranTraversalIndex.js';
@@ -116,6 +116,7 @@ import tenantAuthRouter from './routes/tenantAuthRoutes.js';
 import { removedFeaturesMiddleware } from './middleware/removedFeatures.js';
 import { readLocalMushafFont, readLocalMushafPage } from './services/localMushaf.js';
 import { findNextUnmemorizedPosition } from './services/quranMemorizationContinuity.js';
+import { removePriorMemorizationRange } from './services/quranPriorMemorization.js';
 import {
   normalizeDailyChallengeDays,
   normalizeDailyChallengeGames,
@@ -2207,107 +2208,8 @@ async function getPriorMemorizationRanges(connection, planId) {
   return rows;
 }
 
-async function savePriorMemorizationRange(connection, planId, studentId, range) {
-  await connection.query(
-    `
-    INSERT INTO student_quran_plan_prior_memorization
-      (plan_id, student_id, start_surah, start_ayah, start_page, end_surah, end_ayah, end_page)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    [
-      planId,
-      studentId,
-      range.startSurah,
-      range.startAyah,
-      range.startPage,
-      range.endSurah,
-      range.endAyah,
-      range.endPage,
-    ]
-  );
-}
-
 async function removePriorMemorizationQuranRange(connection, studentId, start, end) {
-  const [rows] = await connection.query(
-    `
-    SELECT
-      id,
-      plan_id AS planId,
-      start_surah AS startSurah,
-      start_ayah AS startAyah,
-      start_page AS startPage,
-      end_surah AS endSurah,
-      end_ayah AS endAyah,
-      end_page AS endPage
-    FROM student_quran_plan_prior_memorization
-    WHERE student_id = ?
-      AND (
-        start_page < ?
-        OR (start_page = ? AND start_surah < ?)
-        OR (start_page = ? AND start_surah = ? AND start_ayah <= ?)
-      )
-      AND (
-        end_page > ?
-        OR (end_page = ? AND end_surah > ?)
-        OR (end_page = ? AND end_surah = ? AND end_ayah >= ?)
-      )
-    FOR UPDATE
-    `,
-    [
-      studentId,
-      end.page,
-      end.page,
-      end.surah,
-      end.page,
-      end.surah,
-      end.ayah,
-      start.page,
-      start.page,
-      start.surah,
-      start.page,
-      start.surah,
-      start.ayah,
-    ]
-  );
-  if (!rows.length) return 0;
-
-  const ids = rows.map((row) => row.id);
-  await connection.query(
-    `DELETE FROM student_quran_plan_prior_memorization WHERE id IN (${ids.map(() => '?').join(',')})`,
-    ids
-  );
-
-  for (const row of rows) {
-    const rowStart = getQuranRangeStart(row);
-    const rowEnd = getQuranRangeEnd(row);
-    if (compareQuranPosition(rowStart, start) < 0) {
-      const leftEnd = await getAdjacentQuranAyah(connection, start, 'previous');
-      if (leftEnd && compareQuranPosition(rowStart, leftEnd) <= 0) {
-        await savePriorMemorizationRange(connection, row.planId, studentId, {
-          startSurah: rowStart.surah,
-          startAyah: rowStart.ayah,
-          startPage: rowStart.page,
-          endSurah: leftEnd.surah,
-          endAyah: leftEnd.ayah,
-          endPage: leftEnd.page,
-        });
-      }
-    }
-    if (compareQuranPosition(rowEnd, end) > 0) {
-      const rightStart = await getAdjacentQuranAyah(connection, end, 'next');
-      if (rightStart && compareQuranPosition(rightStart, rowEnd) <= 0) {
-        await savePriorMemorizationRange(connection, row.planId, studentId, {
-          startSurah: rightStart.surah,
-          startAyah: rightStart.ayah,
-          startPage: rightStart.page,
-          endSurah: rowEnd.surah,
-          endAyah: rowEnd.ayah,
-          endPage: rowEnd.page,
-        });
-      }
-    }
-  }
-  return rows.length;
+  return removePriorMemorizationRange(connection, studentId, start, end, getAdjacentQuranAyah);
 }
 
 async function removePriorMemorizationPageRange(connection, studentId, startPage, endPage) {
@@ -13004,7 +12906,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
     const marksByTask = await getQuranTaskDisplayMarks(connection, allRows.map((row) => row.id));
     const executionOptionsByGroup = new Map();
     await buildTeacherExecutionChoices(allRows, executionOptionsByGroup, connection, date, settings);
-    const [nazemPendingRows] = await connection.query(
+    const [storedNazemPendingRows] = await connection.query(
       `SELECT student_id AS studentId,
          MAX(status IN ('failed','blocked','requires_review','conflict')) AS syncFailed,
          MAX(CASE WHEN status IN ('failed','blocked','requires_review','conflict') THEN last_error_code END) AS syncErrorCode,
@@ -13024,6 +12926,8 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
        GROUP BY student_id`,
       [...nazemTeacherIds, ...scopedStudentIds, date],
     );
+    const managedStudentIds = new Set(students.filter(student => Number(student.nazemManaged)).map(student => Number(student.id)));
+    const nazemPendingRows = storedNazemPendingRows.filter(row => managedStudentIds.has(Number(row.studentId)));
     const nazemPendingStudentIds = new Set(nazemPendingRows.map((row) => Number(row.studentId)));
     const nazemFailedStudentIds = new Set(nazemPendingRows.filter((row) => Number(row.syncFailed)).map((row) => Number(row.studentId)));
     const nazemRecheckStudentIds = new Set(nazemPendingRows.filter((row) => Number(row.needsIdentityRecheck)).map((row) => Number(row.studentId)));
@@ -13155,8 +13059,8 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
           nazemLinkEmpty: Boolean(student.nazemLinkEmpty),
           attendanceStatus: attendanceByStudent.get(Number(student.id)) || '',
           canSetAttendance: teacherAttendanceMode,
-          nazemRemainingDue: nazemDueRows.filter((due) => Number(due.studentId) === Number(student.id)),
-          nazemRecitationCompleted: remotelyCompletedStudentIds.has(Number(student.id))
+          nazemRemainingDue: Number(student.nazemManaged) ? nazemDueRows.filter((due) => Number(due.studentId) === Number(student.id)) : [],
+          nazemRecitationCompleted: Boolean(Number(student.nazemManaged)) && remotelyCompletedStudentIds.has(Number(student.id))
             && !activeTaskStudentIds.has(Number(student.id))
             && !nazemDueStudentIds.has(Number(student.id))
             && !nazemPendingStudentIds.has(Number(student.id)),
@@ -15037,7 +14941,7 @@ async function calculateTaskEvaluationOutcome({ task, connection, settings, notM
       return { warningCount: normalizedWordMarks.filter(mark => mark.markType === 'warning').length,
         mistakeCount: normalizedWordMarks.filter(mark => mark.markType === 'mistake').length };
     }, { warningCount, mistakeCount });
-  if (group) return { ...group, ratingLabel: group.completed ? 'متقن' : 'يحتاج إعادة' };
+  if (group && !notMemorized) return { ...group, ratingLabel: group.completed ? 'متقن' : 'يحتاج إعادة' };
   const evaluatedRange = {
     startPage: task.fromPage,
     startSurah: task.fromSurah,
@@ -18841,9 +18745,9 @@ if (!task || (!Number(task.nazemManaged) && !canTeacherExecuteQuranTask(settings
         return res.status(409).json({ message: 'تعذر اعتماد عدد الربط من ناظم أو تغير منذ فتح الجلسة. أعد تحديث الجلسة.', code: 'STALE_LINK_TASK' });
       }
     }
-    if (notMemorized && !canMarkNazemNotCompleted(task)) {
+    if (notMemorized && !canMarkRecitationNotCompleted(task)) {
       await connection.rollback();
-      return res.status(422).json({ message: 'خيار عدم الإكمال متاح لمقادير ناظم القابلة للتقييم فقط.' });
+      return res.status(422).json({ message: 'لا يمكن تسجيل عدم الإكمال لهذه المهمة.' });
     }
 
   return null;

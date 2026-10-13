@@ -40,7 +40,9 @@ function mergeSessionDeliveryReceipts(session, receipts, tasks, students) {
     const student = students.get(Number(session.studentId));
     const _resolveStatus = () => {
       if (accepted) {
-        if (item.nazemManaged || task?.nazemManaged || student?.nazemManaged) {
+        const managed = task ? Number(task.nazemManaged)
+          : student?.nazemManaged !== undefined ? Number(student.nazemManaged) : Number(item.nazemManaged);
+        if (managed) {
           return 'nazem_pending';
         }
         return 'server_saved';
