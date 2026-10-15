@@ -241,9 +241,8 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
 
   const syncRecitationInBackground = useCallback((sessionId) => {
     if (navigator.onLine === false) return;
-    void syncOfflineRecitations(supervisorId, { force: true })
-      .then((synced) => {
-        const savedSession = synced.find((item) => item?.sessionId === sessionId);
+    void syncCommittedRecitation(supervisorId, sessionId)
+      .then((savedSession) => {
         if (savedSession) assertSessionAccepted(savedSession);
         return load({ fresh: true });
       })
@@ -320,10 +319,8 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
           return { task, payload: { ...payload, offlineOutcome: offlineOutcome(task, payload, data?.evaluationPolicies) } };
         }),
       });
-      const saved = await finishRecitationSave(student.studentId, memorizationTasks, session);
+      await finishRecitationSave(student.studentId, memorizationTasks, session);
       setSelectedStudent(null);
-      toast({ title: nazemNotCompletedLabel(memorizationTasks[0]),
-        ...(saved.pending ? { description: 'النتيجة محفوظة على الجهاز.' } : {}) });
     } catch (error) {
       toast({ title: 'تعذر حفظ النتيجة محليًا', description: error.message, variant: 'destructive' });
     } finally { setIsSavingCount(false); }

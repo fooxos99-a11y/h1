@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { isUuid, recitationCandidateWins, recitationSessionTypeForTask } from '../../shared/offline-recitation.js';
 import { normalizeMasterySessionIdentity } from './masterySessionIdentity.js';
 import { resolveReviewSessionIdentity } from './recitationReviewSessionIdentity.js';
+import { resolveLocalSessionIdentity } from './recitationLocalSessionIdentity.js';
 
 const MAX_TRUSTED_ELAPSED_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -102,8 +103,9 @@ export async function claimRecitationSession(connection, {
   const submittedPlanVersion = Math.max(1, Number(req.body.planVersion || task.planVersion || 1));
   const currentPlanVersion = Math.max(1, Number(task.planVersion || submittedPlanVersion));
   let sessionType = recitationSessionTypeForTask(task);
-  sessionType = await resolveReviewSessionIdentity(connection, task, sessionDate, sessionType);
   if (task.taskType === 'memorization') await normalizeMasterySessionIdentity(connection, task.studentId, sessionDate);
+  sessionType = await resolveLocalSessionIdentity(connection, task, sessionDate, sessionType);
+  sessionType = await resolveReviewSessionIdentity(connection, task, sessionDate, sessionType);
   await connection.query(
     `INSERT INTO student_quran_recitation_submissions
       (session_id, student_id, evaluator_id, evaluator_role, device_id, session_date, session_type, event_at,

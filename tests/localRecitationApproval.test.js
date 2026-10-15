@@ -94,3 +94,25 @@ test('immediate sync reads the exact durable receipt and guards account changes 
     else assert.equal(await confirm(9, 'exact'), phase === 'missing' ? undefined : approved);
   }
 });
+
+test('background save reports the exact durable receipt when a batch snapshot is stale', async () => {
+  const source = await readFile(new URL('../src/components/portal/TeacherEvaluationDialog.jsx', import.meta.url), 'utf8');
+  const definition = source.slice(source.indexOf('  const syncRecitationInBackground ='), source.indexOf('  const finishRecitationSave ='));
+  for (const status of ['synced', 'conflict']) {
+    const notices = [];
+    let finish;
+    const refreshed = new Promise(resolve => { finish = resolve; });
+    const callback = vm.runInNewContext(`${definition}\nsyncRecitationInBackground;`, {
+      useCallback: fn => fn, navigator: { onLine: true }, supervisorId: 11,
+      syncOfflineRecitations: async () => [{ sessionId: 'exact', status: 'conflict' }],
+      syncCommittedRecitation: async (id, sessionId) => {
+        assert.equal(id, 11); assert.equal(sessionId, 'exact'); return { sessionId, status };
+      },
+      assertSessionAccepted: receipt => { if (receipt.status === 'conflict') throw Error('rejected'); },
+      load: async () => { finish(); }, toast: value => notices.push(value), recitationErrorMessage: error => error.message,
+    });
+    callback('exact');
+    await refreshed;
+    assert.equal(notices.length, status === 'synced' ? 0 : 1);
+  }
+});

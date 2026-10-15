@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
 import { offlineRecitationStore } from '../src/services/offlineRecitationStore.js';
 import { serializedSqliteConnection } from '../src/lib/serializedSqliteConnection.js';
+import { recitationSessionTypeForTask } from '../shared/offline-recitation.js';
 
 async function fixture(t) {
   const db = new DatabaseSync(':memory:');
@@ -45,6 +46,25 @@ async function fixture(t) {
 }
 
 const session = (studentId) => ({ sessionId: randomUUID(), studentId, sessionDate: '2026-09-29', tasks: [{ taskId: studentId }] });
+
+test('legacy synced compensation cannot lock a different local lesson, and rejected saves can be retried', async t => {
+  const { store } = await fixture(t);
+  const old = { ...session(1), sessionType: 'memorization',
+    tasks: [{ taskId: 10, taskType: 'memorization', taskDate: '2026-09-28' }] };
+  await store.commitSession('teacher', old);
+  await store.updateSession('teacher', old.sessionId, { status: 'synced' });
+  const task = { id: 11, taskType: 'memorization', taskDate: old.sessionDate };
+  const today = { ...session(1), sessionType: recitationSessionTypeForTask(task),
+    tasks: [{ taskId: task.id, taskType: task.taskType, taskDate: task.taskDate }] };
+  await store.commitSession('teacher', today);
+  await store.updateSession('teacher', today.sessionId, { status: 'rejected_duplicate' });
+  const retry = await store.commitSession('teacher', { ...today, sessionId: randomUUID() });
+  assert.notEqual(retry.sessionId, today.sessionId);
+  assert.equal((await store.getSessions('teacher')).length, 3, 'Retain old rejection and accepted history');
+  await store.updateSession('teacher', retry.sessionId, { status: 'synced' });
+  await assert.rejects(store.commitSession('teacher', { ...today, sessionId: randomUUID() }), /تم تسميع الطالب اليوم/);
+  await assert.rejects(store.commitSession('teacher', { ...old, sessionType: 'memorization:2026-09-28', sessionId: randomUUID() }), /تم تسميع الطالب اليوم/);
+});
 
 test('SQLite serializes concurrent session, draft, cache and metadata operations', async (t) => {
   const { store } = await fixture(t);

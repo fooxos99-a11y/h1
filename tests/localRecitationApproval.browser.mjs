@@ -29,7 +29,7 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
       assert.notEqual(await page.evaluate(() => globalThis.localRecitationFixture.commits[0].status), 'synced');
       assert.equal(await page.getByRole('button', { name: 'حفظ', exact: true }).count(), 0);
       assert.equal(await page.getByRole('button', { name: 'مراجعة', exact: true }).isEnabled(), true);
-      await page.getByText('لم يتم الحفظ', { exact: true }).waitFor();
+      assert.equal(await page.getByText('لم يتم الحفظ', { exact: true }).count(), 0);
       assert.equal(await page.getByText('حُفظت النتيجة', { exact: true }).count(), 0);
       await page.evaluate(() => {
         globalThis.localRecitationFixture.delaySync = false;
@@ -45,8 +45,8 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
       await page.getByRole('dialog').waitFor({ state: 'hidden' });
       assert.ok(await page.evaluate(() => globalThis.localRecitationFixture.commits[1].tasks.every(item =>
         item.taskType === 'review' && item.result.teacherCompleted === false && item.result.evaluationScore === 0)));
-      await page.getByText('لم يتم الحفظ', { exact: true }).waitFor();
-      await page.getByText('لم تتم المراجعة', { exact: true }).waitFor();
+      assert.equal(await page.getByText('لم يتم الحفظ', { exact: true }).count(), 0);
+      assert.equal(await page.getByText('لم تتم المراجعة', { exact: true }).count(), 0);
       assert.equal(await page.getByText('لا يوجد مقدار للتسميع', { exact: true }).count(), 0);
       assert.equal(await page.getByText('اكتمل التسميع', { exact: true }).count(), 0);
 
@@ -105,7 +105,8 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
       assert.equal(await page.getByRole('button', { name: 'مراجعة', exact: true }).isEnabled(), true);
 
       await page.goto(`${origin}/tests/fixtures/local-recitation.html?finishedDaily=1`, { waitUntil: 'domcontentloaded' });
-      await page.getByText('اكتمل التسميع', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'التعويض', exact: true }).waitFor();
+      assert.equal(await page.getByText('اكتمل التسميع', { exact: true }).count(), 0);
       assert.equal(await page.getByText('لا يوجد مقدار للتسميع', { exact: true }).count(), 0);
       await page.screenshot({ path: `outputs/local-recitation-approval-fix/${name}-${width}-finished.png` });
       await page.getByRole('button', { name: 'التعويض', exact: true }).click();

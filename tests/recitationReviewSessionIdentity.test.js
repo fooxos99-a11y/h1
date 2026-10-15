@@ -32,7 +32,7 @@ test('distinct Nazem reviews on the same day use distinct durable device and ser
   assert.notEqual(first, second);
   assert.equal(normalizeRecitationSessionType(second), second);
   assert.ok(second.length <= 40);
-  assert.equal(recitationSessionTypeForTask({ ...task, nazemManaged: false }), 'review');
+  assert.equal(recitationSessionTypeForTask({ ...task, nazemManaged: false }), 'review:2026-09-14:p19');
   assert.equal(recitationSessionTypeForTask({ ...task, taskType: 'memorization' }), 'memorization:2026-09-14');
 });
 

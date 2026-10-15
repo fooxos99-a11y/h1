@@ -19,6 +19,6 @@ test('remote completion requires every returned daily record to be completed', a
   assert.equal((await loadNazemCompletedStudentIds({ query: async () => [[]] }, 4, '2026-09-23')).size, 0);
 });
 
-test('a remotely completed student remains visible for the completed label', () => {
-  assert.equal(shouldShowRecitationStudent({ studentId: 1, attendanceStatus: 'present', nazemRecitationCompleted: true, recitationFinished: true }), true);
+test('a remotely completed student leaves the listening list when no work remains', () => {
+  assert.equal(shouldShowRecitationStudent({ studentId: 1, attendanceStatus: 'present', nazemRecitationCompleted: true, recitationFinished: true }), false);
 });

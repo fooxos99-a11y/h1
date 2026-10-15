@@ -112,7 +112,7 @@ test('attendance points and repetition controls respect their execution actor an
   assert.match(taskList, /recitation-actions/);
   assert.doesNotMatch(taskList, /NazemSyncStatusBadge|task\.nazemSyncStatus|task\.nazemSyncError/);
   assert.doesNotMatch(taskList, /nazemSyncStatusLabel|بانتظار المزامنة/);
-  assert.match(taskList, /حُفظت النتيجة/);
+  assert.doesNotMatch(taskList, /حُفظت النتيجة|اكتمل التسميع|outcome\.label/);
   assert.match(taskList, /هل كرر/);
   assert.match(taskList, /RepeatCountSelector/);
   assert.match(listeningChoice, /justify-start/);

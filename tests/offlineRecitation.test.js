@@ -260,7 +260,7 @@ test('client persists atomically, restores drafts, retries globally, and never b
   assert.doesNotMatch(evaluation, /promote: taskPayloads\.every/);
   assert.match(sync, /\[404, 409, 422\][\s\S]*return 'conflict'/);
   assert.match(sync, /status === 'conflict'[\s\S]*\? null/);
-  assert.match(evaluation, /saved.pending \? \{ description: 'النتيجة محفوظة على الجهاز.'/);
+  assert.doesNotMatch(evaluation, /saved.pending \? \{ description: 'النتيجة محفوظة على الجهاز.'/);
   assert.doesNotMatch(evaluation, /ستُرسل تلقائيًا|سيُرسل إلى ناظم/);
   assert.doesNotMatch(mushaf, /تعذر إرساله إلى ناظم|ستُرسل تلقائيًا|getNazemDeliveryFailure/);
   assert.match(evaluation, /nazemNotCompletedLabel/);

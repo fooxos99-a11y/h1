@@ -7,14 +7,13 @@ export function isRecitationActionPending(task) {
 }
 
 export function shouldShowRecitationStudent(student, tasks = [], taskQueue = [], compensationTasks = []) {
-  if (student.nazemRecitationCompleted) return true;
-  if (student.recitationOutcomes?.some(outcome => !outcome.teacherCompleted)) return true;
   if (!['present', 'late'].includes(student.attendanceStatus)) return true;
   const remaining = [...tasks, ...compensationTasks].some((task) => (
     Number(task.studentId) === Number(student.studentId) && isRecitationActionPending(task)
   ));
   if (remaining) return true;
-  const saved = student.recitationFinished || student.recitationPending || student.recitationSyncFailed
+  const saved = student.nazemRecitationCompleted || student.recitationOutcomes?.length > 0
+    || student.recitationFinished || student.recitationPending || student.recitationSyncFailed
     || [...tasks, ...taskQueue].some((task) => Number(task.studentId) === Number(student.studentId)
       && !isRecitationActionPending(task));
   return !saved;

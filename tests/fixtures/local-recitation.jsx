@@ -4,9 +4,12 @@ import TeacherEvaluationDialog from '../../src/components/portal/TeacherEvaluati
 import { studentsApi } from '../../src/services/studentsApi';
 import { offlineRecitationStore } from '../../src/services/offlineRecitationStore';
 import { isDailyRecitationTask, isRecitationCompensationTask } from '../../shared/recitation-session-scope';
+import { attachRecitationOutcomes } from '../../shared/recitation-outcomes';
+import { Toaster } from '../../src/components/ui/toaster';
 import '../../src/index.css';
 if (!import.meta.env.DEV || !['localhost', '127.0.0.1'].includes(location.hostname)) throw new Error('Local only');
 const date = '2026-10-13';
+const scenario = new URLSearchParams(location.search);
 const positions = [1, 2, 3, 4, 5, 6, 7, 8].map(ayah => ({ page: 597, surah: 95, surahName: 'التين', ayah }));
 const reviewOptions = [114, 113, 112, 67].flatMap(surah => [1, 2, 3].map(ayah => ({ page: 604, surah, ayah, surahName: { 114: 'الناس', 113: 'الفلق', 112: 'الإخلاص', 67: 'الملك' }[surah] })));
 const base = { planId: 1, studentId: 7, studentName: 'طالب اختبار', taskDate: date, track: 'memorization', teacherCompleted: null, nazemManaged: false, planDirection: -1 };
@@ -23,17 +26,25 @@ const evaluation = { date, generationEndDate: date, students: [{ studentId: 7, s
   allowQuranCompensation: true,
   executionSources: { memorization: 'teacher', review: 'teacher', link: 'teacher' }, evaluationModes: { memorization: 'count', review: 'count', link: 'count' }, evaluationPolicies: {} };
 const state = { evaluationCalls: 0, ayahCalls: 0, rangeCalls: [], commits: [], releaseRange: null };
+state.delaySync = scenario.has('delaySync');
+state.failCommit = scenario.has('failCommit');
 studentsApi.getSupervisorQuranEvaluation = async () => {
   state.evaluationCalls++;
-  const recordedIds = new Set(state.commits.filter(session => session.status === 'synced')
-    .flatMap(session => session.tasks.filter(item => item.result?.teacherCompleted === true).map(item => item.taskId)));
+  const deliveryReceipts = state.commits.filter(session => session.status === 'synced')
+    .flatMap(session => session.tasks.filter(item => item.synced && item.result?.ok).map(item => ({
+      ...tasks.find(task => task.id === item.taskId), ...item.result,
+      taskId: item.taskId, status: 'server_saved',
+    })));
+  const recordedIds = new Set(deliveryReceipts.map(item => item.taskId));
   const finishedDaily = new URLSearchParams(location.search).has('finishedDaily');
-  const pendingTasks = tasks.filter(task => !recordedIds.has(task.id) && !(finishedDaily && task.taskDate === date));
+  const pendingTasks = tasks.filter(task => !recordedIds.has(task.id) && !(finishedDaily && task.taskDate === date)
+    && (!scenario.has('dailyOnly') || task.taskDate === date)
+    && (!scenario.has('singleTask') || task.taskType === 'memorization'));
   const dailyTasks = pendingTasks.filter(task => isDailyRecitationTask(task, date));
   const scope = { dailyTasks, compensationTasks: pendingTasks.filter(task => isRecitationCompensationTask(task, date, true)), dailyStudentIds: new Set(dailyTasks.map(task => task.studentId)) };
-  return { ...evaluation, students: evaluation.students.map(student => ({ ...student,
+  return { ...evaluation, deliveryReceipts, students: attachRecitationOutcomes(evaluation.students.map(student => ({ ...student,
     recitationFinished: finishedDaily && !scope.dailyStudentIds.has(student.studentId),
-  })), tasks: scope.dailyTasks, compensationTasks: scope.compensationTasks, taskQueue: pendingTasks };
+  })), deliveryReceipts), tasks: scope.dailyTasks, compensationTasks: scope.compensationTasks, taskQueue: pendingTasks };
 };
 studentsApi.getQuranChapters = async () => [{ number: 95, name: 'التين', ayahCount: 8 }];
 studentsApi.getSupervisorQuranTaskAyahs = async () => { state.ayahCalls++; return {}; };
@@ -75,4 +86,4 @@ studentsApi.syncOfflineRecitationBatch = async sessions => {
   })) };
 };
 globalThis.localRecitationFixture = state;
-createRoot(document.getElementById('root')).render(<><div id="dashboard-mobile-header-actions" /><TeacherEvaluationDialog supervisorId="990" inline /></>);
+createRoot(document.getElementById('root')).render(<><div id="dashboard-mobile-header-actions" /><TeacherEvaluationDialog supervisorId="990" inline /><Toaster /></>);

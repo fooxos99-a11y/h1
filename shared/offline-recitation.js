@@ -23,6 +23,7 @@ const isDateOnly = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
 export const normalizeRecitationSessionType = (value) => {
   const raw = String(value || '');
   if (['memorization', 'mastery', 'review', 'link'].includes(raw)) return raw;
+  if (/^(memorization|mastery|review|link):\d{4}-\d{2}-\d{2}:p[1-9]\d{0,14}$/.test(raw)) return raw;
   if (/^review:\d{4}-\d{2}-\d{2}:[1-9]\d{0,14}$/.test(raw)) return raw;
   return /^(memorization|mastery|review|link):\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : 'general';
 };
@@ -33,7 +34,11 @@ export const recitationSessionTypeForTask = (task = {}) => {
   // A refreshed Nazem review can have a different amount on the same date.
   if (task.nazemManaged && baseType === 'review' && /^\d{4}-\d{2}-\d{2}$/.test(taskDate)
     && /^[1-9]\d{0,14}$/.test(String(task.id || ''))) return `${baseType}:${taskDate}:${task.id}`;
-  return task.nazemManaged && /^\d{4}-\d{2}-\d{2}$/.test(taskDate)
+  // Replacing a local plan can add a new lesson after the old plan was evaluated.
+  if (!task.nazemManaged && /^\d{4}-\d{2}-\d{2}$/.test(taskDate)
+    && /^[1-9]\d{0,14}$/.test(String(task.planId || ''))) return `${baseType}:${taskDate}:p${task.planId}`;
+  // Compensation and today's lesson must not claim the same daily slot.
+  return /^\d{4}-\d{2}-\d{2}$/.test(taskDate)
     ? `${baseType}:${taskDate}`
     : baseType;
 };

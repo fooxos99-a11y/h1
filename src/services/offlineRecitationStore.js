@@ -8,6 +8,7 @@ import {
   createUuid,
   normalizeRecitationSessionType,
   normalizeRecitationSession,
+  recitationSessionTypeForTask,
 } from '../../shared/offline-recitation.js';
 
 const DATABASE_NAME = 'madarij_offline_recitation';
@@ -242,11 +243,15 @@ class OfflineRecitationStore {
     await this.init();
     const now = new Date().toISOString();
     const sessionType = normalizeRecitationSessionType(value.sessionType);
-    const existing = (await this.getSessions(actorKey)).find((row) => (
-      Number(row.studentId) === Number(value.studentId)
-      && row.sessionDate === value.sessionDate
-      && normalizeRecitationSessionType(row.sessionType) === sessionType
-    ));
+    const existing = (await this.getSessions(actorKey)).find((row) => {
+      if (Number(row.studentId) !== Number(value.studentId) || row.sessionDate !== value.sessionDate
+        || row.status === 'rejected_duplicate') return false;
+      if (normalizeRecitationSessionType(row.sessionType) === sessionType) return true;
+      const first = row.tasks?.[0];
+      return Boolean(first?.taskDate && recitationSessionTypeForTask({
+        ...first, id: first.taskId, ...(sessionType.includes(':p') ? { nazemManaged: false } : {}),
+      }) === sessionType);
+    });
     if (existing && !canEditPendingRecitation(existing.status)) {
       throw new Error(existing.status === 'synced'
         ? 'تم تسميع الطالب اليوم بالفعل.'

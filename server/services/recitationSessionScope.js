@@ -9,6 +9,13 @@ export function assertLocalRecitationScope(task, date, compensation, allowed) {
 export function managedRecitationIdentitySql(alias) {
   if (!/^[a-z_]+$/.test(alias)) throw new Error('Invalid recitation table alias');
   return `EXISTS (SELECT 1 FROM nazem_plan_links historicalManagedPlan
+    JOIN nazem_accounts historicalManagedAccount
+      ON historicalManagedAccount.teacher_id = historicalManagedPlan.teacher_id
+      AND historicalManagedAccount.status = 'connected'
+    JOIN app_settings historicalManagedSetting
+      ON historicalManagedSetting.setting_key = 'nazemIntegrationEnabled'
+      AND historicalManagedSetting.setting_value = 'true'
     WHERE historicalManagedPlan.ruwasi_plan_id = ${alias}.plan_id
+      AND historicalManagedPlan.ruwasi_student_id = ${alias}.student_id
       AND historicalManagedPlan.sync_status NOT IN ('deleted','detached'))`;
 }

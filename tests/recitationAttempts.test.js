@@ -106,7 +106,7 @@ test('retry source stays available across dates while completed local actions le
   assert.match(taskList, /pendingTasks = student\.tasks\.filter\(task => isRecitationActionPending\(task\) && isDailyRecitationTask\(task, date\)\)/);
   assert.match(taskList, /tasks: pendingTasks\.filter\(\(task\) => evaluationTypeForTask\(task\) === 'memorization'\)/);
   assert.match(taskList, /tasks: pendingTasks\.filter\(\(task\) => evaluationTypeForTask\(task\) === 'mastery'\)/);
-  assert.match(taskList, /اكتمل التسميع/);
+  assert.doesNotMatch(taskList, /اكتمل التسميع|حُفظت النتيجة/);
   assert.doesNotMatch(taskList, /إعادة إرسال|nazemRetryAvailable|retryingNazemTaskId/);
   assert.match(taskList, /\|\| nazemSubmissionLocked/);
   assert.match(server, /const nazemTeacherActionFilter/);

@@ -145,7 +145,6 @@ const TeacherRecitationTaskList = ({
           return ['teacher', 'both'].includes(executionSources[action.sourceKey]);
         });
         const hasRecitationTasks = recitationActions.some((action) => action.empty || action.tasks.length > 0);
-        const failedOutcomes = (student.recitationOutcomes || []).filter(outcome => !outcome.teacherCompleted && outcome.label);
         const actionViews = recitationActions.map((sourceAction) => {
           const actionKey = `${student.studentId}:${sourceAction.key}:${sourceAction.tasks[0]?.id}`;
           const lateOptions = nazemLateOptions(sourceAction.tasks[0], taskQueue, quranChapters);
@@ -206,13 +205,6 @@ const TeacherRecitationTaskList = ({
         const position = (item) => actionOrder.indexOf(item.action.key === 'mastery' && !memorizationView ? 'saved' : item.action.key);
         const displayActionViews = [...actionViews].sort((a, b) => position(a) - position(b));
         const _resolveTeacherRecitationTaskList = () => {
-          if (student.nazemRecitationCompleted) return 'مكتمل';
-          if (student.recitationPending || student.recitationSyncFailed) {
-            return 'حُفظت النتيجة';
-          }
-          if (student.recitationFinished || (student.tasks.length > 0 && pendingTasks.length === 0)) {
-            return 'اكتمل التسميع';
-          }
           if (student.nazemManaged) {
             if (student.amountRefreshPending) {
               return 'جارٍ تحديث مقدار الجلسة من ناظم';
@@ -317,13 +309,7 @@ const TeacherRecitationTaskList = ({
                 {onRefresh && <Button type="button" variant="ghost" className="min-h-11" onClick={onRefresh}>إعادة المحاولة</Button>}
               </output>}
 
-              {canRecite && failedOutcomes.length > 0 && (
-                <output className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-bold text-muted-foreground [font-family:var(--font-ui)]" aria-live="polite">
-                  {failedOutcomes.map(outcome => <span key={`${outcome.taskType}:${outcome.track}`} title={outcome.taskDate}>{outcome.label}</span>)}
-                </output>
-              )}
-
-              {canRecite && !hasRecitationTasks && failedOutcomes.length === 0 && (
+              {canRecite && !hasRecitationTasks && compensationGroups.length === 0 && (
                 <span className="self-center text-xs font-bold text-muted-foreground">
                   {_resolveTeacherRecitationTaskList()}
                 </span>

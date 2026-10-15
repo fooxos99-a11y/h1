@@ -16,11 +16,11 @@ const student = { studentId: 8, attendanceStatus: 'present', recitationFinished:
 const receipt = { taskId: 1, studentId: 8, taskType: 'memorization', track: 'memorization',
   taskDate: '2026-10-13', teacherCompleted: false, evaluationScore: 0, status: 'server_saved' };
 
-test('a saved zero result stays visible as not memorized rather than finished or missing', () => {
+test('a saved zero result remains recorded without keeping the student in the listening list', () => {
   const [result] = attachRecitationOutcomes([student], [receipt]);
   assert.equal(result.recitationFinished, false);
   assert.equal(result.recitationOutcomes[0].label, 'لم يتم الحفظ');
-  assert.equal(shouldShowRecitationStudent(result), true);
+  assert.equal(shouldShowRecitationStudent(result), false);
 });
 
 test('review failure remains distinct and any failed member fails its review group', () => {
@@ -61,7 +61,7 @@ test('durable negative submissions keep their outcome through offline rehydratio
     const result = mergeCommittedOfflineEvaluation(evaluation, [{ studentId: 8, sessionDate: evaluation.date, status, tasks: [item] }]);
     assert.equal(result.students[0].recitationOutcomes[0].label, 'لم يتم الحفظ');
     assert.equal(result.students[0].recitationFinished, false);
-    assert.equal(shouldShowRecitationStudent(result.students[0]), true);
+    assert.equal(shouldShowRecitationStudent(result.students[0]), false);
   }
 });
 

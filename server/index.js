@@ -7339,7 +7339,7 @@ if (siteConfig.features?.summit !== false) {
 app.use('/api/offline-recitation', createOfflineRecitationRouter({
   getToday: () => getSaudiDateTimeParts().date,
   prepareOfflineWindow: async ({ connection, accountId, fromDate, cacheDays }) => {
-    const settings = await loadSettings();
+    const settings = await loadSettings(connection);
     await ensureSupervisorTeacherModeTasks(
       connection,
       accountId,
@@ -12488,7 +12488,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
       return res.status(403).json({ message: 'جلسات التسميع متاحة لصاحب الحساب فقط.' });
     }
     const now = getSaudiDateTimeParts();
-    const settings = await loadSettings();
+    const settings = await loadSettings(connection);
     const recitationPreferences = await loadStaffRecitationPreferences(
       connection,
       supervisorId,
@@ -13138,7 +13138,7 @@ app.post('/api/supervisors/:id/quran-evaluation/:taskId/range', async (req, res,
     if (!isOwnRecitationAccount(req, supervisorId)) {
       return res.status(403).json({ message: 'جلسات التسميع متاحة لصاحب الحساب فقط.' });
     }
-    const settings = await loadSettings();
+    const settings = await loadSettings(connection);
     const now = getSaudiDateTimeParts();
     const requestedDate = isValidDateOnly(req.body.date || now.date) ? String(req.body.date || now.date) : now.date;
     if (!isRecitationSessionDay(requestedDate, settings)) {
@@ -13301,7 +13301,7 @@ app.get('/api/supervisors/:id/quran-evaluation/:taskId/ayahs', async (req, res, 
     if (!isOwnRecitationAccount(req, supervisorId)) {
       return res.status(403).json({ message: 'جلسات التسميع متاحة لصاحب الحساب فقط.' });
     }
-    const settings = await loadSettings();
+    const settings = await loadSettings(connection);
     const [[task]] = await connection.query(
       `
       SELECT
@@ -13421,7 +13421,7 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
     if (!isOwnRecitationAccount(req, supervisorId)) {
       return res.status(403).json({ message: 'جلسات التسميع متاحة لصاحب الحساب فقط.' });
     }
-    const settings = await loadSettings();
+    const settings = await loadSettings(connection);
     const recitationPreferences = await loadStaffRecitationPreferences(
       connection,
       supervisorId,
