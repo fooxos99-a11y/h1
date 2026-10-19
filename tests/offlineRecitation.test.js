@@ -244,7 +244,7 @@ test('client persists atomically, restores drafts, retries globally, and never b
   assert.match(merge, /filter\(\(student\) => !\['absent', 'excused'\]\.includes\(student\.attendanceStatus\)\)/);
   assert.match(evaluation, /useTeacherEvaluationData\(/);
   const evaluationLoader = await read('../src/hooks/useTeacherEvaluationData.js');
-  assert.match(evaluationLoader, /resolvedEvaluation = await mergeLocalTeacherEvaluation\(supervisorId, evaluation\)/);
+  assert.match(evaluationLoader, /resolvedEvaluation = await withinTimeout\(\(\) => mergeLocalTeacherEvaluation\(supervisorId, evaluation\)/);
   assert.match(evaluationLoader, /update\(\{ data: resolvedEvaluation/);
   assert.match(sync, /if \(!queuedSyncs\.has\(actorKey\)\)/);
   assert.match(sync, /queuedSyncs\.delete\(actorKey\); return syncOfflineRecitations\(supervisorId, \{ force: true \}\)/);

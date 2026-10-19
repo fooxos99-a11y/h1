@@ -42,8 +42,11 @@ import DashboardShell from '@/components/dashboard/DashboardShell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { studentsApi } from '@/services/studentsApi';
-import LoadingScreen from '@/components/LoadingScreen';
-import { hasAuthSession } from '@/lib/authSession';
+import { getAuthSessionVersion, hasAuthSession } from '@/lib/authSession';
+import { isTemporaryReadFailure } from '@/lib/asyncRecovery';
+import { subscribeRecitationResume } from '@/lib/recitationResume';
+import ErrorState from '@/components/ui/error-state';
+import { readPublicSettingsCache } from '@/services/publicSettingsCache';
 import { useAccountLogout } from '@/hooks/useAccountLogout';
 import { readStoredDashboardPermissions, storeDashboardPermissions } from '@/lib/dashboardPermissions';
 import { dashboardSectionRoutes } from '@/lib/sectionRoutes';
@@ -231,9 +234,12 @@ const WajehDashboard = () => {
   const navigate = useNavigate();
   const { section: sectionSlug = '' } = useParams();
   const isOnline = useOnlineStatus();
-  const [settings, setSettings] = useState(defaultSettings);
+  const cachedSettings = useMemo(readPublicSettingsCache, []);
+  const [settings, setSettings] = useState(() => ({ ...defaultSettings, ...cachedSettings }));
   const rewardUnits = useRewardUnits(site.features?.summit !== false && settings.summitEnabled);
   const [isDashboardLoading, setIsDashboardLoading] = useState(true);
+  const [bootstrapError, setBootstrapError] = useState('');
+  const [bootstrapRevision, setBootstrapRevision] = useState(0);
   const [dashboardPermissions, setDashboardPermissions] = useState(readStoredDashboardPermissions);
   const [activeCallRoom, setActiveCallRoom] = useState(null);
   const role = localStorage.getItem('wajeh_role') || '';
@@ -260,26 +266,60 @@ const WajehDashboard = () => {
       setIsDashboardLoading(false);
       return;
     }
-    if (isManager || isSupervisor || isAdmin || isReciter) {
+    let active = true;
+    let pending = false;
+    let timer;
+    let retries = 0;
+    const version = getAuthSessionVersion();
+    const isCurrent = () => active && version === getAuthSessionVersion();
+    const load = () => {
+      if (pending || !isCurrent()) return;
+      pending = true;
+      window.clearTimeout(timer);
+      timer = null;
+      setIsDashboardLoading(true);
+      setBootstrapError('');
       studentsApi.getDashboardBootstrap()
         .then((data) => {
+          if (!isCurrent()) return;
           setSettings({ ...defaultSettings, ...(data.settings) });
           const permissions = data.permissions || [];
           storeDashboardPermissions(permissions);
           setDashboardPermissions(permissions);
+          setBootstrapError('');
+          retries = 0;
         })
-        .catch(() => {
-          setSettings(defaultSettings);
-          if (!isManager) {
+        .catch((error) => {
+          if (!isCurrent()) return;
+          // A transport failure cannot revoke permissions; only a server response can.
+          if (error.status === 403) {
             storeDashboardPermissions([]);
             setDashboardPermissions([]);
           }
+          if (isTemporaryReadFailure(error) && retries < 2) {
+            retries += 1;
+            timer = window.setTimeout(load, retries * 1000);
+          } else if (error.status !== 401) {
+            setBootstrapError(error.message || 'تعذر تحميل البيانات.');
+          }
         })
-        .finally(() => setIsDashboardLoading(false));
+        .finally(() => {
+          pending = false;
+          if (isCurrent() && !timer) setIsDashboardLoading(false);
+        });
+    };
+    if (isManager || isSupervisor || isAdmin || isReciter) {
+      setBootstrapError('');
+      load();
     } else {
       setIsDashboardLoading(false);
     }
-  }, [isAdmin, isManager, isOnline, isReciter, isSupervisor]);
+    const unsubscribe = subscribeRecitationResume({
+      windowTarget: window, documentTarget: document,
+      isOnline: () => navigator.onLine !== false, refresh: load,
+    });
+    return () => { active = false; window.clearTimeout(timer); unsubscribe(); };
+  }, [bootstrapRevision, cachedSettings, isAdmin, isManager, isOnline, isReciter, isSupervisor]);
 
   const staffAttendanceActive = settings.staffAttendanceSource === 'teacher' && (isSupervisor || isAdmin || isReciter);
   const staffAttendanceState = useStaffAttendance(staffAttendanceActive);
@@ -414,14 +454,18 @@ const WajehDashboard = () => {
     );
   };
 
+  if (!isOnline) return <OfflineConnectionRequired message="يلزم الاتصال بالإنترنت لتحديث بيانات الحساب." />;
+
   if (navigationLoading) {
     return (
       <div className="min-h-screen bg-background text-foreground [font-family:var(--font-ui)]" dir="rtl">
         <CustomCursor />
-        <LoadingScreen />
+        <DashboardLoader mode="screen" />
       </div>
     );
   }
+
+  if (bootstrapError && isOnline) return <main className="grid min-h-dvh place-items-center bg-background p-4 [font-family:var(--font-ui)]" dir="rtl"><ErrorState message={bootstrapError} onRetry={() => setBootstrapRevision(value => value + 1)} /></main>;
 
   if (!hasDashboardAccess) {
     return (

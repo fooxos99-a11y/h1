@@ -6,6 +6,8 @@ import AppErrorBoundary from '@/components/AppErrorBoundary';
 import LoadingScreen from '@/components/LoadingScreen';
 import RouteThemeController from '@/components/RouteThemeController';
 import LoginGateway from '@/pages/LoginGateway';
+import { useNavigate } from '@/lib/router';
+import ConnectedEntryGate from '@/components/startup/ConnectedEntryGate';
 
 const AccountPortal = lazy(() => import('@/pages/AccountPortal'));
 const WajehDashboard = lazy(() => import('@/pages/WajehDashboard'));
@@ -21,21 +23,29 @@ const GuessImageGame = lazy(() => import('@/pages/GuessImageGame'));
 const OfflineRecitationSyncBridge = lazy(() => import('@/components/native/OfflineRecitationSyncBridge'));
 
 function App() {
+  const navigate = useNavigate();
   const [syncEnabled, setSyncEnabled] = useState(() => Boolean(localStorage.getItem('wajeh_role')));
 
   useEffect(() => {
     const enableSync = () => setSyncEnabled(Boolean(localStorage.getItem('wajeh_role')));
+    const sessionExpired = () => {
+      setSyncEnabled(false);
+      navigate('/login', { replace: true });
+    };
     window.addEventListener('madarij-authenticated', enableSync);
     window.addEventListener('storage', enableSync);
+    window.addEventListener('madarij-session-expired', sessionExpired);
     return () => {
       window.removeEventListener('madarij-authenticated', enableSync);
       window.removeEventListener('storage', enableSync);
+      window.removeEventListener('madarij-session-expired', sessionExpired);
     };
-  }, []);
+  }, [navigate]);
 
   return (
     <AppErrorBoundary><StartupProvider><ScreenLoadingProvider>
       <RouteThemeController />
+      <ConnectedEntryGate>
       {syncEnabled && (
         <Suspense fallback={null}><OfflineRecitationSyncBridge /></Suspense>
       )}
@@ -59,6 +69,7 @@ function App() {
         <Route><Redirect to="/" replace /></Route>
         </Switch>
       </Suspense>
+      </ConnectedEntryGate>
     </ScreenLoadingProvider></StartupProvider></AppErrorBoundary>
   );
 }

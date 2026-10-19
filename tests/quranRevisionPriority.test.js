@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { partitionQuranRevisionPages } from '../shared/quran-revision-priority.js';
+import { pickReviewPages, reviewPageRanges } from '../shared/quran-review-pages.js';
 
 test('linking pages are excluded from the continuous review rotation', () => {
   const result = partitionQuranRevisionPages({
@@ -127,11 +128,20 @@ test('linking walks backward in the plan traversal order instead of advancing in
   assert.doesNotMatch(implementation, /buildQuranRangeByFaceTarget\(connection, nearest, backwardLimit/);
 });
 
-test('review target records only the faces that are actually available', async () => {
+test('generated review records the full fixed amount over available pages without duplicate task rows', async () => {
   const server = await readFile(new URL('../server/index.js', import.meta.url), 'utf8');
-
-  assert.doesNotMatch(server, /overflowTargetPages/);
-  assert.match(server, /'review',[\s\S]*range\.fromPage,[\s\S]*range\.toPage,[\s\S]*rangePages/);
+  const start = server.indexOf('async function createMissingReviewTasks(');
+  const end = server.indexOf('\n/**', start);
+  const inserted = [];
+  const generate = new Function('reviewPageRanges', 'insertPlanTask', `${server.slice(start, end)}; return createMissingReviewTasks;`)(
+    reviewPageRanges, async (_, row) => inserted.push(row));
+  await generate({ existingTypes: new Set(), reviewEnabledToday: true,
+    pickedReview: pickReviewPages(new Set([1, 2, 3]), 1, 20),
+    connection: { query: async () => {} }, plan: { id: 1 }, date: '2026-10-19' });
+  assert.equal(inserted.length, 1);
+  assert.equal(inserted[0].targetPages, 20);
+  assert.equal(inserted[0].fromPage, 1);
+  assert.equal(inserted[0].toPage, 3);
 });
 
 test('editing a plan keeps its saved page boundaries visible even when already memorized', async () => {

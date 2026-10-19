@@ -12,7 +12,7 @@ function isAtOrAfterPage(ayah, page, direction) {
 // A teacher-rejected review restarts from its first range; otherwise continue after it.
 function priorReviewStart(prior, teacherCompleted) {
   const rejected = teacherCompleted != null && Number(teacherCompleted) !== 1;
-  return rejected ? prior.ranges[0].start : prior.next;
+  return rejected ? prior.ranges[0].start : prior.next || prior.ranges[0].start;
 }
 
 function executionState(status, selection, expectedFaces) {

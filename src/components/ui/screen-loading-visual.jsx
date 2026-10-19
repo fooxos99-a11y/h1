@@ -8,6 +8,6 @@ export default function ScreenLoadingVisual() {
     const timer = window.setTimeout(() => setTimedOut(true), 15_000);
     return () => window.clearTimeout(timer);
   }, []);
-  if (timedOut) return <div className="w-full max-w-lg p-4" dir="rtl"><ErrorState message="تعذر إكمال التحميل. تحقق من الاتصال ثم أعد المحاولة." onRetry={() => window.location.reload()} /></div>;
+  if (timedOut) return <div className="w-full max-w-lg p-4" dir="rtl"><ErrorState message="تعذر إكمال التحميل. أعد المحاولة." onRetry={() => window.location.reload()} /></div>;
   return <LoadingSpinner size="lg" />;
 }

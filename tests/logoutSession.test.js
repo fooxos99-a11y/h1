@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { prepareTimedRequest, requestTimeoutMessage } from '../src/lib/requestTimeout.js';
 import { singleFlight, refreshableSingleFlight } from '../src/lib/asyncRequests.js';
+import { withinTimeout } from '../src/lib/asyncRecovery.js';
 
 const deferred = () => {
   let resolve;
@@ -37,18 +38,22 @@ async function loadModule(file, bindings, exports) {
   const source = (await readFile(new URL(file, import.meta.url), 'utf8'))
     .replace(/^import[\s\S]*?from ['"][^'"]+['"];?\r?\n/gm, '')
     .replace(/\bexport /g, '');
-  return vm.runInNewContext(`${source}\n({${exports.join(',')}})`, bindings);
+  return vm.runInNewContext(`${source}\n({${exports.join(',')}})`, { withinTimeout, ...bindings });
 }
-async function setupApi() {
+async function setupApi({ native = false } = {}) {
   const localStorage = storage();
   localStorage.setItem('wajeh_role', 'student');
   localStorage.setItem('madarij_web_session', '1');
   const requests = [];
   let version = 0;
   let tenant = 'old-tenant';
+  const tokenReads = [];
+  const expired = [];
   const api = await loadModule('../src/services/studentsApi.js', {
-    Capacitor: { isNativePlatform: () => false }, localStorage,
-    getBearerToken: async () => '', getAuthSessionVersion: () => version,
+    Capacitor: { isNativePlatform: () => native }, localStorage,
+    getBearerToken: async (options) => { tokenReads.push(options); return options.fresh ? 'recovered-token' : 'old-token'; },
+    getAuthSessionVersion: () => version,
+    dispatchEvent: event => expired.push(event.type), Event,
     clearAuthSession: async () => { version += 1; localStorage.removeItem('madarij_web_session'); },
     getTenantRegistrationNumber: () => tenant,
     clearTenantRegistrationNumber: () => { tenant = ''; },
@@ -72,8 +77,34 @@ async function setupApi() {
     for (let index = 0; requests.length < count && index < 20; index += 1) await new Promise(setImmediate);
     assert.equal(requests.length, count);
   };
-  return { ...api, localStorage, requests, respond, waitRequest };
+  return { ...api, localStorage, requests, respond, waitRequest, tokenReads, expired };
 }
+
+test('native unauthorized retry rereads the credential before preserving the session', async () => {
+  const env = await setupApi({ native: true });
+  const result = env.request('/profile');
+  await env.waitRequest(1);
+  env.respond(0, 401);
+  await env.waitRequest(2);
+  assert.equal(env.requests[0].options.headers.Authorization, 'Bearer old-token');
+  assert.equal(env.requests[1].options.headers.Authorization, 'Bearer recovered-token');
+  env.respond(1);
+  await result;
+  assert.equal(env.localStorage.getItem('wajeh_role'), 'student');
+  assert.equal(env.expired.length, 0);
+});
+
+test('a confirmed invalid session clears access and notifies the app once', async () => {
+  const env = await setupApi();
+  const result = env.request('/profile');
+  await env.waitRequest(1);
+  env.respond(0, 401);
+  await env.waitRequest(2);
+  env.respond(1, 401, { message: 'expired' });
+  await assert.rejects(result, error => error.status === 401);
+  assert.equal(env.localStorage.getItem('wajeh_role'), null);
+  assert.deepEqual(env.expired, ['madarij-session-expired']);
+});
 
 test('logout clears local access immediately and preserves the original tenant for revocation', async () => {
   const env = await setupApi();

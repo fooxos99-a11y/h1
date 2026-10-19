@@ -1,6 +1,7 @@
 import { mergeEditableRecitationTasks } from '../lib/recitationTaskResults.js';
 import { Capacitor } from '@capacitor/core';
 import { serializedSqliteConnection } from '../lib/serializedSqliteConnection.js';
+import { createEncryptedSqliteDatabaseOpener } from '../lib/nativeSqliteDatabase.js';
 import { getAccountDeviceId } from '../lib/recitationDeviceIdentity.js';
 import {
   OFFLINE_RECITATION_DB_VERSION,
@@ -16,6 +17,15 @@ const DATABASE_NAME = 'madarij_offline_recitation';
 const WEB_DATABASE_NAME = `${DATABASE_NAME}_v1`;
 const CHANGE_EVENT = 'madarij:offline-recitation-change';
 const bootId = createUuid();
+let nativeOpener;
+const getNativeOpener = () => {
+  if (!nativeOpener) {
+    nativeOpener = import('@capacitor-community/sqlite').then(({ CapacitorSQLite, SQLiteConnection }) => (
+      createEncryptedSqliteDatabaseOpener({ sqlite: new SQLiteConnection(CapacitorSQLite), native: CapacitorSQLite, createSecret: createUuid })
+    )).catch(error => { nativeOpener = null; throw error; });
+  }
+  return nativeOpener;
+};
 
 const json = (value) => JSON.stringify(value ?? null);
 const parseJson = (value, fallback = null) => {
@@ -89,18 +99,8 @@ class OfflineRecitationStore {
       this.driver = 'indexeddb';
       return;
     }
-    const { CapacitorSQLite, SQLiteConnection } = await import('@capacitor-community/sqlite');
-    const sqlite = new SQLiteConnection(CapacitorSQLite);
-    const storedSecret = await sqlite.isSecretStored().catch(() => ({ result: false }));
-    if (!storedSecret.result) await sqlite.setEncryptionSecret(createUuid());
-    const connection = await sqlite.createConnection(
-      DATABASE_NAME,
-      true,
-      'secret',
-      OFFLINE_RECITATION_DB_VERSION,
-      false,
-    );
-    await connection.open();
+    const openDatabase = await getNativeOpener();
+    const connection = await openDatabase(DATABASE_NAME, OFFLINE_RECITATION_DB_VERSION, async (connection) => {
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS offline_meta (
         key TEXT PRIMARY KEY NOT NULL,
@@ -160,6 +160,7 @@ class OfflineRecitationStore {
     }
     await connection.execute(`CREATE INDEX IF NOT EXISTS offline_sessions_actor_student_date_type
       ON offline_recitation_sessions(actor_key, student_id, session_date, session_type)`);
+    });
     this.connection = serializedSqliteConnection(connection);
     this.driver = 'sqlite';
   }

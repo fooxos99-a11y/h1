@@ -15,7 +15,7 @@ const LoadingScreen = ({ timeoutMs = 15_000 }) => {
     <main className="fixed inset-0 z-[100] grid place-items-center overflow-auto bg-background p-4 text-foreground [font-family:var(--font-ui)]" dir="rtl">
       <ErrorState
         className="w-full max-w-lg bg-card"
-        message="تعذر إكمال التحميل. تحقق من الاتصال ثم أعد المحاولة."
+        message="تعذر إكمال التحميل. أعد المحاولة."
         onRetry={() => window.location.reload()}
       />
     </main>

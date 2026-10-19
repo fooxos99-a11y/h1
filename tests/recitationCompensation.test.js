@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { countEvaluationItems } from '../shared/nazem-recitation-policy.js';
 import { countRecitationPayload } from '../shared/recitation-group-evaluation.js';
-import { groupRecitationCompensations, isDailyRecitationTask, localRecitationScopeError } from '../shared/recitation-session-scope.js';
+import { groupRecitationCompensations, isDailyRecitationTask, localRecitationScopeError, partitionRecitationSessionTasks } from '../shared/recitation-session-scope.js';
 import { advanceRecitationTaskQueue } from '../src/lib/recitationTaskQueue.js';
 import { shouldShowRecitationStudent } from '../src/lib/recitationActionState.js';
 import { loadRecitationGroupEvaluation } from '../server/services/recitationGroupEvaluation.js';
@@ -12,6 +12,25 @@ const base = { studentId: 7, planId: 9, taskType: 'memorization', track: 'memori
 const today = [1, 2, 3].map(id => ({ ...base, id, targetPages: 1, fromPage: id, toPage: id, fromSurah: 1, toSurah: 1, fromAyah: id, toAyah: id }));
 const old = [{ ...today[0], id: 10, taskDate: '2026-10-12' }, { ...today[1], id: 11, taskDate: '2026-10-12' },
   { ...today[2], id: 12, taskType: 'review', taskDate: '2026-10-12' }, { ...today[2], id: 13, taskType: 'link', taskDate: '2026-10-12' }];
+
+test('old compensations do not prevent daily completion and remain available independently', () => {
+  const scope = partitionRecitationSessionTasks(old, date, true);
+  assert.deepEqual(scope.dailyTasks, []);
+  assert.equal(scope.dailyStudentIds.has(7), false);
+  assert.deepEqual(scope.compensationTasks.map(task => task.id), [10, 11, 12]);
+  const unfinished = partitionRecitationSessionTasks([{ ...today[0], studentId: '7' }, ...old], date, true);
+  assert.equal(unfinished.dailyStudentIds.has(7), true);
+  assert.deepEqual(unfinished.dailyTasks.map(task => task.id), [1]);
+  assert.deepEqual(partitionRecitationSessionTasks(old, date, false).compensationTasks, []);
+});
+
+test('authoritative Nazem work still prevents completion even with an older task date', () => {
+  const authoritative = { ...old[0], nazemManaged: 1 };
+  const scope = partitionRecitationSessionTasks([authoritative, old[2]], date, true);
+  assert.deepEqual(scope.dailyTasks, [authoritative]);
+  assert.equal(scope.dailyStudentIds.has(7), true);
+  assert.deepEqual(scope.compensationTasks, [old[2]]);
+});
 
 test('the daily lesson excludes old work while compensation separates its day and type', () => {
   assert.deepEqual([...today, ...old].filter(task => isDailyRecitationTask(task, date)), today);

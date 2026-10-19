@@ -53,7 +53,7 @@ function StudentHomeContent({ studentId, showPath, showDailyChallenge, execution
   const [sessionVisited, setSessionVisited] = useState(requestedView === 'sessions');
   useEffect(() => {
     let active = true;
-    loadStudentHomeExtras({ showPath, showDailyChallenge, refresh: version > 0, onUpdate: (update) => { if (active) setExtras((current) => ({ ...current, ...update })); } }).then((data) => { if (active) { setExtras(data); setExtrasReady(true); } });
+    loadStudentHomeExtras({ showPath, showDailyChallenge, refresh: true, onUpdate: (update) => { if (active) setExtras((current) => ({ ...current, ...update })); } }).then((data) => { if (active) { setExtras(data); setExtrasReady(true); } });
     return () => { active = false; };
   }, [showPath, showDailyChallenge, today, version]);
   const features = studentHomeFeatures(extras?.settings, site.features, { showPath, showDailyChallenge });

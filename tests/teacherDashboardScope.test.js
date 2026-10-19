@@ -229,7 +229,7 @@ test('teacher recitation attendance reveals grouped actions without a page reloa
   assert.match(server, /AND t\.task_type IN \('memorization', 'review', 'link'\)/);
   assert.match(server, /if \(Number\(row\.nazemManaged\)\) return true;/);
   assert.match(server, /if \(\['absent', 'excused'\]\.includes\(attendanceStatus\)\) return false;/);
-  assert.match(server, /tasks: rows[\s\S]*?isRecitationAttendanceVisible[\s\S]*?taskQueue: allRows/);
+  assert.match(server, /tasks: sessionTasks.dailyTasks[\s\S]*?isRecitationAttendanceVisible[\s\S]*?taskQueue: allRows/);
   assert.match(server, /if \(!\['present', 'late'\]\.includes\(attendanceStatus\)\) return teacherAttendanceMode;/);
   assert.doesNotMatch(server, /const studentStatusFilter = `AND \(t\.student_status = 'done'/);
   assert.match(server, /attemptCount: Math\.max\(0, Number\(row\.attemptCount \|\| 0\)\)/);

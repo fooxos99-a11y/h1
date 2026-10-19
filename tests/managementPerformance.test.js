@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { singleFlight, limitedTaskQueue } from '../src/lib/asyncRequests.js';
 import { createRefreshGate } from '../src/lib/refreshGate.js';
+import { getEntryRefreshVersion } from '../src/lib/entryRefreshVersion.js';
+import { withinTimeout } from '../src/lib/asyncRecovery.js';
 
 function offlineHarness() {
   const source = readFileSync(new URL('../src/services/offlineOperationsService.js', import.meta.url), 'utf8')
@@ -12,8 +14,8 @@ function offlineHarness() {
   const snapshots = new Map();
   const api = new Proxy({}, { get: (_, name) => async () => { calls.push(name); return []; } });
   const store = { getSnapshot: async key => snapshots.get(key), cacheSnapshot: async (key, value) => snapshots.set(key, value) };
-  const create = new Function('studentsApi', 'getTenantRegistrationNumber', 'offlineRecitationStore', 'getBusinessDate', 'shiftDateOnly', 'singleFlight', 'limitedTaskQueue', 'createRefreshGate', 'getAuthSessionVersion', `${source}\nreturn {loadOfflineSnapshot, prefetchOfflineManagementWorkspace};`);
-  return { ...create(api, () => 'tenant', store, () => '2026-09-09', () => '', singleFlight, limitedTaskQueue, createRefreshGate, () => session), calls, newSession: () => { session++; } };
+  const create = new Function('studentsApi', 'getTenantRegistrationNumber', 'offlineRecitationStore', 'getBusinessDate', 'shiftDateOnly', 'singleFlight', 'limitedTaskQueue', 'createRefreshGate', 'getAuthSessionVersion', 'getEntryRefreshVersion', 'withinTimeout', 'reportOfflineCacheFailure', `${source}\nreturn {loadOfflineSnapshot, prefetchOfflineManagementWorkspace};`);
+  return { ...create(api, () => 'tenant', store, () => '2026-09-09', () => '', singleFlight, limitedTaskQueue, createRefreshGate, () => session, getEntryRefreshVersion, withinTimeout, () => assert.fail('cache should remain available')), calls, newSession: () => { session++; } };
 }
 
 test('automatic management preparation avoids hidden reports and respects actor/session isolation', async () => {

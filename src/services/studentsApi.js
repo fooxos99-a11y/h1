@@ -14,6 +14,7 @@ import { localizeRewardText } from '../../shared/reward-units.js';
 import { prepareTimedRequest, requestTimeoutMessage } from '@/lib/requestTimeout';
 import { createRequestCooldown } from '@/lib/requestCooldown';
 import { singleFlight, refreshableSingleFlight } from '@/lib/asyncRequests';
+import { getEntryRefreshVersion } from '@/lib/entryRefreshVersion';
 
 const PUBLIC_RANKINGS_CACHE_VERSION = '2026-08-25-empty-state';
 let pendingLogout = null;
@@ -21,7 +22,7 @@ const requestCooldown = createRequestCooldown({ storage: {
   getItem: (key) => globalThis.localStorage.getItem(key),
   setItem: (key, value) => globalThis.localStorage.setItem(key, value),
 } });
-const requestScopeKey = (value) => JSON.stringify([getApiBase(), getTenantRegistrationNumber(), getAuthSessionVersion(), value]);
+const requestScopeKey = (value) => JSON.stringify([getApiBase(), getTenantRegistrationNumber(), getAuthSessionVersion(), getEntryRefreshVersion(), value]);
 const loadTaskAyahs = singleFlight((supervisorId, taskId) => request(`/supervisors/${supervisorId}/quran-evaluation/${taskId}/ayahs`),
   (supervisorId, taskId) => requestScopeKey([supervisorId, taskId]));
 const loadStudentToday = singleFlight((studentId) => request(`/students/${studentId}/quran-today`),
@@ -37,14 +38,14 @@ const loadChapters = singleFlight(async () => {
   return data;
 }, () => requestScopeKey('chapters'));
 const loadTeacherEvaluation = refreshableSingleFlight(
-  (supervisorId) => request(`/supervisors/${supervisorId}/quran-evaluation`, { timeoutMs: 60_000 }),
+  (supervisorId) => request(`/supervisors/${supervisorId}/quran-evaluation`),
   (supervisorId) => JSON.stringify([getApiBase(), getTenantRegistrationNumber(), getAuthSessionVersion(), String(supervisorId)]),
 );
 
-const roleHeader = async () => {
+const roleHeader = async ({ fresh = false } = {}) => {
   const registrationNumber = getTenantRegistrationNumber();
   const native = Capacitor.isNativePlatform();
-  const token = await getBearerToken();
+  const token = await getBearerToken({ fresh });
   return {
     'Content-Type': 'application/json',
     Authorization: token ? `Bearer ${token}` : '',
@@ -53,7 +54,7 @@ const roleHeader = async () => {
   };
 };
 
-async function fetchRequest(path, options, captureUndo, requestBase) {
+async function fetchRequest(path, options, captureUndo, requestBase, fresh = false) {
   const { apiBaseOverride, authSnapshot, ...requestOptions } = options;
   requestCooldown.check(requestBase, path);
   const traceId = globalThis.crypto?.randomUUID?.() || '';
@@ -64,7 +65,7 @@ async function fetchRequest(path, options, captureUndo, requestBase) {
       cache: 'no-store',
       credentials: 'include',
       headers: {
-        ...await (authSnapshot || roleHeader()),
+        ...await (authSnapshot || roleHeader({ fresh })),
         ...(options.headers),
         ...(captureUndo ? { 'X-Dashboard-Undo': '1' } : {}),
         ...(traceId ? { 'X-Request-Id': traceId } : {}),
@@ -103,11 +104,11 @@ export async function request(path, options = {}) {
   const sessionVersion = getAuthSessionVersion();
   const requestBase = apiBaseOverride || getApiBase();
   const captureUndo = isDashboardUndoActive() && !authSnapshot && isDeferredMutation(path, options);
-  const fetchOnce = () => fetchRequest(path, options, captureUndo, requestBase);
+  const fetchOnce = (fresh = false) => fetchRequest(path, options, captureUndo, requestBase, fresh);
 
   let response = await fetchOnce();
   if (response.status === 401 && path !== '/auth/login' && !authSnapshot
-    && sessionVersion === getAuthSessionVersion()) response = await fetchOnce();
+    && sessionVersion === getAuthSessionVersion()) response = await fetchOnce(true);
 
   requestCooldown.record(requestBase, response);
   const data = await response.json().catch(() => null);
@@ -115,13 +116,15 @@ export async function request(path, options = {}) {
     if (response.status === 401 && !authSnapshot && sessionVersion === getAuthSessionVersion()) {
       clearTenantApiBase();
       clearTenantRegistrationNumber();
-      await clearAuthSession();
+      const cleanup = clearAuthSession();
       localStorage.removeItem('wajeh_role');
       localStorage.removeItem('wajeh_student_id');
       localStorage.removeItem('wajeh_supervisor_id');
       localStorage.removeItem('wajeh_name');
       localStorage.removeItem('wajeh_account_id');
       localStorage.removeItem('wajeh_dashboard_permissions');
+      globalThis.dispatchEvent?.(new Event('madarij-session-expired'));
+      await cleanup;
     }
     const error = new Error(localizeRewardText(
       data?.message || 'تعذر تنفيذ الطلب.',

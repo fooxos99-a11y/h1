@@ -1,10 +1,12 @@
 import { studentsApi } from '@/services/studentsApi';
 import { getTenantRegistrationNumber } from '@/services/apiBase';
 import { getSaudiDate } from '@/lib/dailyChallengeAvailability';
+import { getEntryRefreshVersion } from '@/lib/entryRefreshVersion';
 
 const CACHE_VERSION = 1;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 let activeRequest = null;
+let activeScope = '';
 const experienceCache = {
   summit: { identity: '', value: null, request: null },
   dailyChallenge: { identity: '', value: null, request: null },
@@ -31,13 +33,16 @@ export const writePublicSettingsCache = (value) => {
 export const loadPublicSettingsCached = async ({ refresh = false } = {}) => {
   const cached = readPublicSettingsCache();
   if (cached && !refresh) return cached;
-  if (activeRequest) return activeRequest;
-  activeRequest = studentsApi.getPublicSettings()
+  const scope = JSON.stringify([getTenantRegistrationNumber(), getEntryRefreshVersion()]);
+  if (activeRequest && activeScope === scope) return activeRequest;
+  const request = studentsApi.getPublicSettings()
     .then((settings) => {
-      writePublicSettingsCache(settings);
+      if (scope === JSON.stringify([getTenantRegistrationNumber(), getEntryRefreshVersion()])) writePublicSettingsCache(settings);
       return settings;
     })
-    .finally(() => { activeRequest = null; });
+    .finally(() => { if (activeRequest === request) activeRequest = null; });
+  activeScope = scope;
+  activeRequest = request;
   return activeRequest;
 };
 

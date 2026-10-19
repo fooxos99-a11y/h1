@@ -1,6 +1,8 @@
 import { useStartup } from '@/components/startup/StartupProvider';
 import React, { lazy, Suspense, useEffect, useState } from 'react';
 import LoadingIndicator from '@/components/ui/loading-indicator';
+import ErrorState from '@/components/ui/error-state';
+import { retryTemporaryRead } from '@/lib/asyncRecovery';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import { useNavigate } from '@/lib/router';
@@ -44,6 +46,8 @@ const LoginGateway = ({ loginPage = false, deletionPage = false }) => {
   const logout = useAccountLogout();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [featuresReady, setFeaturesReady] = useState(false);
+  const [featuresError, setFeaturesError] = useState('');
+  const [featuresRevision, setFeaturesRevision] = useState(0);
   const [studentFeatures, setStudentFeatures] = useState(() => {
     const settings = readPublicSettingsCache();
     return {
@@ -90,15 +94,17 @@ const LoginGateway = ({ loginPage = false, deletionPage = false }) => {
   useEffect(() => {
     let active = true;
     setFeaturesReady(false);
-    loadPublicSettingsCached({ refresh: true })
+    setFeaturesError('');
+    retryTemporaryRead(() => loadPublicSettingsCached({ refresh: true }))
       .then((settings) => { if (active) setStudentFeatures({
         summitEnabled: site.features?.summit !== false && Boolean(settings.summitEnabled),
         dailyChallengeEnabled: site.features?.dailyChallenge !== false && Boolean(settings.dailyChallengeEnabled),
         dailyChallengeDays: settings.dailyChallengeDays || [],
         hasStudentQuranExecution: settings.hasStudentQuranExecution !== false,
       }); })
-      .catch(() => {
+      .catch((error) => {
         if (!active) return;
+        if (navigator.onLine !== false) { setFeaturesError(error.message || 'تعذر تحميل البيانات.'); return; }
         const settings = readPublicSettingsCache();
         if (!settings) return;
         setStudentFeatures({
@@ -109,7 +115,7 @@ const LoginGateway = ({ loginPage = false, deletionPage = false }) => {
         });
       }).finally(() => { if (active) setFeaturesReady(true); });
     return () => { active = false; };
-  }, [site.features, storedUser?.id]);
+  }, [featuresRevision, site.features, storedUser?.id]);
 
   const dailyChallengeAvailable = isDailyChallengeAvailable(studentFeatures, saudiClock);
 
@@ -156,6 +162,7 @@ const LoginGateway = ({ loginPage = false, deletionPage = false }) => {
   </Suspense><Toaster /></>;
 
   if (!featuresReady) return <LoadingIndicator mode="screen" delayMs={0} />;
+  if (featuresError) return <main className="grid min-h-dvh place-items-center bg-background p-4 [font-family:var(--font-ui)]" dir="rtl"><ErrorState message={featuresError} onRetry={() => setFeaturesRevision(value => value + 1)} /></main>;
 
   return (
     <div className="min-h-[100svh] overflow-x-clip bg-background text-foreground [font-family:var(--font-ui)]" dir="rtl">

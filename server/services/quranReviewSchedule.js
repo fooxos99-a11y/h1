@@ -23,7 +23,7 @@ function reviewCursorAfterDay(day, cursor) {
   const cycleRow = day.find(row => parseReviewExecution(row.reviewExecution));
   const cycle = parseReviewExecution(cycleRow?.reviewExecution);
   if (cycle) return Number(cycleRow.teacherCompleted != null && Number(cycleRow.teacherCompleted) !== 1
-    ? cycle.ranges[0].start.page : cycle.next.page);
+    ? cycle.ranges[0].start.page : cycle.next?.page || cursor);
   const ascending = [...day].sort((a, b) => Number(a.fromPage) - Number(b.fromPage));
   let start = ascending.findIndex((row) => Number(row.toPage) >= cursor);
   if (start < 0) start = 0;

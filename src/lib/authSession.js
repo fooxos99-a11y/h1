@@ -1,43 +1,67 @@
 import { Capacitor } from '@capacitor/core';
 import { KeychainAccess, SecureStorage } from '@aparajita/capacitor-secure-storage';
 import { getSiteConfig } from '@/site/siteConfigs';
+import { withinTimeout } from '@/lib/asyncRecovery';
 
 const tokenKey = 'wajeh_token';
 const webSessionKey = 'madarij_web_session';
 const nativeSessionKey = 'madarij_native_session';
 let cachedToken = null;
 let secureStorageReady;
+let pendingTokenRead;
 let sessionVersion = 0;
+const storageTimeoutMs = 4_000;
+const storageUnavailableMessage = 'تعذر قراءة جلسة الدخول على الجهاز. أعد المحاولة.';
 
 export const getAuthSessionVersion = () => sessionVersion;
 
 const prepareSecureStorage = () => {
   if (!secureStorageReady) {
-    secureStorageReady = (async () => {
+    secureStorageReady = withinTimeout(async () => {
       await SecureStorage.setKeyPrefix(getSiteConfig().secureStoragePrefix);
       await SecureStorage.setDefaultKeychainAccess(KeychainAccess.afterFirstUnlockThisDeviceOnly);
-    })();
+    }, storageTimeoutMs, storageUnavailableMessage).catch((error) => {
+      secureStorageReady = null;
+      throw error;
+    });
   }
   return secureStorageReady;
 };
 
 const isNativeSession = () => Capacitor.isNativePlatform();
 
-export const getBearerToken = async () => {
+export const getBearerToken = async ({ fresh = false } = {}) => {
   if (!isNativeSession()) return '';
-  if (cachedToken !== null) return cachedToken;
+  if (!fresh && cachedToken !== null) return cachedToken;
   const version = sessionVersion;
+  if (pendingTokenRead?.version === version) return pendingTokenRead.promise;
   const legacyToken = localStorage.getItem(tokenKey) || '';
-  await prepareSecureStorage();
-  if (legacyToken) {
-    await SecureStorage.set(tokenKey, legacyToken);
-    localStorage.removeItem(tokenKey);
-    if (version === sessionVersion) cachedToken = legacyToken;
-    return legacyToken;
-  }
-  const token = String(await SecureStorage.get(tokenKey) || '');
-  if (version === sessionVersion) cachedToken = token;
-  return token;
+  const read = async () => {
+    await prepareSecureStorage();
+    if (legacyToken) {
+      await SecureStorage.set(tokenKey, legacyToken);
+      localStorage.removeItem(tokenKey);
+      return legacyToken;
+    }
+    return String(await withinTimeout(() => SecureStorage.get(tokenKey), storageTimeoutMs, storageUnavailableMessage) || '');
+  };
+  const promise = (async () => {
+    let token;
+    try {
+      token = await read();
+    } catch (error) {
+      if (version !== sessionVersion) throw error;
+      token = await read();
+    }
+    if (!token && version === sessionVersion && getAuthSessionMarker()) token = await read();
+    // An empty result can be transient during native startup; do not retain it.
+    if (token && version === sessionVersion) cachedToken = token;
+    return token;
+  })().finally(() => {
+    if (pendingTokenRead?.promise === promise) pendingTokenRead = null;
+  });
+  pendingTokenRead = { version, promise };
+  return promise;
 };
 
 export const getAuthSessionMarker = () => (

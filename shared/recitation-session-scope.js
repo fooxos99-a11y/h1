@@ -7,6 +7,15 @@ export const isRecitationCompensationTask = (task, date, allowed) => Boolean(all
   && !Number(task.nazemManaged) && ['memorization', 'review'].includes(task.taskType)
   && task.taskDate < date && !task.locallySaved && ![true, 1].includes(task.teacherCompleted));
 
+export function partitionRecitationSessionTasks(tasks, date, allowCompensation) {
+  const dailyTasks = tasks.filter(task => isDailyRecitationTask(task, date));
+  return {
+    dailyTasks,
+    dailyStudentIds: new Set(dailyTasks.map(task => Number(task.studentId))),
+    compensationTasks: tasks.filter(task => isRecitationCompensationTask(task, date, allowCompensation)),
+  };
+}
+
 export function groupRecitationCompensations(tasks, date, allowed) {
   const groups = new Map();
   for (const task of tasks.filter(task => isRecitationCompensationTask(task, date, allowed))) {

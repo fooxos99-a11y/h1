@@ -3,7 +3,7 @@ import { formatStatisticsNumber as formatNumber } from '@/lib/statisticsNumber';
 import { MetricTile } from './MetricCard';
 
 const decimalFormatter = new Intl.NumberFormat('ar-SA-u-nu-latn', { useGrouping: false, maximumFractionDigits: 1 });
-const panelClassName = 'rounded-2xl border border-border bg-card p-5 shadow-[var(--app-shadow)] [font-family:var(--font-ui)]';
+const panelClassName = 'min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-[var(--app-shadow)] [font-family:var(--font-ui)]';
 
 const EmptyRanking = () => (
   <p className="mt-4 rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">لا توجد بيانات في هذه الفترة.</p>
@@ -14,7 +14,7 @@ function RankingList({ rows, columns = false }) {
   return (
     <ol className={`mt-4 grid gap-3 ${columns ? 'sm:grid-cols-2' : ''}`}>
       {rows.map((row, index) => (
-        <li key={row.id} className="flex items-center gap-3 rounded-lg border border-border p-3">
+        <li key={row.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-border p-2 sm:gap-3 sm:p-3">
           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">{formatNumber(index + 1)}</span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-bold">{row.name}</p>
@@ -30,7 +30,7 @@ function RankingList({ rows, columns = false }) {
 /** Best students by the points they earned in the period, and best circles by the average points of their students. */
 export function RankingPanels({ bestStudents = [], bestCommittees = [], unit = 'نقطة' }) {
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-3">
       <section className={`${panelClassName} lg:col-span-2`} aria-label="أفضل الطلاب">
         <h2 className="text-base font-bold">أفضل الطلاب</h2>
         {bestStudents.length ? (

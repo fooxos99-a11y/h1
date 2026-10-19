@@ -4,6 +4,7 @@ import { cacheTeacherEvaluation, getCachedTeacherEvaluation, mergeLocalTeacherEv
 import { getAuthSessionVersion } from '@/lib/authSession';
 import { getTenantRegistrationNumber } from '@/services/apiBase';
 import { recitationErrorMessage } from '@/lib/recitationErrorMessage';
+import { retryTemporaryRead, withinTimeout } from '@/lib/asyncRecovery';
 
 export default function useTeacherEvaluationData(supervisorId, enabled, onLoaded) {
   const scope = JSON.stringify([getTenantRegistrationNumber(), getAuthSessionVersion(), supervisorId]);
@@ -37,36 +38,30 @@ export default function useTeacherEvaluationData(supervisorId, enabled, onLoaded
     const update = (patch) => {
       if (isCurrent()) setState((current) => ({ ...current, ...patch, scope }));
     };
-    setState((current) => ({ ...current, loading: !current.data, error: '' }));
+    setState((current) => ({ ...current, ...(fresh ? { data: null } : {}), loading: fresh || !current.data, error: '' }));
     const request = (async () => {
-      let latestArrived = false;
-      let cached = null;
-      const restoreCache = (async () => {
+      if (navigator.onLine === false) {
+        let cached;
         try {
-          cached = await getCachedTeacherEvaluation(supervisorId);
-          if (navigator.onLine === false && cached && !latestArrived && isCurrent()) setState((current) => (
-            current.scope === scope && !current.data
-              ? { ...current, data: cached, loading: !(cached.tasks?.length || cached.students?.length) }
-              : current
-          ));
+          cached = await withinTimeout(() => getCachedTeacherEvaluation(supervisorId), 3_000, 'تعذر قراءة الجلسة المحفوظة.');
         } catch {
-          // A device-storage failure must not prevent loading the live session.
+          // An unreadable offline snapshot must leave an actionable error.
           cached = null;
         }
-      })();
-      if (navigator.onLine === false) {
-        await restoreCache;
-        update({ loading: false, error: cached ? '' : 'لا توجد جلسة محفوظة على الجهاز. اتصل بالإنترنت ثم أعد المحاولة.' });
+        update({ ...(cached ? { data: cached } : {}), loading: false, error: cached ? '' : 'لا توجد جلسة محفوظة على الجهاز. اتصل بالإنترنت ثم أعد المحاولة.' });
         return;
       }
       try {
         invalidatedTransport.current = false;
-        const evaluation = await studentsApi.getSupervisorQuranEvaluation(supervisorId, { fresh });
+        const evaluation = await retryTemporaryRead(async () => {
+          const evaluation = await studentsApi.getSupervisorQuranEvaluation(supervisorId, { fresh });
+          return evaluation;
+        }, { isCurrent });
         if (!Array.isArray(evaluation?.tasks) || !Array.isArray(evaluation?.students)) throw new Error('تعذر قراءة بيانات جلسة التسميع. أعد المحاولة.');
-        latestArrived = true;
         if (!isCurrent()) return;
         // Merge durable local outcomes before display; snapshot writes are not on the rendering path.
-        const resolvedEvaluation = await mergeLocalTeacherEvaluation(supervisorId, evaluation);
+        const resolvedEvaluation = await withinTimeout(() => mergeLocalTeacherEvaluation(supervisorId, evaluation),
+          5_000, 'تعذر قراءة التقييمات المحفوظة على الجهاز. أعد المحاولة قبل التسميع.');
         if (!isCurrent()) return;
         update({ data: resolvedEvaluation, loading: false, error: '', retryAt: 0 });
         void cacheTeacherEvaluation(supervisorId, evaluation).catch(() => {
@@ -74,15 +69,9 @@ export default function useTeacherEvaluationData(supervisorId, enabled, onLoaded
         });
         if (isCurrent()) onLoaded(evaluation);
       } catch (error) {
-        await restoreCache;
         if (!isCurrent()) return;
-        // A failed online read can fall back to durable local data, with its error visible.
-        if (cached) setState((current) => current.scope === scope && !current.data
-          ? { ...current, data: cached } : current);
         retryDeadline.current = error.status === 429 ? Date.now() + Math.max(Number(error.retryAfterMs) || 0, 1000) : 0;
         update({ loading: false, retryAt: retryDeadline.current, error: recitationErrorMessage(error, 'تعذر تحميل جلسة التسميع. أعد المحاولة.') });
-      } finally {
-        await restoreCache;
       }
     })().finally(() => {
       if (pending.current === request) pending.current = null;
@@ -96,7 +85,7 @@ export default function useTeacherEvaluationData(supervisorId, enabled, onLoaded
     retryDeadline.current = 0;
     pending.current = null;
     setState({ scope, data: null, loading: enabled, error: '' });
-    void load();
+    void load({ fresh: true });
     return () => { revision.current += 1; pending.current = null; };
   }, [enabled, load, scope]);
 

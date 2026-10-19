@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadStudentPlan, loadStudentToday, readCachedStudentPlan } from '@/services/studentPlanService';
+import { retryTemporaryRead } from '@/lib/asyncRecovery';
 
 export default function useStudentPlan(studentId, today) {
   const [data, setData] = useState(null);
@@ -13,7 +14,7 @@ export default function useStudentPlan(studentId, today) {
       if (request === revision.current) setData(current => ({ ...current, today: todayData }));
     }).catch(() => undefined);
     try {
-      const next = await loadStudentPlan(studentId);
+      const next = await retryTemporaryRead(() => loadStudentPlan(studentId), { isCurrent: () => request === revision.current });
       await todayRequest;
       if (request === revision.current) { setData(next); setError(''); }
     } catch (error_) {
@@ -28,7 +29,7 @@ export default function useStudentPlan(studentId, today) {
     setData(null);
     setLoading(true);
     readCachedStudentPlan(studentId, today).then(cached => {
-      if (active && cached) { setData(current => current || cached); setLoading(false); }
+      if (navigator.onLine === false && active && cached) { setData(current => current || cached); setLoading(false); }
     }).catch(() => undefined);
     void load();
     const refresh = () => { if (document.visibilityState === 'visible') void load(true); };

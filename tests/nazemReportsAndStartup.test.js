@@ -28,7 +28,7 @@ test('application startup always mounts and replaces indefinite loading with ret
   assert.match(timeoutHelper, /استغرق الاتصال وقتًا أطول من المتوقع/);
   // Navigation now waits for its feature settings before choosing a destination.
   assert.match(portal, /const \[isLoading, setIsLoading\] = useState\(true\)/);
-  assert.match(portal, /finally \{\s*setIsLoading\(false\)/);
+  assert.match(portal, /finally \{\s*if \(active\) setIsLoading\(false\)/);
   assert.match(dashboard, /const \[isDashboardLoading, setIsDashboardLoading\] = useState\(true\)/);
   assert.match(errorBoundary, /message="تعذر فتح الصفحة"/);
   assert.match(errorBoundary, /retryLabel="تحديث"/);

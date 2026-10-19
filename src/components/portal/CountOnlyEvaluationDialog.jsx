@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import ErrorState from '@/components/ui/error-state';
+import { withinTimeout } from '@/lib/asyncRecovery';
 import { getRecitationDraft, saveRecitationDraft } from '@/services/offlineRecitationService';
 
 const normalizeCount = (value) => Math.min(1000, Math.max(0, Math.trunc(Number(value) || 0)));
@@ -44,32 +46,50 @@ const CountOnlyEvaluationDialog = ({
   const [mistakeCount, setMistakeCount] = useState(0);
   const [itemCounts, setItemCounts] = useState({});
   const [draftReady, setDraftReady] = useState(false);
+  const [draftError, setDraftError] = useState('');
+  const [draftRevision, setDraftRevision] = useState(0);
+  const [draftWriteFailed, setDraftWriteFailed] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setWarningCount(normalizeCount(initialWarningCount));
     setMistakeCount(normalizeCount(initialMistakeCount));
     setDraftReady(false);
+    setDraftError('');
+    setDraftWriteFailed(false);
     const defaults = Object.fromEntries(items.map((item) => [String(item.id), {
       warningCount: normalizeCount(item.warningCount),
       mistakeCount: normalizeCount(item.mistakeCount),
     }]));
     let active = true;
     void (async () => {
-      const draft = supervisorId && studentId ? await getRecitationDraft(supervisorId, studentId) : null;
+      const draft = supervisorId && studentId
+        ? await withinTimeout(() => getRecitationDraft(supervisorId, studentId), 5_000, 'تعذر قراءة نتيجة التسميع المحفوظة. أعد المحاولة.') : null;
       if (!active) return;
-      setItemCounts(draft?.mode === 'count' ? draft.itemCounts : defaults);
+      if (draft?.mode === 'count' && (!draft.itemCounts || typeof draft.itemCounts !== 'object' || Array.isArray(draft.itemCounts))) {
+        throw new Error('تعذر قراءة نتيجة التسميع المحفوظة. أعد المحاولة.');
+      }
+      setItemCounts(Object.fromEntries(items.map(item => {
+        const saved = draft?.mode === 'count' && draft.itemCounts[String(item.id)];
+        if (!saved) return [String(item.id), defaults[String(item.id)]];
+        if (![saved.warningCount, saved.mistakeCount].every(value => Number.isInteger(value) && value >= 0 && value <= 1000)) {
+          throw new Error('تعذر قراءة نتيجة التسميع المحفوظة. أعد المحاولة.');
+        }
+        return [String(item.id), { warningCount: saved.warningCount, mistakeCount: saved.mistakeCount }];
+      })));
       setDraftReady(true);
-    })();
+    })().catch(() => { if (active) setDraftError('تعذر قراءة نتيجة التسميع المحفوظة. أعد المحاولة.'); });
     return () => { active = false; };
-  }, [initialMistakeCount, initialWarningCount, items, open, studentId, supervisorId]);
+  }, [draftRevision, initialMistakeCount, initialWarningCount, items, open, studentId, supervisorId]);
 
   useEffect(() => {
     if (!open || !draftReady || !supervisorId || !studentId) return undefined;
+    let active = true;
     const timer = window.setTimeout(() => {
-      void saveRecitationDraft(supervisorId, studentId, { mode: 'count', itemCounts });
+      void saveRecitationDraft(supervisorId, studentId, { mode: 'count', itemCounts })
+        .catch(() => { if (active) { setDraftReady(false); setDraftWriteFailed(true); setDraftError('تعذر حفظ نتيجة التسميع على الجهاز. أعد المحاولة.'); } });
     }, 250);
-    return () => window.clearTimeout(timer);
+    return () => { active = false; window.clearTimeout(timer); };
   }, [draftReady, itemCounts, open, studentId, supervisorId]);
 
   const updateItemCount = (itemId, field, value) => setItemCounts((current) => ({
@@ -82,6 +102,14 @@ const CountOnlyEvaluationDialog = ({
       <DialogContent className="max-w-sm border-primary/30 bg-card [font-family:var(--font-ui)]" dir="rtl">
         <DialogHeader><DialogTitle className="text-right text-primary neon-text">{title}</DialogTitle></DialogHeader>
         {children}
+        {draftError && <ErrorState message={draftError} onRetry={async () => {
+          if (!draftWriteFailed) { setDraftRevision(value => value + 1); return; }
+          try {
+            await withinTimeout(() => saveRecitationDraft(supervisorId, studentId, { mode: 'count', itemCounts }), 5_000, draftError);
+            setDraftWriteFailed(false); setDraftError(''); setDraftReady(true);
+          } catch { setDraftError('تعذر حفظ نتيجة التسميع على الجهاز. أعد المحاولة.'); }
+        }} />}
+        <fieldset disabled={!draftReady || isSaving} className="contents">
         {items.length ? (
           <div className="max-h-[65dvh] space-y-3 overflow-y-auto pr-1">
             {items.map((item, index) => {
@@ -103,11 +131,12 @@ const CountOnlyEvaluationDialog = ({
             <CountField id="recitation-mistake-count" label="عدد الأخطاء" value={mistakeCount} onChange={setMistakeCount} />
           </div>
         )}
+        </fieldset>
         <DialogFooter className="!flex-row !justify-between gap-2" dir="rtl">
           <Button type="button" variant="outline" className="min-h-11 px-3" onClick={() => onOpenChange?.(false)} disabled={isSaving}>إغلاق</Button>
           <div className="flex items-center gap-2">
-            {secondaryAction}
-            <Button type="button" className="min-h-11 px-3 text-white hover:text-white" onClick={() => onSubmit?.({ warningCount, mistakeCount, itemCounts })} disabled={isSaving}>{submitLabel}</Button>
+            {secondaryAction && React.cloneElement(secondaryAction, { disabled: isSaving || !draftReady })}
+            <Button type="button" className="min-h-11 px-3 text-white hover:text-white" onClick={() => onSubmit?.({ warningCount, mistakeCount, itemCounts })} disabled={isSaving || !draftReady}>{submitLabel}</Button>
           </div>
         </DialogFooter>
       </DialogContent>

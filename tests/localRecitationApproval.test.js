@@ -15,14 +15,13 @@ const receipt = { sessionId: 'local', status: 'synced', studentId: 8, sessionDat
   tasks: [{ taskId: 1, planId: 17, planVersion: 1, taskType: 'memorization', nazemManaged: true,
     synced: true, result: { ok: true, teacherCompleted: true, syncStatus: 'synced' } }] };
 
-test('local memorization and review expose negative results without requiring Nazem', () => {
-  for (const taskType of ['memorization', 'review']) {
+test('local memorization, review and linking expose negative results without requiring Nazem', () => {
+  for (const taskType of ['memorization', 'review', 'link']) {
     assert.equal(canMarkRecitationNotCompleted({ ...task, taskType }), true);
     assert.equal(canMarkNazemNotCompleted({ ...task, taskType }), false);
     assert.equal(canMarkRecitationNotCompleted({ ...task, taskType, teacherCompleted: true }), false);
     assert.equal(canMarkRecitationNotCompleted({ ...task, taskType, locallySaved: true }), false);
   }
-  assert.equal(canMarkRecitationNotCompleted({ ...task, taskType: 'link' }), false);
   assert.equal(canMarkRecitationNotCompleted({ ...task, nazemManaged: true, nazemSubmissionLocked: true }), false);
 });
 

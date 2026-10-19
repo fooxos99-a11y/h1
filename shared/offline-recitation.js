@@ -47,10 +47,29 @@ export const recitationSessionKey = ({ studentId, sessionDate, sessionType }) =>
   `${Number(studentId)}:${String(sessionDate || '')}:${normalizeRecitationSessionType(sessionType)}`
 );
 
-export const compareRecitationSessions = (first, second) => (
-  `${String(first?.sessionDate || '')}:${String(first?.committedAtLocal || first?.createdAtLocal || '')}:${String(first?.sessionId || '')}`
-    .localeCompare(`${String(second?.sessionDate || '')}:${String(second?.committedAtLocal || second?.createdAtLocal || '')}:${String(second?.sessionId || '')}`)
+export const compareRecitationSessions = (first, second) => {
+  const key = session => {
+    const task = session?.tasks?.[0];
+    const sourceDate = task?.nazemManaged && /^\d{4}-\d{2}-\d{2}$/.test(String(task.taskDate || '')) ? task.taskDate : session?.sessionDate;
+    return `${String(sourceDate || '')}:${String(session?.sessionDate || '')}:${String(session?.committedAtLocal || session?.createdAtLocal || '')}:${String(session?.sessionId || '')}`;
+  };
+  return key(first).localeCompare(key(second));
+};
+
+export const recitationOutcomeBlocksFollowing = outcome => !(
+  outcome.result === 'conflict' && ['RECITATION_TASK_UNAVAILABLE', 'RECITATION_PLAN_CHANGED',
+    'RECITATION_GROUP_CHANGED', 'RECITATION_TASK_INVALID'].includes(outcome.code)
 );
+
+/** Memorization and its link share a sequence; independent plans/tracks/reviews do not. */
+export function recitationSessionsShareDependency(first, second) {
+  if (Number(first.studentId) !== Number(second.studentId)) return false;
+  const a = first.tasks?.[0], b = second.tasks?.[0];
+  if (!a?.planId || !b?.planId || !a.taskType || !b.taskType) return true;
+  const group = task => ['memorization', 'link'].includes(task.taskType) ? 'memorization' : task.taskType;
+  return Number(a.planId) === Number(b.planId)
+    && String(a.track || 'memorization') === String(b.track || 'memorization') && group(a) === group(b);
+}
 
 export const canEditPendingRecitation = (status) => (
   ['pending', 'failed', 'invalid_sequence', 'conflict'].includes(String(status || ''))

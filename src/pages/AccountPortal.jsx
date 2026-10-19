@@ -7,13 +7,14 @@ import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from
 import { BarChart3, BookOpen, CalendarDays, ClipboardCheck, History, ListChecks, PhoneCall, PlusCircle, ShoppingBag, Trophy } from 'lucide-react';
 import { useNavigate, useParams } from '@/lib/router';
 import DashboardLoader from '@/components/dashboard/DashboardLoader';
+import ErrorState from '@/components/ui/error-state';
+import { retryTemporaryRead } from '@/lib/asyncRecovery';
 import DashboardShell from '@/components/dashboard/DashboardShell';
 import LazyCallsSection from '@/components/calls/LazyCallsSection';
 import OfflineConnectionRequired from '@/components/network/OfflineConnectionRequired';
 import PointsValue from '@/components/points/PointsValue';
 import { Card, CardContent } from '@/components/ui/card';
 import { Toaster } from '@/components/ui/toaster';
-import { useToast } from '@/components/ui/use-toast';
 import { getAuthSessionMarker } from '@/lib/authSession';
 import { useAccountLogout } from '@/hooks/useAccountLogout';
 import { readStoredDashboardPermissions, storeDashboardPermissions } from '@/lib/dashboardPermissions';
@@ -51,7 +52,6 @@ const AccountPortal = () => {
   const site = useSiteConfig();
   const navigate = useNavigate();
   const { section: sectionSlug = '' } = useParams();
-  const { toast } = useToast();
   const isOnline = useOnlineStatus();
   const saudiClock = useSaudiClock();
   const [session] = useState(() => ({
@@ -77,6 +77,8 @@ const AccountPortal = () => {
   });
   const studentExecutionLivesOnPublicHome = !Capacitor.isNativePlatform();
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [loadRevision, setLoadRevision] = useState(0);
   const [storeBalance, setStoreBalance] = useState(0);
   const [planPoints, setPlanPoints] = useState(null);
   const [readerTarget, setReaderTarget] = useState(null);
@@ -101,19 +103,22 @@ const AccountPortal = () => {
       setIsLoading(false);
       return;
     }
+    let active = true;
+    setIsLoading(true);
+    setLoadError('');
     const load = async () => {
       try {
-        const publicSettings = await loadPublicSettingsCached({ refresh: true })
-          .catch(() => cachedSettings || ({ pointsSystemEnabled: false, storeEnabled: false }));
-        setSettings(publicSettings);
+        const publicSettings = await retryTemporaryRead(() => loadPublicSettingsCached({ refresh: true }), { isCurrent: () => active });
+        if (active) setSettings(publicSettings);
       } catch (error) {
-        toast({ title: 'تعذر تحميل البيانات', description: error.message, variant: 'destructive' });
+        if (active) setLoadError(error.message || 'تعذر تحميل البيانات.');
       } finally {
-        setIsLoading(false);
+        if (active) setIsLoading(false);
       }
     };
     void load();
-  }, [cachedSettings, hasDashboard, isOnline, session.role, session.studentId, session.token, toast]);
+    return () => { active = false; };
+  }, [hasDashboard, isOnline, loadRevision, session.role, session.studentId, session.token]);
 
   useEffect(() => {
     if (session.role === 'student') preloadStudentExperiences({
@@ -262,6 +267,8 @@ const AccountPortal = () => {
   };
 
   if (!session.token || hasDashboard) return null;
+
+  if (loadError && isOnline) return <main className="grid min-h-dvh place-items-center bg-background p-4 [font-family:var(--font-ui)]" dir="rtl"><ErrorState message={loadError} onRetry={() => setLoadRevision(value => value + 1)} /></main>;
 
   if (isLoading || waitingForAttendance || !permissionsReady || isImmersiveRouteLoading) {
     return (

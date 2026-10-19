@@ -12,6 +12,7 @@ import { prefetchOfflineManagementWorkspace } from '@/services/offlineOperations
 import { getSiteConfig } from '@/site/siteConfigs';
 import { serverConnectivityChangeEvent } from '@/hooks/useOnlineStatus';
 import { getAuthSessionVersion, hasAuthSession } from '@/lib/authSession';
+import { useToast } from '@/components/ui/use-toast';
 
 const getSupervisorId = () => {
   const role = localStorage.getItem('wajeh_role');
@@ -32,6 +33,13 @@ const getManagementAccount = () => {
 };
 
 const OfflineRecitationSyncBridge = () => {
+  const { toast } = useToast();
+  useEffect(() => {
+    const unavailable = () => toast({ title: 'تعذر الوصول إلى التخزين على الجهاز',
+      description: 'البيانات متاحة عبر الإنترنت. أعد المحاولة قبل تسجيل التسميع.', variant: 'destructive' });
+    window.addEventListener('madarij-offline-storage-unavailable', unavailable);
+    return () => window.removeEventListener('madarij-offline-storage-unavailable', unavailable);
+  }, [toast]);
   useEffect(() => {
     let active = true;
     const run = async ({ bootstrap = false, force = false } = {}) => {

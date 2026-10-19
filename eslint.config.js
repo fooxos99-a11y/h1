@@ -7,6 +7,8 @@ export default [
     ignores: [
       'node_modules/**',
       'dist/**',
+      // Generated reports and archived release builds are not project source.
+      'outputs/**',
       'public/sw.js',
       'tools/**',
       'android/**/assets/public/**',

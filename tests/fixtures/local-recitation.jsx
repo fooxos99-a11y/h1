@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import TeacherEvaluationDialog from '../../src/components/portal/TeacherEvaluationDialog';
 import { studentsApi } from '../../src/services/studentsApi';
 import { offlineRecitationStore } from '../../src/services/offlineRecitationStore';
-import { isDailyRecitationTask, isRecitationCompensationTask } from '../../shared/recitation-session-scope';
+import { partitionRecitationSessionTasks } from '../../shared/recitation-session-scope';
 import { attachRecitationOutcomes } from '../../shared/recitation-outcomes';
 import { Toaster } from '../../src/components/ui/toaster';
 import '../../src/index.css';
@@ -40,8 +40,7 @@ studentsApi.getSupervisorQuranEvaluation = async () => {
   const pendingTasks = tasks.filter(task => !recordedIds.has(task.id) && !(finishedDaily && task.taskDate === date)
     && (!scenario.has('dailyOnly') || task.taskDate === date)
     && (!scenario.has('singleTask') || task.taskType === 'memorization'));
-  const dailyTasks = pendingTasks.filter(task => isDailyRecitationTask(task, date));
-  const scope = { dailyTasks, compensationTasks: pendingTasks.filter(task => isRecitationCompensationTask(task, date, true)), dailyStudentIds: new Set(dailyTasks.map(task => task.studentId)) };
+  const scope = partitionRecitationSessionTasks(pendingTasks, date, true);
   return { ...evaluation, deliveryReceipts, students: attachRecitationOutcomes(evaluation.students.map(student => ({ ...student,
     recitationFinished: finishedDaily && !scope.dailyStudentIds.has(student.studentId),
   })), deliveryReceipts), tasks: scope.dailyTasks, compensationTasks: scope.compensationTasks, taskQueue: pendingTasks };

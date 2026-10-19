@@ -2,6 +2,8 @@ import { mergeRecitationTaskResults } from '../lib/recitationTaskResults.js';
 import {
   OFFLINE_RECITATION_MAX_BATCH,
   compareRecitationSessions,
+  recitationSessionsShareDependency,
+  recitationOutcomeBlocksFollowing,
   createUuid,
   recitationSessionTypeForTask,
 } from '../../shared/offline-recitation.js';
@@ -472,10 +474,10 @@ export function syncOfflineRecitations(supervisorId, { force = false } = {}) {
     const ready = pending.filter((session) => (
       force || !session.nextRetryAt || Date.parse(session.nextRetryAt) <= Date.now()
     ));
-    const blockedStudentIds = new Set();
+    const blockedStudentIds = [];
     for (let offset = 0; offset < ready.length; offset += OFFLINE_RECITATION_MAX_BATCH) {
       const batch = ready.slice(offset, offset + OFFLINE_RECITATION_MAX_BATCH)
-        .filter((session) => !blockedStudentIds.has(Number(session.studentId)));
+        .filter((session) => !blockedStudentIds.some(blocked => recitationSessionsShareDependency(blocked, session)));
       if (!batch.length) continue;
       const resolvedSessionIds = new Set();
       try {
@@ -501,13 +503,13 @@ export function syncOfflineRecitations(supervisorId, { force = false } = {}) {
 
 /** Use the legacy endpoint in order and stop later sessions for a student after a failure. */
 async function syncOfflineBatchIndividually(batch, results, supervisorId, actorKey, force) {
-  const blockedStudents = new Set();
+  const blockedStudents = [];
   for (const session of batch) {
-    if (blockedStudents.has(Number(session.studentId))) continue;
+    if (blockedStudents.some(blocked => recitationSessionsShareDependency(blocked, session))) continue;
     try {
       results.push(await syncSession(supervisorId, actorKey, force ? { ...session, nextRetryAt: null } : session));
     } catch {
-      blockedStudents.add(Number(session.studentId));
+      blockedStudents.push(session);
     }
   }
 }
@@ -565,10 +567,14 @@ async function applyOfflineBatchOutcomes({ batch, outcomeById, actorKey, results
         ? null
         : nextRetryAt(retryCount),
       lastError: outcome.tasks?.find((item) => item.message)?.message || outcome.message || 'تعذرت مزامنة الجلسة.',
+      errorCode: outcome.code || outcome.tasks?.find(item => item.code)?.code || '',
+      blockedBySessionId: outcome.blockedBySessionId || '',
+      blockedByDate: outcome.blockedByDate || outcome.tasks?.find(item => item.blockedByDate)?.blockedByDate || '',
     });
     results.push(resolved);
     resolvedSessionIds.add(session.sessionId);
-    if (['failed', 'invalid_sequence', 'conflict', 'rejected_permission'].includes(status)) blockedStudentIds.add(Number(session.studentId));
+    if (['failed', 'invalid_sequence', 'conflict', 'rejected_permission'].includes(status)
+      && recitationOutcomeBlocksFollowing({ ...outcome, code: resolved.errorCode })) blockedStudentIds.push(session);
   }
 }
 

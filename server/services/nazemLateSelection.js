@@ -18,10 +18,13 @@ export function skipsOpenNazemLate(owned, lateRows, selected, sessionDate) {
 }
 
 // Validate the whole batch before any evaluation is written in its transaction.
-export async function validateNazemLateSession(connection, session, teacherId) {
+export async function inspectNazemLateSession(connection, session, teacherId) {
+  const reject = (code, message, blocking = null) => ({ valid: false, code, message,
+    result: code === 'NAZEM_PREVIOUS_SESSION_BLOCKING' ? 'invalid_sequence' : 'conflict',
+    ...(blocking ? { blockedByTaskId: blocking.id, blockedByDate: blocking.taskDate, blockedByTaskType: blocking.taskType || 'memorization' } : {}) });
   const ids = (session.tasks || []).map(item => Number(item.taskId));
   if (!ids.length || ids.some(id => !Number.isSafeInteger(id) || id <= 0)
-    || new Set(ids).size !== ids.length) return false;
+    || new Set(ids).size !== ids.length) return reject('RECITATION_TASK_INVALID', 'مقاطع جلسة التسميع غير صالحة. بقي التقييم محفوظًا على الجهاز.');
   const [owned] = await connection.query(
     `SELECT t.id, t.student_id AS studentId, t.plan_id AS planId, t.task_type AS taskType, t.track,
       DATE_FORMAT(t.task_date, '%Y-%m-%d') AS taskDate,
@@ -40,9 +43,15 @@ export async function validateNazemLateSession(connection, session, teacherId) {
          WHERE sc.committee_id = s.committee_id AND sc.supervisor_id = ?)`,
     [session.sessionId || '', ...ids, teacherId],
   );
-  if (owned.length !== ids.length || owned.some(row => Number(row.studentId) !== Number(session.studentId))) return false;
+  if (owned.length !== ids.length || owned.some(row => Number(row.studentId) !== Number(session.studentId))) {
+    return reject('RECITATION_TASK_UNAVAILABLE', 'لم تعد بعض مقاطع الجلسة متاحة لهذا الحساب. بقي التقييم محفوظًا؛ حدّث الجلسة.');
+  }
+  if (owned.some(row => {
+    const submitted = session.tasks.find(item => Number(item.taskId) === Number(row.id));
+    return submitted.planId && Number(submitted.planId) !== Number(row.planId);
+  })) return reject('RECITATION_PLAN_CHANGED', 'تغيّرت خطة الطالب. بقي التقييم السابق محفوظًا للمراجعة.');
   // Unlinking retains daily history. Those snapshots cannot impose remote ordering on local work.
-  if (owned.every(row => !Number(row.nazemManaged))) return true;
+  if (owned.every(row => !Number(row.nazemManaged))) return { valid: true };
   const [rows] = await connection.query(
     `SELECT t.id, t.plan_id AS planId, t.student_id AS studentId,
       t.task_type AS taskType, t.track, DATE_FORMAT(t.task_date, '%Y-%m-%d') AS taskDate,
@@ -87,18 +96,29 @@ export async function validateNazemLateSession(connection, session, teacherId) {
       const first = selected[0];
       const authority = authorities.find(row => Number(row.planId) === Number(first.planId)
         && row.taskType === 'memorization' && row.track === first.track);
-      if (authority?.taskDate !== first.taskDate) return false;
+      if (authority?.taskDate !== first.taskDate) return reject('NAZEM_SESSION_CHANGED', 'تغيّر المقطع المتاح في ناظم. حدّث الجلسة؛ التقييم السابق محفوظ.');
     }
-    if (!isCurrentNazemSession(owned, authorities, selected.map(row => row.id))) return false;
+    if (!isCurrentNazemSession(owned, authorities, selected.map(row => row.id))) return reject('NAZEM_SESSION_CHANGED', 'تغيّر المقطع المتاح في ناظم. حدّث الجلسة؛ التقييم السابق محفوظ.');
   }
-  if (skipsOpenNazemLate(owned, rows, selected, session.sessionDate)) return false;
-  if (!selected.length) return true;
-  if (selected.length !== ids.length) return false;
-  if (selected.every(row => Number(row.sameSession))) return true;
+  if (skipsOpenNazemLate(owned, rows, selected, session.sessionDate)) {
+    const blocking = rows.find(late => !Number(late.completed) && !ids.includes(Number(late.id))
+      && late.availableOn === session.sessionDate && !isNazemFollowUpCompleted(late.remoteStatus)
+      && owned.some(task => Number(task.planId) === Number(late.planId) && task.track === late.track && late.taskDate < task.taskDate));
+    return reject('NAZEM_PREVIOUS_SESSION_BLOCKING', `أكمل الحفظ المتأخر بتاريخ ${blocking?.taskDate || session.sessionDate} أولًا. بقي التقييم محفوظًا.`, blocking);
+  }
+  if (!selected.length) return { valid: true };
+  if (selected.length !== ids.length) return reject('RECITATION_GROUP_CHANGED', 'تغيّرت مقاطع جلسة التسميع. حدّث الجلسة؛ التقييم السابق محفوظ.');
+  if (selected.every(row => Number(row.sameSession))) return { valid: true };
   const available = rows.filter(row => !Number(row.completed)
     && row.availableOn === session.sessionDate && !isNazemFollowUpCompleted(row.remoteStatus));
   const first = available.find(row => Number(row.planId) === Number(selected[0].planId)
     && row.track === selected[0].track);
   const options = nazemLateOptions(first, available);
-  return ids.every((id, index) => Number(options[index]?.task.id) === id);
+  return ids.every((id, index) => Number(options[index]?.task.id) === id)
+    ? { valid: true }
+    : reject('NAZEM_PREVIOUS_SESSION_BLOCKING', `أكمل الحفظ المتأخر بتاريخ ${first?.taskDate || session.sessionDate} أولًا. بقي التقييم محفوظًا.`, first);
+}
+
+export async function validateNazemLateSession(connection, session, teacherId) {
+  return (await inspectNazemLateSession(connection, session, teacherId)).valid;
 }

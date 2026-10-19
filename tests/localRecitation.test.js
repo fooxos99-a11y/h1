@@ -54,7 +54,9 @@ test('range preparation retains scheduled faces and does not approve execution',
 });
 
 test('group evaluation rejects missing and foreign task IDs and derives its denominator from stored rows', async () => {
-  const rows = group.map(task => ({ ...task, reviewExecution: JSON.stringify(task.id === 1 ? { faces: 3, ranges: [], expectedFaces: 999 } : { faces: 0, ranges: [], anchorId: 1 }) }));
+  const rows = group.map(task => ({ ...task, reviewExecution: JSON.stringify(task.id === 1
+    ? { faces: 3, ranges: [{ start: { page: 1, surah: 1, ayah: 1 }, end: { page: 3, surah: 2, ayah: 16 } }], expectedFaces: 999 }
+    : { faces: 0, ranges: [], anchorId: 1 }) }));
   const connection = { query: async () => [rows] };
   const task = { ...group[0], taskType: 'review' };
   const input = { taskIds: [1, 2, 3], mistakeCount: 0, warningCount: 0 };

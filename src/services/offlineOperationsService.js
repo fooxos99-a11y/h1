@@ -1,9 +1,12 @@
 import { singleFlight, limitedTaskQueue } from '@/lib/asyncRequests';
 import { createRefreshGate } from '@/lib/refreshGate';
 import { getAuthSessionVersion } from '@/lib/authSession';
+import { getEntryRefreshVersion } from '@/lib/entryRefreshVersion';
 import { studentsApi } from '@/services/studentsApi';
 import { getTenantRegistrationNumber } from '@/services/apiBase';
 import { offlineRecitationStore } from '@/services/offlineRecitationStore';
+import { withinTimeout } from '@/lib/asyncRecovery';
+import { reportOfflineCacheFailure } from '@/lib/offlineCacheFailure';
 import { getBusinessDate, shiftDateOnly } from '../../shared/business-date.js';
 
 const ACTION_HANDLERS = Object.freeze({
@@ -50,31 +53,64 @@ export const offlineActorKey = (accountId, actorRole = 'supervisor') => (
 
 const refreshManagementWorkspace = createRefreshGate(5 * 60_000);
 const fetchSnapshot = singleFlight(async (key, _session, loader) => {
+  const entryVersion = getEntryRefreshVersion();
   const value = await loader();
-  await offlineRecitationStore.cacheSnapshot(key, value);
+  if (_session === getAuthSessionVersion() && entryVersion === getEntryRefreshVersion()) {
+    // Online reads remain usable when optional device caching fails.
+    await withinTimeout(() => offlineRecitationStore.cacheSnapshot(key, value), 3_000, 'تعذر حفظ نسخة على الجهاز.')
+      .catch(reportOfflineCacheFailure);
+  }
   return value;
-}, (key, session) => JSON.stringify([key, session]));
+}, (key, session) => JSON.stringify([key, session, getEntryRefreshVersion()]));
 
 export async function loadOfflineSnapshot(accountId, resourceKey, loader, {
   actorRole = 'supervisor',
   preferCache = false,
+  requireFresh = false,
   onRefresh,
 } = {}) {
-  const key = `${offlineActorKey(accountId, actorRole)}:resource:${resourceKey}`;
-  const cached = await offlineRecitationStore.getSnapshot(key);
+  const actorKey = offlineActorKey(accountId, actorRole);
+  const key = `${actorKey}:resource:${resourceKey}`;
+  const sessionVersion = getAuthSessionVersion();
+  const assertCurrent = () => {
+    if (sessionVersion !== getAuthSessionVersion() || actorKey !== offlineActorKey(accountId, actorRole)) {
+      throw Object.assign(new Error('تغير الحساب. أعد فتح الصفحة.'), { status: 409 });
+    }
+  };
+  const freshRead = async () => {
+    assertCurrent();
+    const value = await fetchSnapshot(key, sessionVersion, loader);
+    assertCurrent();
+    return value;
+  };
+  if (requireFresh) {
+    if (!isOnline()) throw new Error('يلزم الاتصال بالإنترنت لتحديث البيانات.');
+    return freshRead();
+  }
+  let cached;
+  try {
+    cached = await withinTimeout(() => offlineRecitationStore.getSnapshot(key), 3_000, 'تعذر قراءة البيانات المحفوظة على الجهاز.');
+  } catch (error) {
+    if (!isOnline()) throw error;
+    reportOfflineCacheFailure();
+  }
+  assertCurrent();
   if (!isOnline()) {
     if (cached !== null && cached !== undefined) return cached;
     throw new Error('هذه البيانات غير محفوظة للعمل دون إنترنت. اتصل بالإنترنت مرة واحدة أولًا.');
   }
   if (preferCache && cached !== null && cached !== undefined) {
-    void fetchSnapshot(key, getAuthSessionVersion(), loader).then((value) => {
+    void freshRead().then((value) => {
       onRefresh?.(value);
     }).catch(() => undefined);
     return cached;
   }
   try {
-    return await fetchSnapshot(key, getAuthSessionVersion(), loader);
+    return await freshRead();
   } catch (error) {
+    assertCurrent();
+    // A cached report cannot override revoked access or a changed account.
+    if ([401, 403].includes(error.status)) throw error;
     if (cached !== null && cached !== undefined) return cached;
     throw error;
   }

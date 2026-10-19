@@ -1,6 +1,6 @@
 import test from 'node:test';
 import { managedRecitationIdentitySql } from '../server/services/recitationSessionScope.js';
-import { isDailyRecitationTask, isRecitationCompensationTask } from '../shared/recitation-session-scope.js';
+import { isDailyRecitationTask, partitionRecitationSessionTasks } from '../shared/recitation-session-scope.js';
 import assert from 'node:assert/strict';
 import { loadReciterNazemScope } from '../server/services/reciterNazemScope.js';
 import { enqueueNazemRecitation, resolveNazemTeacherForStudent } from '../server/integrations/nazem/queue.js';
@@ -83,22 +83,25 @@ test('actual evaluation handler refreshes plan teachers, exposes unexecuted Naze
   const date = '2026-10-01';
   const students = [{ id: 1, name: 'طالب مرتبط', nazemManaged: 1 }, { id: 2, name: 'طالب آخر', nazemManaged: 1 }];
   const task = { id: 7, studentId: 1, planId: 70, taskDate: date, taskType: 'memorization', track: 'memorization', planTrack: 'memorization', nazemManaged: 1, studentStatus: 'pending' };
+  const taskRows = [task];
+  const attempts = [];
   const connection = { release() {}, query: async (sql, params) => {
     calls.push({ sql, params });
     if (sql.includes('account.refresh_followups')) return [[{ status: params[0] === 11 ? 'failed' : 'pending', createdEpochMs: Date.now() }]];
-    if (sql.includes('SELECT student_id AS studentId, status')) return [[{ studentId: 1, status: 'present' }, { studentId: 2, status: 'present' }]];
-    if (sql.includes('t.id,') && sql.includes('FROM student_quran_tasks t')) return [[task]];
+    if (sql.includes('SELECT student_id AS studentId, status')) return [students.map(student => ({ studentId: student.id, status: 'present' }))];
+    if (sql.includes('SELECT DISTINCT task.student_id AS studentId')) return [attempts];
+    if (sql.includes('t.id,') && sql.includes('FROM student_quran_tasks t')) return [taskRows];
     return [[]];
   } };
   const refreshes = [];
   const dependencies = {
-    managedRecitationIdentitySql, isDailyRecitationTask, isRecitationCompensationTask,
+    managedRecitationIdentitySql, isDailyRecitationTask, partitionRecitationSessionTasks,
     siteConfig: { features: {} },
     nazemEvaluationEndDateSql,
     quranTaskMarkVerseKey: (mark) => `${mark.surah}:${mark.ayah}`,
     db: () => ({ getConnection: async () => connection }),
     isOwnRecitationAccount: (req, id) => ['supervisor', 'reciter'].includes(req.auth?.role) && Number(req.auth.id) === id,
-    getSaudiDateTimeParts: () => ({ date }), loadSettings: async () => ({ quranTaskExecutionSource: 'student', nazemIntegrationEnabled: true }),
+    getSaudiDateTimeParts: () => ({ date }), loadSettings: async () => ({ quranTaskExecutionSource: 'student', nazemIntegrationEnabled: true, allowQuranCompensation: true }),
     loadStaffRecitationPreferences: async () => ({}), isValidDateOnly: () => true,
     getRecitationEvaluationWindow: () => ({ sessionDate: date, previousSessionDate: '2026-09-30', generationEndDate: date }),
     isRecitationSessionDay: () => true, canTeacherSetRecitationAttendance, isRecitationAttendanceVisible,
@@ -129,4 +132,20 @@ test('actual evaluation handler refreshes plan teachers, exposes unexecuted Naze
   const pending = calls.find((call) => call.sql.includes("operation_type = 'recitation.submit'"));
   assert.deepEqual(pending.params, [11, 15, 1, 2, date]);
   assert.match(pending.sql, /student_id IN \(\?, \?\)/);
+
+  // Reproduce a recorded daily session with an older local compensation still waiting.
+  students.push({ id: 3, name: 'طالب لديه تعويض', nazemManaged: 0 });
+  attempts.push({ studentId: 3 });
+  const compensation = { ...task, id: 8, studentId: 3, nazemManaged: 0, taskDate: '2026-09-30',
+    studentStatus: 'done', executionActorRole: 'student', teacherCompleted: false };
+  taskRows.push(compensation);
+  await handler({ params: { id: '99' }, query: {}, auth: { role: 'reciter', id: 99 } }, res, next);
+  assert.equal(response.body.students.find(student => student.studentId === 3).recitationFinished, true);
+  assert.deepEqual(response.body.compensationTasks.map(item => item.id), [8]);
+  assert.equal(response.body.tasks.some(item => item.studentId === 3), false);
+  taskRows.push({ ...compensation, id: 9, taskDate: date });
+  await handler({ params: { id: '99' }, query: {}, auth: { role: 'reciter', id: 99 } }, res, next);
+  assert.equal(response.body.students.find(student => student.studentId === 3).recitationFinished, false);
+  assert.deepEqual(response.body.tasks.filter(item => item.studentId === 3).map(item => item.id), [9]);
+  assert.deepEqual(response.body.compensationTasks.map(item => item.id), [8]);
 });

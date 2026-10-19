@@ -8,6 +8,7 @@ import DashboardLoader from '@/components/dashboard/DashboardLoader';
 import CountOnlyEvaluationDialog from '@/components/portal/CountOnlyEvaluationDialog';
 import RecitationAmountsToggle from '@/components/portal/RecitationAmountsToggle';
 import TeacherRecitationTaskList from '@/components/portal/TeacherRecitationTaskList';
+import RecitationPendingStatus from '@/components/portal/RecitationPendingStatus';
 import ErrorState from '@/components/ui/error-state';
 import useTeacherEvaluationData from '@/hooks/useTeacherEvaluationData';
 import useRecitationAmountsPreference from '@/hooks/useRecitationAmountsPreference';
@@ -335,6 +336,10 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
 
   const content = (
     <div className="space-y-3">
+      <RecitationPendingStatus receipts={data?.deliveryReceipts} onRetry={async () => {
+        try { await syncOfflineRecitations(supervisorId, { force: true }); await load({ fresh: true }); }
+        catch (error) { toast({ title: 'تعذر اعتماد التسميع', description: recitationErrorMessage(error), variant: 'destructive' }); }
+      }} />
       {loadError && <ErrorState retryAt={retryAt} message={loadError} onRetry={() => void load()} />}
       {(!loadError || Boolean(data?.tasks?.length || data?.students?.length)) && <TeacherRecitationTaskList
         onRefresh={() => void load()}

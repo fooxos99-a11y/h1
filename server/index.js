@@ -2,11 +2,14 @@ import { selectNarrationStudents, manualNarrationRange } from './services/narrat
 import { loadReciterNazemScope } from './services/reciterNazemScope.js';
 import { getStudentPointSourceLabel } from '../shared/student-point-sources.js';
 import { loadReviewCycle, saveReviewCycle, selectAuthorizedReview } from './services/quranReviewCycle.js';
-import { parseReviewExecution, reviewRangeLabel, reviewEndOptions, selectReviewFaces } from '../shared/quran-review-cycle.js';
+import { MAX_REVIEW_FACES, parseReviewExecution, reviewRangeLabel, reviewEndOptions, selectReviewFaces } from '../shared/quran-review-cycle.js';
+import { pickReviewPages, reviewPageRanges } from '../shared/quran-review-pages.js';
+import { latestApprovedLinkAnchor } from './services/quranLinkAnchor.js';
+import { ensureDefaultReviewExecution } from './services/recitationDefaultReview.js';
 import { prepareTeacherReviewRange, loadPreparedRecitationTasks } from './services/teacherReviewRange.js';
 import { loadRecitationGroupEvaluation } from './services/recitationGroupEvaluation.js';
 import { assertLocalRecitationScope, managedRecitationIdentitySql } from './services/recitationSessionScope.js';
-import { isDailyRecitationTask, isRecitationCompensationTask } from '../shared/recitation-session-scope.js';
+import { isDailyRecitationTask, partitionRecitationSessionTasks } from '../shared/recitation-session-scope.js';
 import { normalizeEventNotifications } from '../shared/event-notifications.js';
 import { notifyStudentsOfEvent } from './services/eventNotifications.js';
 import { extendReviewEnd } from '../shared/quran-review-extension.js';
@@ -56,7 +59,7 @@ import { nazemTaskRangeSql } from './integrations/nazem/taskRange.js';
 import { nazemRemainderSuffix } from './integrations/nazem/remainderScope.js';
 import { nazemStudentRefreshState } from './integrations/nazem/refreshState.js';
 import { loadNazemCompletedStudentIds } from './integrations/nazem/completedRecitation.js';
-import { validateNazemLateSession } from './services/nazemLateSelection.js';
+import { inspectNazemLateSession } from './services/nazemLateSelection.js';
 import { buildStudentPlanPoints } from './services/studentPlanPoints.js';
 import { getManualAttendancePoints, applyStudentPointDelta, applyAttendancePointDelta, syncStudentPointBalance, logStudentPointTransaction, syncStudentFamilyPointsForAttendance } from './services/studentPoints.js';
 import { saveAttendanceWithPoints } from './services/attendancePoints.js';
@@ -2844,6 +2847,17 @@ async function getFullyMemorizedPages(connection, ranges, startPage, endPage) {
   return pages;
 }
 
+async function buildCurrentLocalLinkRanges(connection, plan, date, settings, direction) {
+  const studentExecution = getQuranTaskExecutionSource(settings, 'memorization') === 'student';
+  const filters = { beforeDate: addUtcDays(date, 1), approvedOnly: !studentExecution };
+  const memorized = await getStudentMemorizedRanges(connection, plan.studentId, filters);
+  const anchor = await latestApprovedLinkAnchor(connection, plan, date,
+    position => getAdjacentQuranAyahInDirection(connection, position, direction),
+    () => getNextUnmemorizedPlanPosition(connection, plan, filters),
+    studentExecution ? acceptedMemorizationSql() : 'teacher_completed = 1');
+  return buildExactLinkRanges(connection, memorized, anchor, direction, plan.linkPages || 10);
+}
+
 async function buildExactLinkRanges(connection, ranges, currentMemorizationStart, direction, targetFaces, { limitToTarget = false } = {}) {
   if (!ranges.length || !isValidQuranPosition(currentMemorizationStart)) return [];
   const mergedRanges = await mergeQuranRanges(connection, ranges);
@@ -3022,6 +3036,7 @@ async function repairUnevaluatedRevisionTasks(
        t.to_surah AS toSurah,
        t.to_ayah AS toAyah,
        t.student_id AS studentId,
+       t.target_pages AS targetPages,
        t.student_status AS studentStatus,
        t.execution_actor_role AS executionActorRole,
        t.executed_at AS executedAt, t.actual_to_page AS actualToPage, t.evaluated_at AS evaluatedAt,
@@ -3064,7 +3079,7 @@ async function repairUnevaluatedRevisionTasks(
   const invalidReviewRows = reviewRows.filter((row) => rowPages(row).some((page) => (
     desiredLinkSet.has(page) || !allowedReviewSet.has(page)
   )));
-  const currentReviewPageCount = new Set(reviewRows.flatMap(rowPages)).size;
+  const currentReviewPageCount = reviewRows.reduce((sum, row) => sum + (Number(row.targetPages) || rowPages(row).length), 0);
   const reviewAmountChanged = desiredReviewPageCount !== null
     && reviewRows.length > 0
     && currentReviewPageCount !== Number(desiredReviewPageCount);
@@ -3111,31 +3126,8 @@ async function reverseReplacedRevisionRewards({ settings, removableLinkRows, rem
   }
 }
 
-function pickAvailablePages(availablePages, startPage, count) {
-  const sorted = [...availablePages].sort((a, b) => a - b);
-  if (!sorted.length || count < 1) return { pages: [], nextReviewPage: startPage };
-  const startIndex = sorted.findIndex((page) => page >= Number(startPage));
-  const ordered = startIndex >= 0
-    ? [...sorted.slice(startIndex), ...sorted.slice(0, startIndex)]
-    : sorted;
-  const picked = [];
-  let segments = 0;
-  for (const page of ordered) {
-    const previous = picked.at(-1);
-    const wrappedToStart = previous && page === sorted[0] && previous === sorted.at(-1);
-    // A wrap or gap begins one new segment; never cross a second discontinuity.
-    if (previous && (wrappedToStart || page !== previous + 1)) {
-      segments += 1;
-      if (segments > 1 || (!wrappedToStart && picked.length >= count)) break;
-    }
-    picked.push(page);
-    if (picked.length >= count) break;
-  }
-  const lastPicked = picked.at(-1);
-  const nextReviewPage = lastPicked
-    ? (sorted.find((page) => page > lastPicked) || sorted[0])
-    : (sorted[0] || startPage);
-  return { pages: picked, nextReviewPage };
+function pickAvailablePages(availablePages, startPage, count, direction = 1) {
+  return pickReviewPages(availablePages, startPage, count, direction);
 }
 
 function formatTaskPreview(task, referenceMode = 'ayah') {
@@ -3621,15 +3613,7 @@ async function ensureStudentPlanTasks(connection, plan, date, settings) {
     beforeDate: addUtcDays(date, 1),
   });
   const availablePages = await getFullyMemorizedPages(connection, memorizedRangesForReview, 1, 604);
-  const memorizedBeforeToday = await getStudentMemorizedRanges(connection, plan.studentId, { beforeDate: date });
-  const linkStart = await getNextUnmemorizedPlanPosition(connection, plan, { beforeDate: date });
-  const exactLinkRanges = await buildExactLinkRanges(
-    connection,
-    memorizedBeforeToday,
-    linkStart,
-    direction,
-    plan.linkPages || 10,
-  );
+  const exactLinkRanges = await buildCurrentLocalLinkRanges(connection, plan, date, settings, direction);
   const exactLinkPages = [...new Set(exactLinkRanges.flatMap((range) => Array.from(
     { length: Math.abs(Number(range.endPage) - Number(range.startPage)) + 1 },
     (_, index) => Math.min(Number(range.startPage), Number(range.endPage)) + index,
@@ -3648,10 +3632,10 @@ async function ensureStudentPlanTasks(connection, plan, date, settings) {
     })
     : Number(plan.reviewPages || 20);
   const reviewStartPage = await getReviewStartForDate(connection, plan, date);
-  const pickedReview = pickAvailablePages(new Set(revisionPages.review), reviewStartPage, targetReviewPages);
+  const pickedReview = pickAvailablePages(new Set(revisionPages.review), reviewStartPage, targetReviewPages, direction);
   const repairedRevisionTasks = await repairUnevaluatedRevisionTasks(
     connection,
-    { planId: plan.id, date, desiredLinkPages: revisionPages.linking, allowedReviewPages: revisionPages.review, desiredLinkRanges: exactLinkRanges, settings, desiredReviewPageCount: splitReview && reviewEnabledToday ? targetReviewPages : null, desiredReviewPages: date >= getSaudiDateTimeParts().date && reviewEnabledToday ? pickedReview.pages : null },
+    { planId: plan.id, date, desiredLinkPages: revisionPages.linking, allowedReviewPages: revisionPages.review, desiredLinkRanges: exactLinkRanges, settings, desiredReviewPageCount: reviewEnabledToday ? targetReviewPages : null, desiredReviewPages: date >= getSaudiDateTimeParts().date && reviewEnabledToday ? pickedReview.pages : null },
   );
   if (repairedRevisionTasks.removedLink) existingTypes.delete('link');
   if (repairedRevisionTasks.removedReview) existingTypes.delete('review');
@@ -3684,13 +3668,12 @@ function buildRevisionPageSets(exactLinkPages, availablePages, exactLinkPageSet,
 /** Create missing review ranges and advance the review cursor atomically. */
 async function createMissingReviewTasks({ existingTypes, reviewEnabledToday, pickedReview, connection, plan, date }) {
   if (!existingTypes.has('review') && reviewEnabledToday) {
-    const reviewRanges = pagesToRanges(pickedReview.pages);
+    const reviewRanges = reviewPageRanges(pickedReview);
     if (reviewRanges.length > 0) {
       for (const range of reviewRanges) {
-        const rangePages = range.toPage - range.fromPage + 1;
         await insertPlanTask(
           connection,
-          { plan, date, type: 'review', fromPage: range.fromPage, toPage: range.toPage, targetPages: rangePages }
+          { plan, date, type: 'review', fromPage: range.fromPage, toPage: range.toPage, targetPages: range.targetPages }
         );
       }
       await connection.query('UPDATE student_quran_plans SET next_review_page = ? WHERE id = ?', [pickedReview.nextReviewPage, plan.id]);
@@ -3905,7 +3888,7 @@ async function previewStudentPlanDay(connection, plan, date, settings, nazemMana
     for (const part of _resolveConditional5()) addRange('memorization', part.start, part.end, part.faces);
   }
   const memorized = await getStudentMemorizedRanges(connection, plan.studentId, { beforeDate: date });
-  const links = await buildExactLinkRanges(connection, memorized, next, direction, plan.linkPages || 10);
+  const links = await buildCurrentLocalLinkRanges(connection, plan, date, settings, direction);
   const linkPages = new Set();
   for (const range of links) {
     for (let page = Math.min(range.startPage, range.endPage); page <= Math.max(range.startPage, range.endPage); page++) linkPages.add(page);
@@ -3931,11 +3914,12 @@ async function appendPreviewReviewRanges({ settings, date, split, reviewDays, co
     const available = await getFullyMemorizedPages(connection, memorized, 1, 604);
     const pages = new Set([...available].filter((page) => !linkPages.has(page)));
     const count = split ? calculateWeeklyReviewDailyPages({ availableReviewPages: pages.size, reviewDays: reviewDays.length, minimumDailyPages: plan.reviewMinDailyPages }) : Number(plan.reviewPages || 20);
-    const picked = pickAvailablePages(pages, await getReviewStartForDate(connection, plan, date), count);
-    for (const range of pagesToRanges(picked.pages)) {
+    const direction = Number(plan.startSurah) > Number(plan.endSurah) ? -1 : 1;
+    const picked = pickAvailablePages(pages, await getReviewStartForDate(connection, plan, date), count, direction);
+    for (const range of reviewPageRanges(picked)) {
       const first = await getQuranPageBoundaryInDirection(connection, range.fromPage);
       const last = await getQuranPageBoundaryInDirection(connection, range.toPage);
-      addRange('review', first?.start, last?.end, range.toPage - range.fromPage + 1);
+      addRange('review', first?.start, last?.end, range.targetPages);
     }
   }
 }
@@ -8691,6 +8675,7 @@ app.put('/api/student-plans/:studentId', requireStudentPlanAccess, async (req, r
     const dailyPages = toPositiveQuarterFace(req.body.dailyPages, 1);
     const linkPages = toPositiveInt(req.body.linkPages, 10);
     const reviewPages = toPositiveInt(req.body.reviewPages, 20);
+    if (reviewPages > MAX_REVIEW_FACES) return res.status(422).json({ message: 'مقدار المراجعة غير صالح.' });
     const track = normalizeQuranPlanTrack(req.body.track);
     const reviewSplitWeekly = req.body.reviewSplitWeekly === true || req.body.reviewSplitWeekly === 1 ? 1 : 0;
     const reviewWeekStartDay = normalizeWeekDay(req.body.reviewWeekStartDay, 0);
@@ -12904,6 +12889,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
     );
     const attemptedStudentIds = new Set(sessionAttemptRows.map((row) => Number(row.studentId)));
     const activeTaskStudentIds = new Set(rows.map((row) => Number(row.studentId)));
+    const sessionTasks = partitionRecitationSessionTasks(rows, generationEndDate, settings.allowQuranCompensation);
     const marksByTask = await getQuranTaskDisplayMarks(connection, allRows.map((row) => row.id));
     const executionOptionsByGroup = new Map();
     await buildTeacherExecutionChoices(allRows, executionOptionsByGroup, connection, date, settings);
@@ -13077,7 +13063,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
             refresh: req.auth.role === 'reciter' ? refreshByTeacher.get(delegatedScope.teacherByStudent.get(Number(student.id))) : followUpRefresh
           }),
           recitationFinished: attemptedStudentIds.has(Number(student.id))
-            && !activeTaskStudentIds.has(Number(student.id))
+            && !sessionTasks.dailyStudentIds.has(Number(student.id))
             && !(Number(student.nazemManaged)
               && (nazemPendingStudentIds.has(Number(student.id))
                 || nazemDueStudentIds.has(Number(student.id)))),
@@ -13111,12 +13097,10 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
         masteryThreePlusFacesMistakes: settings.masteryEvaluationThreePlusFacesMistakes,
         masteryThreePlusFacesWarnings: settings.masteryEvaluationThreePlusFacesWarnings,
       },
-      tasks: rows
-        .filter(row => isDailyRecitationTask(row, generationEndDate))
+      tasks: sessionTasks.dailyTasks
         .filter((row) => isRecitationAttendanceVisible(attendanceByStudent.get(Number(row.studentId)) || '', teacherAttendanceMode))
         .map(serializeEvaluationTask),
-      compensationTasks: rows
-        .filter(row => isRecitationCompensationTask(row, generationEndDate, settings.allowQuranCompensation))
+      compensationTasks: sessionTasks.compensationTasks
         .filter((row) => isRecitationAttendanceVisible(attendanceByStudent.get(Number(row.studentId)) || '', teacherAttendanceMode))
         .map(serializeEvaluationTask),
       taskQueue: allRows
@@ -13307,6 +13291,8 @@ app.get('/api/supervisors/:id/quran-evaluation/:taskId/ayahs', async (req, res, 
       SELECT
         t.id,
         t.task_type AS taskType,
+        t.plan_id AS planId, t.student_id AS studentId, t.track,
+        DATE_FORMAT(t.task_date, '%Y-%m-%d') AS taskDate,
         t.from_page AS fromPage,
         t.to_page AS toPage,
         t.from_surah AS fromSurah,
@@ -13343,6 +13329,11 @@ app.get('/api/supervisors/:id/quran-evaluation/:taskId/ayahs', async (req, res, 
       task.actualToPage = task.toPage;
       task.actualToSurah = task.toSurah;
       task.actualToAyah = task.toAyah;
+    }
+    if (!Number(task.nazemManaged) && task.taskType === 'review' && !task.reviewExecution) {
+      await connection.beginTransaction();
+      try { await ensureTeacherDefaultReview(connection, task); await connection.commit(); }
+      catch (error) { await connection.rollback(); throw error; }
     }
     const ayahs = await getQuranAyahsForTask(connection, task);
     const marksByTask = await getQuranTaskAyahMarks(connection, [taskId]);
@@ -13649,6 +13640,7 @@ const rateSupervisorQuranTaskHandler = async (req, res, next) => {
     if (replyToExistingRecitationAttemptResult) { return replyToExistingRecitationAttemptResult; }
     let normalizedAyahMarks = null;
     let normalizedWordMarks = null;
+    await ensureTeacherDefaultReview(connection, task);
     ({ mistakeCount, warningCount } = await saveValidatedRecitationMarks({ ayahMarksPayload, wordMarksPayload, connection, task, normalizedWordMarks, markLimit, normalizedAyahMarks, mistakeCount, warningCount, taskId, supervisorId }));
     const { ratingLabel, score, policy, completed, evaluatedFaces } = await calculateTaskEvaluationOutcome({ task, connection, settings, notMemorized, warningCount, mistakeCount, groupEvaluation: req.body.groupEvaluation, evaluationMode });
     await connection.query(
@@ -13830,10 +13822,10 @@ app.post('/api/offline-recitation/batch', async (req, res) => {
     try {
       const outcome = await runRecitationSessionTransaction(db(), async (connection, transaction) => {
         const taskResults = [];
-        if (!await validateNazemLateSession(connection, session, Number(req.auth?.id))) {
+        const sequence = await inspectNazemLateSession(connection, session, Number(req.auth?.id));
+        if (!sequence.valid) {
           transaction.failed = true;
-          return [{ taskId: Number(session.tasks?.[0]?.taskId), result: 'invalid_sequence',
-            message: 'يجب إكمال المتأخرات من الأقدم قبل ورد اليوم. حدّث الجلسة ليظهر المتأخر التالي.' }];
+          return [{ taskId: Number(session.tasks?.[0]?.taskId), ...sequence }];
         }
         for (const item of (Array.isArray(session?.tasks) ? session.tasks : [])) {
           const body = {
@@ -13881,7 +13873,9 @@ app.post('/api/offline-recitation/batch', async (req, res) => {
     }
     const failedTask = taskResults.find((item) => !['accepted', 'already_synced'].includes(item.result));
     const result = failedTask?.result || (taskResults.length ? 'accepted' : 'conflict');
-    return { sessionId: session?.sessionId, result, tasks: taskResults };
+    return { sessionId: session?.sessionId, result, tasks: taskResults,
+      ...(failedTask?.code ? { code: failedTask.code, blockedByDate: failedTask.blockedByDate,
+        blockedByTaskId: failedTask.blockedByTaskId, blockedByTaskType: failedTask.blockedByTaskType } : {}) };
   });
   res.json({ results });
 });
@@ -14929,6 +14923,15 @@ async function buildTeacherExecutionChoices(allRows, executionOptionsByGroup, co
 }
 
 /** Calculate bounded evaluation scores from the actual range and the current task policy. */
+async function ensureTeacherDefaultReview(connection, task) {
+  await ensureDefaultReviewExecution(connection, task, async rows => {
+    const [[plan]] = await connection.query(`SELECT id, student_id AS studentId, start_page AS startPage,
+      start_surah AS startSurah, end_surah AS endSurah FROM student_quran_plans WHERE id=?`, [task.planId]);
+    if (!plan) throw Object.assign(new Error('خطة الطالب غير متاحة.'), { statusCode: 409 });
+    return getStudentReviewCycle(connection, plan, task.taskDate, rows);
+  });
+}
+
 async function calculateTaskEvaluationOutcome({ task, connection, settings, notMemorized, warningCount, mistakeCount, groupEvaluation, evaluationMode }) {
   const group = await loadRecitationGroupEvaluation(connection, task, groupEvaluation,
     row => getTeacherTaskEvaluationPolicy(settings, row), calculateQuranRangeFaces, evaluationMode,
@@ -19388,10 +19391,11 @@ function resolveRecitationRequestDate(requested, today) {
 
 async function rejectOutOfSequenceRecitation({ task, req, connection, date, taskId, supervisorId, res }) {
   if (!Number(task.nazemManaged) || (req.recitationSessionTaskIds || []).length) return false;
-  if (await validateNazemLateSession(connection, {
+  const sequence = await inspectNazemLateSession(connection, {
     studentId: task.studentId, sessionDate: date, sessionId: req.body.sessionId, tasks: [{ taskId }],
-  }, supervisorId)) return false;
+  }, supervisorId);
+  if (sequence.valid) return false;
   await connection.rollback();
-  res.status(409).json({ code: 'INVALID_SEQUENCE', message: 'يجب إكمال المتأخرات من الأقدم قبل ورد اليوم. حدّث الجلسة ليظهر المتأخر التالي.' });
+  res.status(409).json({ ...sequence, code: sequence.result === 'invalid_sequence' ? 'INVALID_SEQUENCE' : sequence.code });
   return true;
 }

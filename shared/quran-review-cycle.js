@@ -49,6 +49,11 @@ export function reviewEndOptions(cycle) {
 
 // Resolve the endpoint within the ordered cycle, including its wrap and gaps.
 export function selectReviewEnd(cycle, end) {
+  // An endpoint can occur several times. Preserve the scheduled amount at its endpoint.
+  if (Number(cycle?.expectedFaces) > 0) {
+    const scheduled = selectReviewFaces(cycle, cycle.expectedFaces);
+    if (key(scheduled.ranges.at(-1).end) === key(end)) return scheduled;
+  }
   const option = reviewEndOptions(cycle).find(item => key(item) === key(end));
   if (!option) throw new RangeError('نهاية المراجعة خارج المحفوظ المتاح.');
   return selectReviewFaces(cycle, option.reviewFaces);
@@ -61,6 +66,13 @@ export function reviewRangeLabel(range) {
 
 export function parseReviewExecution(value) {
   if (!value) return null;
-  const data = typeof value === 'string' ? JSON.parse(value) : value;
-  return Array.isArray(data?.ranges) && Number(data.faces) > 0 ? data : null;
+  let data;
+  try { data = typeof value === 'string' ? JSON.parse(value) : value; }
+  catch { return null; }
+  const validPosition = position => Number.isInteger(Number(position?.page)) && Number(position.page) >= 1 && Number(position.page) <= 604
+    && Number.isInteger(Number(position.surah)) && Number(position.surah) >= 1 && Number(position.surah) <= 114
+    && Number.isInteger(Number(position.ayah)) && Number(position.ayah) >= 1 && Number(position.ayah) <= 286;
+  return Array.isArray(data?.ranges) && data.ranges.length && Number.isFinite(Number(data.faces))
+    && Number(data.faces) > 0 && Number(data.faces) <= MAX_REVIEW_FACES
+    && data.ranges.every(range => validPosition(range?.start) && validPosition(range?.end)) ? data : null;
 }

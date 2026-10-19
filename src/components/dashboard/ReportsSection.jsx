@@ -100,7 +100,10 @@ const ReportsSection = ({
         setOverview(report);
       });
     load.catch((error) => {
-      if (active) setLoadError(error.message || 'تعذر تحميل الإحصائيات');
+      if (active) {
+        if ([401, 403].includes(error.status)) { setOverview(null); setArchive(null); }
+        setLoadError(error.message || 'تعذر تحميل الإحصائيات');
+      }
     }).finally(() => { if (active) setIsLoading(false); });
     return () => { active = false; };
   }, [archiveId, cachedReport, canViewStandardReports, from, retry, scopeCommittee, to]);
