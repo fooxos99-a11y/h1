@@ -372,3 +372,13 @@ test('settings from before reopening cannot satisfy or overwrite the next entry 
   await old;
   assert.equal(service.readPublicSettingsCache().fresh, true);
 });
+
+test('full or disabled device storage cannot turn fresh settings into a loading failure', async () => {
+  const source = (await read('../src/services/publicSettingsCache.js')).replace(/^import[^\n]+\r?\n/gm, '').replace(/\bexport /g, '');
+  const service = vm.runInNewContext(`${source}\n({loadPublicSettingsCached});`, {
+    getTenantRegistrationNumber: () => 'test', getEntryRefreshVersion: () => 1, getSaudiDate: () => '2026-10-20',
+    localStorage: { getItem: () => null, setItem: () => { throw new Error('QuotaExceededError'); } },
+    studentsApi: { getPublicSettings: async () => ({ fresh: true }) },
+  });
+  assert.equal((await service.loadPublicSettingsCached({ refresh: true })).fresh, true);
+});

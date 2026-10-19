@@ -489,7 +489,7 @@ test('loading surfaces share one indicator and startup does not wait for every f
   assert.match(loadingIndicatorText, /aria-label="جاري التحميل"/);
   assert.doesNotMatch(loadingIndicatorText, />\s*جاري التحميل\s*</);
   assert.match(loadingScreenText, /LoadingIndicator mode="screen" delayMs=\{0\}/);
-  assert.match(loadingScreenText, /تعذر إكمال التحميل/);
+  assert.doesNotMatch(loadingScreenText, /setTimedOut|تعذر إكمال التحميل/);
   assert.match(dashboardLoaderText, /<LoadingIndicator className=/);
   assert.match(buttonText, /<LoadingSpinner className="ml-2"/);
   assert.doesNotMatch(studentsApiText, /updateRequestLoading|REQUEST_LOADING_EVENT/);

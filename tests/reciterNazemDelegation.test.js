@@ -11,6 +11,7 @@ import { nazemStudentRefreshState } from '../server/integrations/nazem/refreshSt
 import { canTeacherExecuteQuranTask, getQuranTaskExecutionSource } from '../shared/quran-execution-policy.js';
 import { canTeacherSetRecitationAttendance, isRecitationAttendanceVisible } from '../shared/recitation-attendance-policy.js';
 import { nazemEvaluationEndDateSql } from '../server/integrations/nazem/evaluationScope.js';
+import { latestRecitationRetryJoinSql } from '../server/services/recitationRetryScope.js';
 
 test('reciter refresh scope derives plan owners from assigned committees and linked active rosters', async () => {
   let query;
@@ -97,7 +98,7 @@ test('actual evaluation handler refreshes plan teachers, exposes unexecuted Naze
   const dependencies = {
     managedRecitationIdentitySql, isDailyRecitationTask, partitionRecitationSessionTasks,
     siteConfig: { features: {} },
-    nazemEvaluationEndDateSql,
+    nazemEvaluationEndDateSql, latestRecitationRetryJoinSql,
     quranTaskMarkVerseKey: (mark) => `${mark.surah}:${mark.ayah}`,
     db: () => ({ getConnection: async () => connection }),
     isOwnRecitationAccount: (req, id) => ['supervisor', 'reciter'].includes(req.auth?.role) && Number(req.auth.id) === id,

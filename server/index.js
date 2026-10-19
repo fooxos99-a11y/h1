@@ -74,6 +74,7 @@ import { requestDiagnostics, startRuntimeDiagnostics } from './services/requestD
 import { publicErrorMessage } from './services/publicErrors.js';
 import { logRecitationFailure } from './services/recitationDiagnostics.js';
 import { createSharedPreparation } from './services/sharedPreparation.js';
+import { latestRecitationRetryJoinSql } from './services/recitationRetryScope.js';
 import { loadStudentRecitationHistory } from './services/studentRecitationHistory.js';
 import { createOverviewReportScope } from './services/overviewReportScope.js';
 import { buildOverviewRankings } from './services/overviewRankings.js';
@@ -12569,19 +12570,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
     const studentExecutedMemorizationCondition = getQuranTaskExecutionSource(settings, 'memorization') === 'student'
       ? `(t.task_type = 'memorization' AND t.student_status = 'done' AND t.execution_actor_role = 'student')`
       : 'FALSE';
-    const retryableAttemptFilter = `EXISTS (
-      SELECT 1
-      FROM student_quran_recitation_attempts previous_attempt
-      WHERE previous_attempt.task_id = t.id
-        AND previous_attempt.is_official = 1
-        AND previous_attempt.session_date = (
-          SELECT MAX(latest_attempt.session_date)
-          FROM student_quran_recitation_attempts latest_attempt
-          JOIN student_quran_tasks latest_task ON latest_task.id = latest_attempt.task_id
-          WHERE latest_task.student_id = t.student_id
-            AND latest_attempt.is_official = 1
-        )
-    )`;
+    const retryableAttemptFilter = 'retryable_session.task_id IS NOT NULL';
     const nazemUnrecordedTaskFilter = `(
       NOT EXISTS (
         SELECT 1 FROM nazem_plan_links managedTaskLink
@@ -12804,6 +12793,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
       LEFT JOIN quran_surahs qps ON qps.surah_number = p.start_surah
       LEFT JOIN quran_surahs qpe ON qpe.surah_number = p.end_surah
       JOIN supervisor_committees sc ON sc.committee_id = s.committee_id AND sc.supervisor_id = ?
+      ${latestRecitationRetryJoinSql}
       WHERE (p.status = 'active' OR ${retryableAttemptFilter} OR ${studentExecutedMemorizationCondition})
         AND t.task_date <= ${nazemEvaluationEndDateSql}
         AND t.task_type IN ('memorization', 'review', 'link')
@@ -12816,8 +12806,8 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
         AND ${nazemTeacherActionFilter}
         AND NOT EXISTS (
           SELECT 1
-          FROM student_quran_recitation_attempts same_day_attempt
-          JOIN student_quran_tasks attempted_task ON attempted_task.id = same_day_attempt.task_id
+          FROM student_quran_tasks attempted_task
+          STRAIGHT_JOIN student_quran_recitation_attempts same_day_attempt ON same_day_attempt.task_id = attempted_task.id
           WHERE attempted_task.plan_id = t.plan_id
             AND attempted_task.task_type = t.task_type
             AND (t.task_type <> 'link' OR attempted_task.task_date = t.task_date)
@@ -12853,7 +12843,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
         )
       ORDER BY c.name ASC, s.name ASC, t.task_date ASC, t.from_page ASC
       `,
-      [supervisorId, date, taskEndDate, date, date, taskEndDate]
+      [supervisorId, supervisorId, date, taskEndDate, date, date, taskEndDate]
     );
     const visibleStudentIds = new Set(students.map(student => Number(student.id)));
     const studentSlots = [...visibleStudentIds].map(() => '?').join(', ') || '?';

@@ -17,12 +17,15 @@ const evaluation = {
   executionSources: { memorization: 'teacher', review: 'teacher', link: 'teacher' },
 };
 const scenario = new URLSearchParams(location.search).get('scenario') || 'cache';
+if (!import.meta.env.DEV || !['localhost', '127.0.0.1'].includes(location.hostname)) throw new Error('Local startup fixture only');
+if (scenario !== 'login') {
 localStorage.setItem('madarij_web_session', '1');
 localStorage.setItem('wajeh_role', 'supervisor');
 localStorage.setItem('wajeh_supervisor_id', '990');
 localStorage.setItem('wajeh_name', 'معلم تجريبي');
 localStorage.setItem('wajeh_dashboard_permissions', '["quranEvaluation","students"]');
 localStorage.setItem('rawasi_public_settings_v1_default', JSON.stringify({ savedAt: Date.now(), value: settings }));
+}
 offlineRecitationStore.getSnapshot = async key => key.endsWith(':bootstrap') || scenario === 'no-cache' ? null : evaluation;
 offlineRecitationStore.cacheSnapshot = async () => {};
 offlineRecitationStore.getSessions = async () => [];

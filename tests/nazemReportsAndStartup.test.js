@@ -21,8 +21,8 @@ test('application startup always mounts and replaces indefinite loading with ret
   assert.match(main, /requestIdleCallback\(runServiceWorkerSetup/);
   assert.doesNotMatch(main, /hardBootTimeout|preloadSiteBrandAssets/);
   assert.match(main, /revealTimeout = window\.setTimeout/);
-  assert.match(loading, /timeoutMs = 15_000/);
-  assert.match(loading, /تعذر إكمال التحميل/);
+  assert.doesNotMatch(loading, /setTimedOut|تعذر إكمال التحميل/);
+  assert.match(loading, /LoadingIndicator mode="screen"/);
   assert.match(requests, /prepareTimedRequest\(requestOptions\)/);
   assert.match(timeoutHelper, /controller\.abort\(\)/);
   assert.match(timeoutHelper, /استغرق الاتصال وقتًا أطول من المتوقع/);

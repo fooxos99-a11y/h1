@@ -98,7 +98,10 @@ test('retry source stays available across dates while completed local actions le
 
   assert.match(server, /previous_attempt\.task_id = t\.id/);
   assert.match(server, /WHERE \(p\.status = 'active' OR \$\{retryableAttemptFilter\} OR \$\{studentExecutedMemorizationCondition\}\)/);
-  assert.match(server, /MAX\(latest_attempt\.session_date\)/);
+  const retryScope = await read('../server/services/recitationRetryScope.js');
+  assert.match(retryScope, /MAX\(latest_attempt\.session_date\)/);
+  assert.match(retryScope, /GROUP BY latest_task\.student_id/);
+  assert.match(server, /\$\{latestRecitationRetryJoinSql\}/);
   assert.match(server, /attemptCount: Math\.max\(0, Number\(row\.attemptCount \|\| 0\)\)/);
   assert.match(server, /AND a\.teacher_completed = 1\s*\) AS successfulAttemptCount/);
   assert.match(server, /nazemSubmissionLocked: Boolean\(row\.nazemManaged\s*&& Number\(row\.attemptCount \|\| 0\) > 0\)/);
@@ -144,5 +147,5 @@ test('a combined memorization session evaluates each face independently and defe
   assert.match(rewindImplementation, /ensureStudentPlanTasks\(connection, refreshedPlan, sessionDate, settings\)/);
   assert.match(rewindImplementation, /compareQuranPositionInDirection\(failedPosition, currentPosition, direction\) < 0/);
   assert.match(server, /recitationSessionTaskIds: sessionTaskIds/);
-  assert.match(server, /JOIN student_quran_tasks attempted_task ON attempted_task\.id = same_day_attempt\.task_id/);
+  assert.match(server, /FROM student_quran_tasks attempted_task\s+STRAIGHT_JOIN student_quran_recitation_attempts same_day_attempt ON same_day_attempt\.task_id = attempted_task\.id/);
 });

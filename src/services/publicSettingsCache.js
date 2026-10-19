@@ -27,7 +27,11 @@ export const readPublicSettingsCache = () => {
 
 export const writePublicSettingsCache = (value) => {
   if (!value || typeof value !== 'object') return;
-  localStorage.setItem(cacheKey(), JSON.stringify({ savedAt: Date.now(), value }));
+  try {
+    localStorage.setItem(cacheKey(), JSON.stringify({ savedAt: Date.now(), value }));
+  } catch {
+    // Optional caching must not discard settings successfully read from the server.
+  }
 };
 
 export const loadPublicSettingsCached = async ({ refresh = false } = {}) => {
@@ -95,21 +99,23 @@ export const clearStudentExperienceCaches = () => {
 };
 
 export const preloadStudentExperiences = (features = {}) => {
-  void import('@/components/portal/StudentDailyChallengeSection');
-  void import('@/components/portal/SummitJourneySection');
-  [
+  if (localStorage.getItem('wajeh_role') !== 'student') return;
+  if (features.dailyChallengeAvailable) void import('@/components/portal/StudentDailyChallengeSection').catch(() => {});
+  if (features.summitEnabled) {
+    void import('@/components/portal/SummitJourneySection').catch(() => {});
+    [
     '/summit/qassim-road-city-departure.webp',
     '/summit/qassim-road-desert.webp',
     '/summit/qassim-road-city-approach.webp',
     '/summit/qassim-road-city-entrance.webp',
     '/summit/qassim-road-city-interior.webp',
     '/summit/qassim-road-station.webp',
-  ].forEach((source) => {
+    ].forEach((source) => {
     const image = new Image();
     image.decoding = 'async';
     image.src = source;
-  });
-  if (localStorage.getItem('wajeh_role') !== 'student') return;
+    });
+  }
   if (features.summitEnabled) void getSummitJourneyCached().catch(() => {});
   if (features.dailyChallengeAvailable) void getDailyChallengeCached().catch(() => {});
 };

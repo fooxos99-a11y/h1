@@ -3,6 +3,7 @@ import ErrorState from '@/components/ui/error-state';
 import LoadingIndicator from '@/components/ui/loading-indicator';
 import { appResumeEvent } from '@/lib/recitationResume';
 import { refreshAppEntry } from '@/services/entryRefresh';
+import { advanceEntryRefreshVersion } from '@/lib/entryRefreshVersion';
 
 export default function ConnectedEntryGate({ children }) {
   const [revision, setRevision] = useState(0);
@@ -23,12 +24,17 @@ export default function ConnectedEntryGate({ children }) {
   useEffect(() => {
     const reload = () => { setError(''); setRevision(value => value + 1); };
     const accountChanged = () => { setReady(false); reload(); };
+    // The completed login already reached the server and persisted credentials.
+    // Do not unmount the new route and run another connectivity round trip.
+    const authenticated = () => { advanceEntryRefreshVersion(); setError(''); setReady(true); };
     // Revalidate on resume without unmounting forms, pending saves and the sync bridge.
     for (const event of [appResumeEvent, 'online']) window.addEventListener(event, reload);
-    for (const event of ['madarij-authenticated', 'madarij-session-expired']) window.addEventListener(event, accountChanged);
+    window.addEventListener('madarij-authenticated', authenticated);
+    window.addEventListener('madarij-session-expired', accountChanged);
     return () => {
       for (const event of [appResumeEvent, 'online']) window.removeEventListener(event, reload);
-      for (const event of ['madarij-authenticated', 'madarij-session-expired']) window.removeEventListener(event, accountChanged);
+      window.removeEventListener('madarij-authenticated', authenticated);
+      window.removeEventListener('madarij-session-expired', accountChanged);
     };
   }, []);
 
