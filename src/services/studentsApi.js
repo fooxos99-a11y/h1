@@ -15,6 +15,7 @@ import { prepareTimedRequest, requestTimeoutMessage } from '@/lib/requestTimeout
 import { createRequestCooldown } from '@/lib/requestCooldown';
 import { singleFlight, refreshableSingleFlight } from '@/lib/asyncRequests';
 import { getEntryRefreshVersion } from '@/lib/entryRefreshVersion';
+import { unpackTeacherEvaluation } from '../../shared/teacher-evaluation-transport.js';
 
 const PUBLIC_RANKINGS_CACHE_VERSION = '2026-08-25-empty-state';
 let pendingLogout = null;
@@ -38,8 +39,8 @@ const loadChapters = singleFlight(async () => {
   return data;
 }, () => requestScopeKey('chapters'));
 const loadTeacherEvaluation = refreshableSingleFlight(
-  (supervisorId) => request(`/supervisors/${supervisorId}/quran-evaluation`),
-  (supervisorId) => JSON.stringify([getApiBase(), getTenantRegistrationNumber(), getAuthSessionVersion(), String(supervisorId)]),
+  (supervisorId) => request(`/supervisors/${supervisorId}/quran-evaluation?compact=2`).then(unpackTeacherEvaluation),
+  (supervisorId) => JSON.stringify([getApiBase(), getTenantRegistrationNumber(), getAuthSessionVersion(), getEntryRefreshVersion(), String(supervisorId)]),
 );
 
 const roleHeader = async ({ fresh = false } = {}) => {
@@ -509,7 +510,8 @@ export const studentsApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
-  getWhatsAppStatus: () => request('/whatsapp/status'),
+  getWhatsAppStatus: () => request('/whatsapp/status?observe=1'),
+  connectWhatsApp: () => request('/whatsapp/connect', { method: 'POST' }),
   disconnectWhatsApp: () =>
     request('/whatsapp/disconnect', {
       method: 'POST',

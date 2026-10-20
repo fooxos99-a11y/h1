@@ -28,9 +28,9 @@ function reviewExecutionJson(status, task, anchor, selection, expectedFaces) {
   return JSON.stringify(data);
 }
 
-export async function loadReviewCycle({ connection, plan, date, rows, ayahs, isAvailable, fallbackPage }) {
+export async function loadReviewCycle({ connection, plan, date, rows, ayahs, isAvailable, fallbackPage, historyOverride }) {
   const direction = Number(plan.startSurah) > Number(plan.endSurah) ? -1 : 1;
-  const [[history]] = await connection.query(`SELECT review_execution_json AS reviewExecution,
+  const [[history]] = historyOverride !== undefined ? [[historyOverride]] : await connection.query(`SELECT review_execution_json AS reviewExecution,
     teacher_completed AS teacherCompleted FROM student_quran_tasks
     WHERE plan_id = ? AND task_type = 'review' AND task_date < ? AND (student_status = 'done' OR teacher_completed IS NOT NULL)
     ORDER BY task_date DESC, id ASC LIMIT 1`, [plan.id, date]);

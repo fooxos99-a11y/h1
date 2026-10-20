@@ -936,7 +936,7 @@ test('Nazem full refresh is manual while outgoing recitations refresh only their
   assert.doesNotMatch(serverSource, /req\.query\.refreshNazem|enqueueImmediateNazemReconciliation/);
   assert.match(serverSource, /operation_type = 'recitation\.submit'[\s\S]*student_id IN \(\$\{studentSlots\}\)/);
   assert.match(apiSource, /getSupervisorQuranEvaluation: loadTeacherEvaluation/);
-  assert.match(apiSource, /const loadTeacherEvaluation = refreshableSingleFlight\([\s\S]*quran-evaluation`/);
+  assert.match(apiSource, /const loadTeacherEvaluation = refreshableSingleFlight\([\s\S]*quran-evaluation\?compact=2`\)\.then\(unpackTeacherEvaluation\)/);
   assert.doesNotMatch(apiSource, /refreshNazem/);
   const evaluationLoader = readFileSync(new URL('../src/hooks/useTeacherEvaluationData.js', import.meta.url), 'utf8');
   assert.match(dialogSource, /useTeacherEvaluationData\(/);

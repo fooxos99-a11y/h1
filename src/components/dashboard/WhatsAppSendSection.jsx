@@ -177,11 +177,11 @@ const WhatsAppSendSection = () => {
     }
   };
 
-  const loadWhatsAppStatus = useCallback(async () => {
+  const loadWhatsAppStatus = useCallback(async ({ connect = false } = {}) => {
     if (statusRequestRef.current) return;
     statusRequestRef.current = true;
     try {
-      const status = await studentsApi.getWhatsAppStatus();
+      const status = await (connect ? studentsApi.connectWhatsApp() : studentsApi.getWhatsAppStatus());
       setWhatsAppStatus((current) => {
         if (current?.ready && !status.ready && (status.status === 'starting' || status.status === 'qr')) {
           return { ...current, status: 'checking' };
@@ -223,7 +223,7 @@ const WhatsAppSendSection = () => {
         status: 'starting',
         message: 'جاري إنشاء باركود واتساب جديد...',
       });
-      await loadWhatsAppStatus();
+      await loadWhatsAppStatus({ connect: true });
     } catch (error) {
       setWhatsAppStatus({ ready: false, qr: '', status: 'error', message: error.message });
       toast({ title: 'تعذر إنشاء باركود جديد', description: error.message, variant: 'destructive' });
@@ -233,8 +233,11 @@ const WhatsAppSendSection = () => {
   };
 
   useEffect(() => {
+    if (qrOpen) void loadWhatsAppStatus({ connect: true });
+  }, [loadWhatsAppStatus, qrOpen]);
+
+  useEffect(() => {
     if (!qrOpen) return undefined;
-    loadWhatsAppStatus();
     if (whatsAppStatus?.ready || failedWhatsAppStatuses.has(whatsAppStatus?.status)) return undefined;
     const timer = setInterval(loadWhatsAppStatus, 1500);
     return () => clearInterval(timer);
@@ -242,8 +245,8 @@ const WhatsAppSendSection = () => {
 
   const _resolveWhatsAppSendSection = () => {
     if (whatsAppStatus?.ready) {
-      return <div className="rounded-2xl border border-green-400/30 bg-green-400/10 px-5 py-4 text-center font-bold text-green-300">
-                واتساب متصل وجاهز للإرسال
+      return <div className="rounded-2xl border border-green-400/30 bg-green-400/10 px-5 py-4 text-center font-bold text-foreground">
+                {whatsAppStatus.suspended ? 'واتساب مرتبط ويعمل عند الإرسال.' : 'واتساب متصل وجاهز للإرسال'}
               </div>;
     }
     if (whatsAppStatus?.qr && whatsAppStatus.status === 'qr') {

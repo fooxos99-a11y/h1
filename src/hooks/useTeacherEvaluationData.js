@@ -85,7 +85,9 @@ export default function useTeacherEvaluationData(supervisorId, enabled, onLoaded
     retryDeadline.current = 0;
     pending.current = null;
     setState({ scope, data: null, loading: enabled, error: '' });
-    void load({ fresh: true });
+    // The current entry may already have a server read from offline preparation.
+    // Share that read; explicit refreshes and local mutations still force a new one.
+    void load();
     return () => { revision.current += 1; pending.current = null; };
   }, [enabled, load, scope]);
 

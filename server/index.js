@@ -1,7 +1,10 @@
+import { createWhatsAppDispatchJournal, createWhatsAppIdleSession, whatsAppBrowserOptions, withWhatsAppDispatchKey } from './services/whatsAppIdleSession.js';
 import { selectNarrationStudents, manualNarrationRange } from './services/narrationSelection.js';
 import { loadReciterNazemScope } from './services/reciterNazemScope.js';
 import { getStudentPointSourceLabel } from '../shared/student-point-sources.js';
 import { loadReviewCycle, saveReviewCycle, selectAuthorizedReview } from './services/quranReviewCycle.js';
+import { compileQuranRanges, loadTeacherReviewHistory } from './services/teacherReviewHistory.js';
+import { packTeacherEvaluation } from '../shared/teacher-evaluation-transport.js';
 import { MAX_REVIEW_FACES, parseReviewExecution, reviewRangeLabel, reviewEndOptions, selectReviewFaces } from '../shared/quran-review-cycle.js';
 import { pickReviewPages, reviewPageRanges } from '../shared/quran-review-pages.js';
 import { latestApprovedLinkAnchor } from './services/quranLinkAnchor.js';
@@ -1077,16 +1080,43 @@ function fillWhatsAppTemplate(template, person = {}) {
   );
 }
 
+function getWhatsAppIdleSession(runtime) {
+  if (!runtime.idleSession) {
+    runtime.idleSession = createWhatsAppIdleSession({
+      journal: createWhatsAppDispatchJournal(nodePath.join(getWhatsAppAuthPath(), '..', 'whatsapp-outbox', runtime.key)),
+      onSuspend(client, { linked }) {
+        if (runtime.client !== client && runtime.initializingClient !== client) return;
+        runtime.client = null;
+        runtime.initializingClient = null;
+        runtime.starting = null;
+        runtime.startupToken = null;
+        runtime.state.ready = linked;
+        runtime.state.suspended = true;
+        runtime.state.qr = '';
+        runtime.state.status = linked ? 'ready' : 'disconnected';
+        runtime.state.message = linked ? 'واتساب مرتبط ويعمل عند الإرسال.' : 'انتهت مهلة الربط. افتح الباركود للمحاولة مجددًا.';
+      },
+    });
+  }
+  return runtime.idleSession;
+}
+
 async function ensureWhatsAppClient() {
   const runtime = getWhatsAppRuntime();
+  const idleSession = getWhatsAppIdleSession(runtime);
+  await idleSession.waitForClose();
   if (runtime.client) return runtime.client;
   if (runtime.starting) return runtime.starting;
+  const startupToken = Symbol('whatsapp-startup');
+  runtime.startupToken = startupToken;
 
   runtime.starting = (async () => {
     try {
       const module = await import('whatsapp-web.js');
       const { Client, LocalAuth, MessageMedia } = module.default || module;
       WhatsAppMessageMedia = MessageMedia;
+      whatsAppState.ready = false;
+      whatsAppState.suspended = false;
       whatsAppState.status = 'starting';
       whatsAppState.message = 'جاري تشغيل واتساب.';
 
@@ -1095,17 +1125,20 @@ async function ensureWhatsAppClient() {
           clientId: runtime.key,
           dataPath: getWhatsAppAuthPath(),
         }),
-        puppeteer: {
+        puppeteer: await whatsAppBrowserOptions({
           headless: true,
           args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-        },
+        }),
       });
       runtime.initializingClient = client;
+      idleSession.attach(client);
 
       client.on('qr', async (qr) => {
         if (runtime.initializingClient !== client && runtime.client !== client) return;
+        const qrImage = await QRCode.toDataURL(qr);
+        if (runtime.initializingClient !== client && runtime.client !== client) return;
         runtime.state.ready = false;
-        runtime.state.qr = await QRCode.toDataURL(qr);
+        runtime.state.qr = qrImage;
         runtime.state.status = 'qr';
         runtime.state.message = 'امسح الباركود من تطبيق واتساب.';
       });
@@ -1126,6 +1159,8 @@ async function ensureWhatsAppClient() {
         runtime.client = null;
         runtime.initializingClient = null;
         runtime.starting = null;
+        runtime.startupToken = null;
+        void client.destroy().catch((error) => console.error('WhatsApp cleanup failed:', error.code || error.name));
       });
 
       client.on('auth_failure', async () => {
@@ -1152,10 +1187,12 @@ async function ensureWhatsAppClient() {
           initializationTimer.unref?.();
         }),
       ]).finally(() => clearTimeout(initializationTimer));
+      if (runtime.startupToken !== startupToken) return null;
       runtime.client = client;
       runtime.initializingClient = null;
       return client;
     } catch (error) {
+      if (runtime.startupToken !== startupToken) return null;
       runtime.state.ready = false;
       runtime.state.status = 'error';
       runtime.state.message = error.message;
@@ -1166,7 +1203,7 @@ async function ensureWhatsAppClient() {
       await initializingClient?.destroy().catch(() => {});
       return null;
     } finally {
-      runtime.starting = null;
+      if (runtime.startupToken === startupToken) runtime.starting = null;
     }
   })();
 
@@ -1305,6 +1342,10 @@ async function waitForWhatsAppDelivery(sentMessage, timeoutMs = 8000) {
 
 async function sendWhatsAppMessage(phone, message, attachment = null) {
   const runtime = getWhatsAppRuntime();
+  if (!attachment) {
+    const previous = await getWhatsAppIdleSession(runtime).inspectDispatch([`${phone}@c.us`, message]);
+    if (previous) return previous;
+  }
   await refreshWhatsAppState({ waitMs: 10000 });
   assertWhatsAppClientAvailable(runtime);
   if (!whatsAppState.ready && whatsAppState.status === 'disconnected') {
@@ -1389,6 +1430,9 @@ function randomWhatsAppDelay() {
 
 async function disconnectWhatsAppClient() {
   const runtime = getWhatsAppRuntime();
+  await getWhatsAppIdleSession(runtime).waitForClose();
+  runtime.startupToken = null;
+  runtime.state.suspended = false;
   const client = runtime.client;
   const initializingClient = runtime.initializingClient;
   runtime.client = null;
@@ -1455,7 +1499,9 @@ async function notifyStudentGuardian(studentId, template, context = {}) {
     failureReason = 'رقم الجوال غير صالح.';
   } else {
     try {
-      await sendWhatsAppMessage(phone, message);
+      const dispatchKey = ['absence', 'execution_reminder'].includes(context.messageType) && context.date
+        ? `${student.id}:${context.messageType}:${context.date}` : null;
+      await withWhatsAppDispatchKey(dispatchKey, () => sendWhatsAppMessage(phone, message));
       finalStatus = 'sent';
     } catch (error) {
       failureReason = error.message || 'تعذر الإرسال من واتساب المرتبط.';
@@ -10273,13 +10319,16 @@ async function resolveRequestedPlanPageBounds(requestedStartPage, requestedEndPa
 }
 
 /** Build unique execution choices from valid task bounds and the permitted traversal direction. */
-async function getStudentReviewCycle(connection, plan, date, rows) {
+async function getStudentReviewCycle(connection, plan, date, rows, reviewHistory = null) {
   if (!rows.length) return null;
-  const saved = await getStudentMemorizedRanges(connection, plan.studentId, { beforeDate: date });
-  const [links] = await connection.query("SELECT from_page AS startPage, from_surah AS startSurah, from_ayah AS startAyah, to_page AS endPage, to_surah AS endSurah, to_ayah AS endAyah FROM student_quran_tasks WHERE student_id = ? AND task_date = ? AND task_type = 'link'", [plan.studentId, date]);
-  return loadReviewCycle({ connection, plan, date, rows, ayahs: await readQuranRange(connection, 1, 604),
-    isAvailable: ayah => quranPositionInRanges(ayah, saved) && !quranPositionInRanges(ayah, links),
-    fallbackPage: await getReviewStartForDate(connection, plan, date) });
+  const prepared = reviewHistory?.forDate(plan, date);
+  const saved = prepared?.saved || await getStudentMemorizedRanges(connection, plan.studentId, { beforeDate: date });
+  const [links] = prepared ? [prepared.links] : await connection.query("SELECT from_page AS startPage, from_surah AS startSurah, from_ayah AS startAyah, to_page AS endPage, to_surah AS endSurah, to_ayah AS endAyah FROM student_quran_tasks WHERE student_id = ? AND task_date = ? AND task_type = 'link'", [plan.studentId, date]);
+  const isSaved = compileQuranRanges(saved), isLinked = compileQuranRanges(links);
+  return loadReviewCycle({ connection, plan, date, rows, ayahs: reviewHistory?.ayahs || await readQuranRange(connection, 1, 604),
+    isAvailable: ayah => isSaved(ayah) && !isLinked(ayah),
+    historyOverride: prepared?.latestReview,
+    fallbackPage: prepared ? prepared.fallbackPage : await getReviewStartForDate(connection, plan, date) });
 }
 
 async function getStudentReviewEnd(connection, plan, date, start, expectedEnd) {
@@ -12996,7 +13045,7 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
       });
     };
     const deliveryReceipts = await loadRecitationDeliveryReceipts(connection, supervisorId, date);
-    res.json({
+    const evaluation = {
       date,
       previousSessionDate,
       deliveryReceipts,
@@ -13096,7 +13145,8 @@ app.get('/api/supervisors/:id/quran-evaluation', async (req, res, next) => {
       taskQueue: allRows
         .filter((row) => isRecitationAttendanceVisible(attendanceByStudent.get(Number(row.studentId)) || '', teacherAttendanceMode))
         .map(serializeEvaluationTask),
-    });
+    };
+    res.json(['1', '2'].includes(req.query.compact) ? packTeacherEvaluation(evaluation, { version: Number(req.query.compact) }) : evaluation);
   } catch (error) {
     next(error);
   } finally {
@@ -13933,7 +13983,23 @@ app.get('/api/students', async (req, res, next) => {
   }
 });
 
-app.get('/api/whatsapp/status', requirePermission('whatsappSend'), async (_req, res) => {
+app.post('/api/whatsapp/connect', requirePermission('whatsappSend'), async (_req, res) => {
+  const runtime = getWhatsAppRuntime();
+  if (runtime.client || runtime.starting || runtime.initializingClient) return res.status(202).json(runtime.state);
+  runtime.state.ready = false;
+  runtime.state.suspended = false;
+  runtime.state.status = 'starting';
+  runtime.state.message = 'جاري تشغيل واتساب.';
+  void ensureWhatsAppClient().catch((error) => {
+    console.error('WhatsApp connection failed:', error.code || error.name);
+  });
+  res.status(202).json(runtime.state);
+});
+
+app.get('/api/whatsapp/status', requirePermission('whatsappSend'), async (req, res) => {
+  const runtime = getWhatsAppRuntime();
+  // Older native builds request their QR through GET. Observers never create a browser.
+  if (req.query.observe === '1' || runtime.state.suspended) return res.json(runtime.state);
   try {
     await refreshWhatsAppState({ waitMs: 2000 });
   } catch (error) {
@@ -14823,6 +14889,16 @@ function notifyChangedStudentAbsence(status, previous, settings, req, date) {
 
 /** Build each recitation group once and retain the fixed Nazem and local plan limits. */
 async function buildTeacherExecutionChoices(allRows, executionOptionsByGroup, connection, date, settings) {
+  const reviewHistory = await loadTeacherReviewHistory(connection, allRows, {
+    acceptedSql: acceptedMemorizationSql(), expandRange: range => expandQuranTraversalRange(connection, range),
+    ayahs: await readQuranRange(connection, 1, 604),
+  });
+  const groups = new Map();
+  for (const item of allRows) {
+    const key = `${item.planId}:${item.taskDate}:${item.taskType}:${item.track}${nazemRemainderSuffix(item)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
   for (const row of allRows.filter((item) => (
     item.taskType === 'memorization' || item.taskType === 'review'
   ))) {
@@ -14847,9 +14923,9 @@ async function buildTeacherExecutionChoices(allRows, executionOptionsByGroup, co
       scheduleAnchorSurah: row.planScheduleAnchorSurah,
       scheduleAnchorAyah: row.planScheduleAnchorAyah,
     };
-    const groupRows = allRows.filter((item) => `${item.planId}:${item.taskDate}:${item.taskType}:${item.track}${nazemRemainderSuffix(item)}` === groupKey);
+    const groupRows = groups.get(groupKey);
     if (row.taskType === 'review' && !Number(row.nazemManaged)) {
-      const cycle = await getStudentReviewCycle(connection, plan, row.taskDate, groupRows);
+      const cycle = await getStudentReviewCycle(connection, plan, row.taskDate, groupRows, reviewHistory);
       if (!cycle?.ayahs.length) continue;
       const recorded = groupRows.map(item => parseReviewExecution(item.reviewExecution)).find(Boolean);
       const selection = recorded || selectReviewFaces(cycle, cycle.expectedFaces);
@@ -18595,8 +18671,7 @@ try {
     await reconcileAllTenantStartupState();
     startAutomaticAbsenceScheduler();
     app.listen(port);
-    try { await refreshWhatsAppState({ waitMs: 15000 }); }
-    catch (error) { console.error('WhatsApp warmup failed:', error.message); }
+    // WhatsApp starts only for an explicit connection or an outbound operation.
 } catch (error) {
     console.error('MySQL initialization failed:', error);
     process.exit(1);

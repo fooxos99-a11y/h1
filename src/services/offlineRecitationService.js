@@ -17,6 +17,7 @@ import {
   syncOfflineActions,
 } from '@/services/offlineOperationsService';
 import { mergeCommittedOfflineEvaluation } from '@/lib/offlineEvaluationMerge';
+import { packTeacherEvaluation, unpackTeacherEvaluation } from '../../shared/teacher-evaluation-transport.js';
 import { limitedTaskQueue } from '@/lib/asyncRequests';
 import { getAuthSessionVersion } from '@/lib/authSession';
 import { migrateLegacyRecitationDevice } from '@/lib/recitationDeviceIdentity';
@@ -131,7 +132,7 @@ export async function prepareOfflineRecitationWorkspace(supervisorId, { automati
 
 export async function cacheTeacherEvaluation(supervisorId, evaluation) {
   const actorKey = recitationActorKey(supervisorId);
-  await offlineRecitationStore.cacheSnapshot(actorKey, evaluation);
+  await offlineRecitationStore.cacheSnapshot(actorKey, packTeacherEvaluation(evaluation));
   return evaluation;
 }
 
@@ -146,13 +147,14 @@ export async function mergeLocalTeacherEvaluation(supervisorId, evaluation) {
 
 export async function getCachedTeacherEvaluation(supervisorId) {
   const actorKey = recitationActorKey(supervisorId);
-  const [base, bootstrap, anchor, sessions, actions] = await Promise.all([
+  const [storedBase, bootstrap, anchor, sessions, actions] = await Promise.all([
     offlineRecitationStore.getSnapshot(actorKey),
     offlineRecitationStore.getSnapshot(`${actorKey}:bootstrap`),
     offlineRecitationStore.getMeta(`time_anchor:${actorKey}`),
     offlineRecitationStore.getSessions(actorKey),
     offlineRecitationStore.getActions(actorKey),
   ]);
+  const base = unpackTeacherEvaluation(storedBase);
   if (!base) return base;
   const currentEvaluation = mergeCommittedOfflineEvaluation(base, sessions, actions);
   if (!bootstrap || !anchor) return currentEvaluation;
