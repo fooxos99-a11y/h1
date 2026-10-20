@@ -37,6 +37,12 @@ class NoRedirects(urllib.request.HTTPRedirectHandler):
         raise ValueError("App Store Connect API redirects are not allowed")
 
 
+class AppStoreHttpError(RuntimeError):
+    def __init__(self, status_code, details):
+        self.status_code = status_code
+        super().__init__(f"App Store Connect returned HTTP {status_code}: {details}")
+
+
 def request_json(path, token, method="GET", payload=None):
     """Send JSON only to a validated Apple endpoint with a bounded timeout."""
     url = app_store_url(path)
@@ -52,4 +58,4 @@ def request_json(path, token, method="GET", payload=None):
             return json.load(response)
     except HTTPError as error:
         details = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"App Store Connect returned HTTP {error.code}: {details}") from error
+        raise AppStoreHttpError(error.code, details) from error

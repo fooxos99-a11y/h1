@@ -1,3 +1,6 @@
+from app_store_http import AppStoreHttpError
+
+
 def verified_review_submission(versions, builds, version_string, build_number):
     """Require the selected binary, completed processing, review, and automatic release."""
     target = next((version for version in versions
@@ -26,7 +29,15 @@ def wait_for_review_cancellation(submission_ids, request, sleep, attempts=60):
     pending = set(submission_ids)
     for attempt in range(attempts):
         for submission_id in tuple(pending):
-            response = request(f"/reviewSubmissions/{submission_id}")
+            try:
+                response = request(f"/reviewSubmissions/{submission_id}")
+            except AppStoreHttpError as error:
+                if error.status_code != 404:
+                    raise
+                # Apple can remove a successfully canceled review immediately.
+                # The caller still confirms version editability before changing it.
+                pending.remove(submission_id)
+                continue
             if response["data"]["attributes"]["state"] == "COMPLETE":
                 pending.remove(submission_id)
         if not pending:

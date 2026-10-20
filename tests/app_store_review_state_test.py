@@ -4,6 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from app_store_review_state import verified_review_submission, wait_for_review_cancellation
+from app_store_http import AppStoreHttpError
 
 
 class SubmissionVerificationTests(unittest.TestCase):
@@ -69,6 +70,21 @@ class ReviewCancellationTests(unittest.TestCase):
         def unexpected(_):
             self.fail("No cancellation requires no API call")
         wait_for_review_cancellation([], unexpected, unexpected)
+
+    def test_removed_canceled_review_is_complete(self):
+        calls = []
+        def removed(path):
+            calls.append(path)
+            raise AppStoreHttpError(404, 'NOT_FOUND')
+        wait_for_review_cancellation(['canceled'], removed, lambda _: self.fail('No wait required'))
+        self.assertEqual(calls, ['/reviewSubmissions/canceled'])
+
+    def test_other_apple_failures_do_not_confirm_cancellation(self):
+        for status in [401, 403, 429, 500]:
+            def failed(_):
+                raise AppStoreHttpError(status, 'unavailable')
+            with self.assertRaises(AppStoreHttpError):
+                wait_for_review_cancellation(['canceled'], failed, lambda _: None)
 
 
 if __name__ == "__main__":
