@@ -116,7 +116,7 @@ test('native resume refreshes a visible online page and unsubscribes cleanly', (
   assert.equal(count, 1);
 });
 
-async function evaluationHook({ cached, online = true, merge = async (_, value) => value, timeout = withinTimeout } = {}) {
+async function evaluationHook({ cached, online = true, merge = async (_, value) => value, timeout = withinTimeout, request } = {}) {
   const source = (await read('../src/hooks/useTeacherEvaluationData.js'))
     .replace(/^import[^\n]+\r?\n/gm, '').replace('export default ', '');
   const network = deferred();
@@ -128,7 +128,7 @@ async function evaluationHook({ cached, online = true, merge = async (_, value) 
     useRef: value => ({ current: value }),
     navigator: { onLine: online }, getTenantRegistrationNumber: () => 'test', getAuthSessionVersion: () => version,
     getCachedTeacherEvaluation: async () => cached,
-    studentsApi: { getSupervisorQuranEvaluation: () => network.promise },
+    studentsApi: { getSupervisorQuranEvaluation: request || (() => network.promise) },
     mergeLocalTeacherEvaluation: merge, cacheTeacherEvaluation: async () => {},
     recitationErrorMessage: error => error.message, retryTemporaryRead, withinTimeout: timeout,
   });
@@ -176,6 +176,109 @@ test('a late server read cannot replace a local save or data from a different ac
     await pending;
     assert.notEqual(env.state().data?.tasks[0]?.id, 'old');
   }
+});
+
+test('a silent refresh after a local save keeps the list visible while requesting fresh transport', async () => {
+  const network = deferred();
+  const calls = [];
+  const env = await evaluationHook({ request: (id, options) => { calls.push({ id, ...options }); return network.promise; } });
+  const saved = { tasks: [{ id: 7, pending: true }], students: [{ id: 11 }] };
+  env.hook.setData(saved);
+  const pending = env.hook.load({ silent: true });
+  assert.equal(env.state().data, saved);
+  assert.equal(env.state().loading, false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].fresh, true, 'Preserving the list must not reuse a transport from before the save');
+  const accepted = { tasks: [{ id: 8 }], students: [{ id: 11 }] };
+  network.resolve(accepted);
+  await pending;
+  assert.equal(env.state().data, accepted);
+  assert.equal(env.state().error, '');
+});
+
+test('silent fresh initial entry still hides cached data until the server responds', async () => {
+  const cached = { tasks: [{ id: 'old' }], students: [] };
+  const env = await evaluationHook({ cached });
+  const pending = env.hook.load({ fresh: true, silent: true });
+  assert.equal(env.state().data, null);
+  assert.equal(env.state().loading, true);
+  const fresh = { tasks: [{ id: 'fresh' }], students: [] };
+  env.network.resolve(fresh);
+  await pending;
+  assert.equal(env.state().data, fresh);
+});
+
+test('a failed silent refresh keeps the local outcome and reports the failure; retry replaces it with server data', async () => {
+  let failing = true;
+  let calls = 0;
+  const accepted = { tasks: [{ id: 8 }], students: [] };
+  const env = await evaluationHook({ request: async () => {
+    calls++;
+    if (failing) throw Object.assign(new Error('temporary transport failure'), { status: 503 });
+    return accepted;
+  } });
+  const saved = { tasks: [{ id: 7, pending: true }], students: [] };
+  env.hook.setData(saved);
+  await env.hook.load({ fresh: true, silent: true });
+  assert.equal(calls, 2);
+  assert.equal(env.state().data, saved);
+  assert.equal(env.state().loading, false);
+  assert.equal(env.state().error, 'temporary transport failure');
+  failing = false;
+  await env.hook.load({ fresh: true, silent: true });
+  assert.equal(env.state().data, accepted);
+  assert.equal(env.state().error, '');
+});
+
+test('a silent refresh revokes displayed account data on authoritative 401 or 403', async () => {
+  for (const status of [401, 403]) {
+    const env = await evaluationHook({ request: async () => { throw Object.assign(new Error('access revoked'), { status }); } });
+    env.hook.setData({ tasks: [{ id: 7 }], students: [] });
+    await env.hook.load({ fresh: true, silent: true });
+    assert.equal(env.state().data, null);
+    assert.equal(env.state().loading, false);
+    assert.equal(env.state().error, 'access revoked');
+  }
+});
+
+test('a silent refresh started before another save cannot restore the old task', async () => {
+  const old = deferred();
+  const current = deferred();
+  let calls = 0;
+  const env = await evaluationHook({ request: () => (++calls === 1 ? old : current).promise });
+  env.hook.setData({ tasks: [{ id: 'initial' }], students: [] });
+  const oldRequest = env.hook.load({ fresh: true, silent: true });
+  const saved = { tasks: [{ id: 'saved', pending: true }], students: [] };
+  env.hook.setData(saved);
+  const currentRequest = env.hook.load({ fresh: true, silent: true });
+  assert.equal(env.state().data, saved);
+  const accepted = { tasks: [{ id: 'next' }], students: [] };
+  current.resolve(accepted);
+  await currentRequest;
+  old.resolve({ tasks: [{ id: 'initial' }], students: [] });
+  await oldRequest;
+  assert.equal(env.state().data, accepted);
+});
+
+test('a silent response from another account cannot replace the current local outcome', async () => {
+  const env = await evaluationHook();
+  const saved = { tasks: [{ id: 'saved' }], students: [] };
+  env.hook.setData(saved);
+  const pending = env.hook.load({ fresh: true, silent: true });
+  env.changeAccount();
+  env.network.resolve({ tasks: [{ id: 'other-account' }], students: [] });
+  await pending;
+  assert.equal(env.state().data, saved);
+});
+
+test('an explicit non-silent fresh load still blocks stale visible data', async () => {
+  const env = await evaluationHook();
+  env.hook.setData({ tasks: [{ id: 'old' }], students: [] });
+  const pending = env.hook.load({ fresh: true });
+  assert.equal(env.state().data, null);
+  assert.equal(env.state().loading, true);
+  env.network.resolve({ tasks: [], students: [] });
+  await pending;
 });
 
 test('offline entry exposes cached evaluation without a network wait', async () => {

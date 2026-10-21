@@ -25,11 +25,25 @@ tasks.push(...[7, 8].map((ayah, index) => ({ ...tasks[0], id: 6 + index, fromAya
 const evaluation = { date, generationEndDate: date, students: [{ studentId: 7, studentName: 'طالب اختبار', attendanceStatus: 'present' }], tasks, taskQueue: tasks,
   allowQuranCompensation: true,
   executionSources: { memorization: 'teacher', review: 'teacher', link: 'teacher' }, evaluationModes: { memorization: 'count', review: 'count', link: 'count' }, evaluationPolicies: {} };
-const state = { evaluationCalls: 0, ayahCalls: 0, rangeCalls: [], commits: [], releaseRange: null };
+if (scenario.has('backgroundRefresh')) {
+  for (let studentId = 8; studentId <= 67; studentId++) {
+    const studentName = `طالب متابعة ${studentId}`;
+    evaluation.students.push({ studentId, studentName, attendanceStatus: 'present' });
+    tasks.push({ ...tasks[0], id: 100 + studentId, studentId, studentName });
+  }
+}
+const state = { evaluationCalls: 0, cacheWrites: 0, ayahCalls: 0, rangeCalls: [], commits: [], releaseRange: null };
 state.delaySync = scenario.has('delaySync');
 state.failCommit = scenario.has('failCommit');
 studentsApi.getSupervisorQuranEvaluation = async () => {
   state.evaluationCalls++;
+  if (state.delayEvaluation) {
+    state.delayEvaluation = false;
+    await new Promise(resolve => { state.releaseEvaluation = resolve; });
+  }
+  if (state.failEvaluation) throw Object.assign(new Error('فشل قراءة الجلسة التجريبي'), {
+    status: typeof state.failEvaluation === 'number' ? state.failEvaluation : 503,
+  });
   const deliveryReceipts = state.commits.filter(session => session.status === 'synced')
     .flatMap(session => session.tasks.filter(item => item.synced && item.result?.ok).map(item => ({
       ...tasks.find(task => task.id === item.taskId), ...item.result,
@@ -55,7 +69,7 @@ studentsApi.prepareSupervisorQuranRange = async (_teacher, id, payload) => {
   return { taskIds: selected.map(task => task.id), tasks: selected, actualEnd: payload.actualEnd };
 };
 offlineRecitationStore.getSnapshot = async () => null;
-offlineRecitationStore.cacheSnapshot = async () => {};
+offlineRecitationStore.cacheSnapshot = async () => { state.cacheWrites++; };
 offlineRecitationStore.getSessions = async (_actor, statuses = []) => state.commits.filter(session => !statuses.length || statuses.includes(session.status));
 offlineRecitationStore.getActions = async () => [];
 offlineRecitationStore.getMeta = async () => null;

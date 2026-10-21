@@ -108,7 +108,11 @@ test('background save reports the exact durable receipt when a batch snapshot is
         assert.equal(id, 11); assert.equal(sessionId, 'exact'); return { sessionId, status };
       },
       assertSessionAccepted: receipt => { if (receipt.status === 'conflict') throw Error('rejected'); },
-      load: async () => { finish(); }, toast: value => notices.push(value), recitationErrorMessage: error => error.message,
+      load: async options => {
+        assert.equal(options.fresh, true);
+        assert.equal(options.silent, true, 'Saving must not replace the list with its loading screen');
+        finish();
+      }, toast: value => notices.push(value), recitationErrorMessage: error => error.message,
     });
     callback('exact');
     await refreshed;

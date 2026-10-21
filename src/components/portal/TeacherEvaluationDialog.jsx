@@ -99,6 +99,10 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
     supervisorId, shouldLoad, onEvaluationLoaded,
   );
 
+  useEffect(() => {
+    if (!isLoading && !data) setSelectedStudent(null);
+  }, [data, isLoading]);
+
   const toggleAmounts = async () => {
     if (!await setShowAmounts(!showAmounts)) {
       toast({ title: 'تعذر حفظ خيار إظهار المقادير', variant: 'destructive' });
@@ -125,7 +129,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
     return subscribeRecitationResume({
       windowTarget: window, documentTarget: document,
       isOnline: () => navigator.onLine !== false,
-      refresh: () => { void load({ fresh: true }); },
+      refresh: () => { void load({ fresh: true, silent: true }); },
     });
   }, [load, shouldLoad]);
 
@@ -245,7 +249,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
     void syncCommittedRecitation(supervisorId, sessionId)
       .then((savedSession) => {
         if (savedSession) assertSessionAccepted(savedSession);
-        return load({ fresh: true });
+        return load({ fresh: true, silent: true });
       })
       .catch((error) => {
         toast({
@@ -253,7 +257,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
           description: recitationErrorMessage(error, 'بقي التقييم محفوظًا على الجهاز وتنتظر مزامنته.'),
           variant: 'destructive',
         });
-        return load({ fresh: true });
+        return load({ fresh: true, silent: true });
       });
   }, [load, supervisorId, toast]);
 
@@ -337,7 +341,7 @@ const TeacherEvaluationDialog = ({ supervisorId, open = false, onOpenChange, inl
   const content = (
     <div className="space-y-3">
       <RecitationPendingStatus receipts={data?.deliveryReceipts} onRetry={async () => {
-        try { await syncOfflineRecitations(supervisorId, { force: true }); await load({ fresh: true }); }
+        try { await syncOfflineRecitations(supervisorId, { force: true }); await load({ fresh: true, silent: true }); }
         catch (error) { toast({ title: 'تعذر اعتماد التسميع', description: recitationErrorMessage(error), variant: 'destructive' }); }
       }} />
       {loadError && <ErrorState retryAt={retryAt} message={loadError} onRetry={() => void load()} />}

@@ -23,7 +23,7 @@ export default function useTeacherEvaluationData(supervisorId, enabled, onLoaded
       : current);
   }, [scope]);
 
-  const load = useCallback(({ fresh = false } = {}) => {
+  const load = useCallback(({ fresh = false, silent = false } = {}) => {
     if (!enabled || !supervisorId) return Promise.resolve();
     fresh = fresh || invalidatedTransport.current;
     if (fresh) {
@@ -38,7 +38,10 @@ export default function useTeacherEvaluationData(supervisorId, enabled, onLoaded
     const update = (patch) => {
       if (isCurrent()) setState((current) => ({ ...current, ...patch, scope }));
     };
-    setState((current) => ({ ...current, ...(fresh ? { data: null } : {}), loading: fresh || !current.data, error: '' }));
+    // A fresh transport need not unmount this account's already loaded list.
+    const clearVisibleData = fresh && !silent;
+    setState((current) => ({ ...current, ...(clearVisibleData ? { data: null } : {}),
+      loading: clearVisibleData || !current.data, error: '' }));
     const request = (async () => {
       if (navigator.onLine === false) {
         let cached;
@@ -71,7 +74,9 @@ export default function useTeacherEvaluationData(supervisorId, enabled, onLoaded
       } catch (error) {
         if (!isCurrent()) return;
         retryDeadline.current = error.status === 429 ? Date.now() + Math.max(Number(error.retryAfterMs) || 0, 1000) : 0;
-        update({ loading: false, retryAt: retryDeadline.current, error: recitationErrorMessage(error, 'تعذر تحميل جلسة التسميع. أعد المحاولة.') });
+        update({ ...(error.status === 401 || error.status === 403 ? { data: null } : {}),
+          loading: false, retryAt: retryDeadline.current,
+          error: recitationErrorMessage(error, 'تعذر تحميل جلسة التسميع. أعد المحاولة.') });
       }
     })().finally(() => {
       if (pending.current === request) pending.current = null;
